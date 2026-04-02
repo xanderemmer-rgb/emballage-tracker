@@ -741,6 +741,7 @@ function App() {
   const [currentAccountId, setCurrentAccountId] = useState(null);
   const [accounts, setAccounts] = useState(loadAccounts());
   const [apiKey, setApiKeyState] = useState(getApiKey());
+  const [masterScreen, setMasterScreen] = useState("dashboard");
 
   useEffect(() => {
     saveAccounts(accounts);
@@ -764,6 +765,7 @@ function App() {
     setScreen("login");
     setCurrentUser(null);
     setCurrentAccountId(null);
+    setMasterScreen("dashboard");
   };
 
   const handleReset = () => {
@@ -791,7 +793,6 @@ function App() {
   }
 
   if (currentUser.role === "master") {
-    const [masterScreen, setMasterScreen] = useState("dashboard");
     const setCurrentAccount = (acc) => {
       setAccounts(accounts.map(a => a.id === acc.id ? acc : a));
     };
