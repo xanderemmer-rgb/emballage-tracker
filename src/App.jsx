@@ -7,6 +7,39 @@ import {
   Calendar, LogOut, User, Building2, Shield
 } from "lucide-react";
 
+// ─── BARCODE LOGO ────────────────────────────────────────────────────────────
+function BarcodeLogo({ size = "md" }) {
+  const sizes = {
+    sm: { bars: "h-6", gap: "gap-[2px]", barW: "w-[3px]", text: "text-lg", wrap: "gap-2" },
+    md: { bars: "h-8", gap: "gap-[2.5px]", barW: "w-[3.5px]", text: "text-2xl", wrap: "gap-3" },
+    lg: { bars: "h-10", gap: "gap-[3px]", barW: "w-1", text: "text-3xl", wrap: "gap-3" },
+  };
+  const s = sizes[size] || sizes.md;
+  const barHeights = ["100%", "65%", "85%", "50%", "95%", "40%", "75%"];
+  const barColors = ["#a78bfa", "#8b5cf6", "#7c3aed", "#6d28d9", "#7c3aed", "#8b5cf6", "#a78bfa"];
+
+  return (
+    <div className={`flex items-center ${s.wrap}`}>
+      <div className={`flex items-end ${s.gap} ${s.bars}`}>
+        {barHeights.map((h, i) => (
+          <div
+            key={i}
+            className={`${s.barW} rounded-sm`}
+            style={{
+              height: h,
+              backgroundColor: barColors[i],
+              animation: `barPulse 3s ease-in-out ${i * 0.15}s infinite`,
+            }}
+          />
+        ))}
+      </div>
+      <span className={`${s.text} font-bold text-gray-900`} style={{ fontFamily: "'Inter', sans-serif", letterSpacing: "-0.04em" }}>
+        reggy
+      </span>
+    </div>
+  );
+}
+
 // ─── PRICING ──────────────────────────────────────────────────────────────────
 const PRICE_OUTLET = 10;      // € per outlet per maand
 const PRICE_MASTER = 15;      // € master admin per maand (verplicht vanaf 2 outlets)
@@ -200,7 +233,7 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
       <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">ET</div>
+            <BarcodeLogo size="sm" />
             <h1 className="text-3xl font-bold text-gray-900">Super Admin</h1>
           </div>
           <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
@@ -558,7 +591,7 @@ function BranchApp({ user, account, setAccount }) {
       <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto p-6">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">ET</div>
+            <BarcodeLogo size="sm" />
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{user.branch}</h1>
               <p className="text-sm text-gray-600">{account.companyName}</p>
@@ -700,9 +733,8 @@ function LoginPage({ onLogin, onRegister, onReset }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-400 to-purple-500 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md lg:max-w-2xl xl:max-w-4xl w-full p-8">
-        <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-2xl">R</div>
-          <h1 className="text-3xl font-bold text-gray-900">Reggy</h1>
+        <div className="flex items-center justify-center mb-8">
+          <BarcodeLogo size="lg" />
         </div>
 
         <div className="space-y-4 mb-6">
