@@ -4,8 +4,11 @@ import {
   Truck, Download, ScanLine, ArrowDownCircle, ArrowUpCircle, Plus, PlusCircle, Pencil,
   Trash2, Paperclip, Key, FileText, TrendingUp, CheckCircle, Check, X, RotateCcw, Eye,
   EyeOff, Sparkles, Inbox, Lock, PackageOpen, AlertCircle, ChevronRight, Search, Filter,
-  Calendar, LogOut, User, Building2, Shield
+  Calendar, LogOut, User, Users, Building2, Shield
 } from "lucide-react";
+
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const DEMO_MODE = true; // Set to false for production
 
 // ─── BARCODE LOGO ────────────────────────────────────────────────────────────
 function BarcodeLogo({ size = "md" }) {
@@ -107,7 +110,7 @@ const SUPER_ADMIN = { id: "superadmin", name: "Super Admin", role: "superadmin",
 const fmt = (v) => `€ ${parseFloat(v || 0).toFixed(2)}`;
 const uid = () => Math.random().toString(36).slice(2, 10);
 const STORAGE_KEY = "reggy_data";
-const API_KEY_STORAGE = "emballage_api_key";
+const API_KEY_STORAGE = "reggy_api_key";
 
 // ─── TOAST COMPONENT ──────────────────────────────────────────────────────────
 function Toast({ message, type = "success", onClose }) {
@@ -290,7 +293,7 @@ function exportToCSV(transactions, emballageTypes) {
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = "emballage_export.csv";
+  link.download = "reggy_export.csv";
   link.click();
 }
 
@@ -552,8 +555,42 @@ function AbonnementTab({ account }) {
   );
 }
 
+// ─── MASTER APP ──────────────────────────────────────────────────────────────
+function MasterApp({ account, user, onLogout, setAccount }) {
+  const [masterScreen, setMasterScreen] = useState("dashboard");
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto p-6">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <BarcodeLogo size="sm" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">{account.companyName}</h1>
+              <p className="text-sm text-gray-600">{user.name}</p>
+            </div>
+          </div>
+          <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
+        </div>
+
+        <div className="flex gap-2 mb-6 border-b border-gray-200">
+          <button onClick={() => setMasterScreen("dashboard")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "dashboard" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Dashboard</button>
+          <button onClick={() => setMasterScreen("logboek")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "logboek" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Logboek</button>
+          <button onClick={() => setMasterScreen("beheer")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "beheer" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Beheer</button>
+          <button onClick={() => setMasterScreen("abonnement")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "abonnement" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Abonnement</button>
+        </div>
+
+        {masterScreen === "dashboard" && <MasterDashboard account={account} />}
+        {masterScreen === "logboek" && <MasterLogboek account={account} setAccount={setAccount} />}
+        {masterScreen === "beheer" && <MasterBeheer account={account} setAccount={setAccount} />}
+        {masterScreen === "abonnement" && <AbonnementTab account={account} />}
+      </div>
+    </div>
+  );
+}
+
 // ─── BRANCH APP ───────────────────────────────────────────────────────────────
-function BranchApp({ user, account, setAccount }) {
+function BranchApp({ user, account, setAccount, onLogout }) {
   const [screen, setScreen] = useState("overzicht");
   const [scanModal, setScanModal] = useState(false);
   const [exportModal, setExportModal] = useState(false);
@@ -600,6 +637,7 @@ function BranchApp({ user, account, setAccount }) {
           <div className="flex gap-2">
             <button onClick={() => setExportModal(true)} className="p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-200"><Download size={20} className="text-blue-600" /></button>
             <button onClick={() => setScanModal(true)} className="p-3 bg-blue-600 text-white rounded-lg shadow-sm hover:shadow-md transition-all duration-200 hover:bg-blue-700"><ScanLine size={20} /></button>
+            <button onClick={onLogout} className="p-3 bg-red-500 text-white rounded-lg shadow-sm hover:shadow-md hover:bg-red-600 transition-all duration-200"><LogOut size={20} /></button>
           </div>
         </div>
 
@@ -738,28 +776,30 @@ function LoginPage({ onLogin, onRegister, onReset }) {
         </div>
 
         <div className="space-y-4 mb-6">
-          <input type="text" placeholder="Gebruikersnaam" value={username} onChange={(e) => setUsername(e.target.value)} onKeyPress={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-          <input type="password" placeholder="Wachtwoord" value={password} onChange={(e) => setPassword(e.target.value)} onKeyPress={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+          <input type="text" placeholder="Gebruikersnaam" value={username} onChange={(e) => setUsername(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+          <input type="password" placeholder="Wachtwoord" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
         </div>
 
         {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm flex items-center gap-2"><AlertCircle size={18} /> {error}</div>}
 
         <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 mb-4">Inloggen</button>
 
-        <div className="border-t border-gray-200 pt-6">
-          <p className="text-xs text-gray-600 mb-3">Demo accounts:</p>
-          <div className="grid grid-cols-2 gap-2">
-            {demoAccounts.map((demo, i) => (
-              <button key={i} onClick={() => { setUsername(demo.user); setPassword(demo.pass); }} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded-lg transition-all duration-200">
-                {demo.label}
-              </button>
-            ))}
+        {DEMO_MODE && (
+          <div className="border-t border-gray-200 pt-6">
+            <p className="text-xs text-gray-600 mb-3">Demo accounts:</p>
+            <div className="grid grid-cols-2 gap-2">
+              {demoAccounts.map((demo, i) => (
+                <button key={i} onClick={() => { setUsername(demo.user); setPassword(demo.pass); }} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded-lg transition-all duration-200">
+                  {demo.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="mt-6 flex gap-3 text-sm">
           <button onClick={onRegister} className="flex-1 text-blue-600 hover:text-blue-700 font-semibold">Registreren</button>
-          <button onClick={onReset} className="flex-1 text-gray-600 hover:text-gray-700 font-semibold">Reset</button>
+          {DEMO_MODE && <button onClick={onReset} className="flex-1 text-gray-600 hover:text-gray-700 font-semibold">Reset</button>}
         </div>
       </div>
     </div>
@@ -823,42 +863,10 @@ function App() {
   }
 
   if (currentUser.role === "master") {
-    const [masterScreen, setMasterScreen] = useState("dashboard");
-    const setCurrentAccount = (acc) => {
-      setAccounts(accounts.map(a => a.id === acc.id ? acc : a));
-    };
-
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-        <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto p-6">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg">ET</div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">{currentAccount.companyName}</h1>
-                <p className="text-sm text-gray-600">{currentUser.name}</p>
-              </div>
-            </div>
-            <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
-          </div>
-
-          <div className="flex gap-2 mb-6 border-b border-gray-200">
-            <button onClick={() => setMasterScreen("dashboard")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "dashboard" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Dashboard</button>
-            <button onClick={() => setMasterScreen("logboek")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "logboek" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Logboek</button>
-            <button onClick={() => setMasterScreen("beheer")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "beheer" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Beheer</button>
-            <button onClick={() => setMasterScreen("abonnement")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "abonnement" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Abonnement</button>
-          </div>
-
-          {masterScreen === "dashboard" && <MasterDashboard account={currentAccount} />}
-          {masterScreen === "logboek" && <MasterLogboek account={currentAccount} setAccount={setCurrentAccount} />}
-          {masterScreen === "beheer" && <MasterBeheer account={currentAccount} setAccount={setCurrentAccount} />}
-          {masterScreen === "abonnement" && <AbonnementTab account={currentAccount} />}
-        </div>
-      </div>
-    );
+    return <MasterApp account={currentAccount} user={currentUser} onLogout={handleLogout} setAccount={(acc) => setAccounts(accounts.map(a => a.id === acc.id ? acc : a))} />;
   }
 
-  return <BranchApp user={currentUser} account={currentAccount} setAccount={(acc) => setAccounts(accounts.map(a => a.id === acc.id ? acc : a))} />;
+  return <BranchApp user={currentUser} account={currentAccount} setAccount={(acc) => setAccounts(accounts.map(a => a.id === acc.id ? acc : a))} onLogout={handleLogout} />;
 }
 
 export default App;
