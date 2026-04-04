@@ -151,7 +151,7 @@ function PricingCalc({ outlets, onChange }) {
         <span className="font-bold text-gray-800">Totaal per maand</span>
         <span className="text-xl font-bold text-blue-700">€ {p.total.toFixed(2)}</span>
       </div>
-      {outlets >= MASTER_REQUIRED_FROM && <p className="text-xs text-blue-600 flex items-center gap-1"><CheckCircle size={14} /> Master admin inbegrepen — overzicht van alle filialen</p>}
+      {outlets >= MASTER_REQUIRED_FROM && <p className="text-xs text-blue-600 flex items-center gap-1"><CheckCircle size={14} /> Master admin inbegrepen, overzicht van alle filialen</p>}
     </div>
   );
 }
@@ -386,12 +386,12 @@ function exportToPDF(transactions, emballageTypes, users, suppliers, companyName
   const transRows = [...transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 100).map(t => {
     const color = t.type === "IN" ? "#059669" : "#e11d48";
     const label = t.type === "IN" ? "↓ IN" : "↑ UIT";
-    return `<tr><td>${t.date}</td><td style="color:${color};font-weight:600">${label}</td><td>${t.supplier}</td><td>${t.emballage}</td><td style="text-align:center">${t.qty}</td><td>${t.branch}</td><td style="color:#71717a;font-size:11px">${t.note || "—"}</td></tr>`;
+    return `<tr><td>${t.date}</td><td style="color:${color};font-weight:600">${label}</td><td>${t.supplier}</td><td>${t.emballage}</td><td style="text-align:center">${t.qty}</td><td>${t.branch}</td><td style="color:#71717a;font-size:11px">${t.note || "-"}</td></tr>`;
   }).join("");
 
   const branches = [...new Set(users.filter(u => u.role === "branch").map(u => u.branch))];
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reggy Rapport — ${companyName}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reggy Rapport | ${companyName}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -495,7 +495,7 @@ function exportToPDF(transactions, emballageTypes, users, suppliers, companyName
   </div>
 
   <div class="footer">
-    <p>Gegenereerd door Reggy — Smart Packaging Tracker • reggy.com</p>
+    <p>Gegenereerd door Reggy | Smart Packaging Tracker • reggy.com</p>
   </div>
 </div>
 </body></html>`;
