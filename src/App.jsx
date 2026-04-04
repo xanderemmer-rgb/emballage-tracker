@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Store, Crown, Settings, BarChart3, ClipboardList, PenSquare, CreditCard, Package,
   Truck, Download, ScanLine, ArrowDownCircle, ArrowUpCircle, Plus, PlusCircle, Pencil,
   Trash2, Paperclip, Key, FileText, TrendingUp, CheckCircle, Check, X, RotateCcw, Eye,
   EyeOff, Sparkles, Inbox, Lock, PackageOpen, AlertCircle, ChevronRight, Search, Filter,
-  Calendar, LogOut, User, Users, Building2, Shield
+  Calendar, LogOut, User, Users, Building2, Shield, Camera, HelpCircle
 } from "lucide-react";
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
@@ -126,6 +126,184 @@ function Toast({ message, type = "success", onClose }) {
     <div className={`fixed bottom-4 right-4 ${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-slide-up`}>
       {icon}
       <span>{message}</span>
+    </div>
+  );
+}
+
+// ─── ONBOARDING WALKTHROUGH ──────────────────────────────────────────────
+const ONBOARDING_KEY = "reggy_onboarding_done";
+
+function OnboardingOverlay({ onDone }) {
+  const [step, setStep] = useState(0);
+
+  const steps = [
+    {
+      title: "Welkom bij Reggy!",
+      desc: "In een paar stappen leer je hoe je emballage registreert en je saldo bijhoudt.",
+      icon: <Sparkles size={32} className="text-purple-500" />,
+    },
+    {
+      title: "Registreer emballage",
+      desc: "Tik op de + knop onderaan om een levering of retour te registreren. Je kunt meerdere items tegelijk invoeren.",
+      icon: <Plus size={32} className="text-blue-500" />,
+    },
+    {
+      title: "Bekijk je saldo",
+      desc: "Onder 'Saldo' zie je precies hoeveel emballage je uitstaan hebt per leverancier, inclusief de geschatte waarde.",
+      icon: <TrendingUp size={32} className="text-emerald-500" />,
+    },
+    {
+      title: "Logboek & exports",
+      desc: "In het logboek vind je alle transacties terug. Je kunt zoeken, filteren en exporteren naar CSV of PDF.",
+      icon: <ClipboardList size={32} className="text-amber-500" />,
+    },
+  ];
+
+  const handleFinish = () => {
+    try { localStorage.setItem(ONBOARDING_KEY, "true"); } catch {}
+    onDone();
+  };
+
+  const current = steps[step];
+  const isLast = step === steps.length - 1;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center animate-slide-up">
+        <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+          {current.icon}
+        </div>
+        <h3 className="text-xl font-bold text-gray-900 mb-2">{current.title}</h3>
+        <p className="text-gray-500 text-sm leading-relaxed mb-6">{current.desc}</p>
+
+        {/* Progress dots */}
+        <div className="flex justify-center gap-2 mb-6">
+          {steps.map((_, i) => (
+            <div key={i} className={`w-2 h-2 rounded-full transition-all duration-300 ${i === step ? "bg-blue-600 w-6" : i < step ? "bg-blue-300" : "bg-gray-200"}`} />
+          ))}
+        </div>
+
+        <div className="flex gap-3">
+          {step > 0 && (
+            <button onClick={() => setStep(step - 1)} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 transition-all duration-200">
+              Terug
+            </button>
+          )}
+          {step === 0 && (
+            <button onClick={handleFinish} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-400 font-semibold hover:bg-gray-50 transition-all duration-200 text-sm">
+              Overslaan
+            </button>
+          )}
+          <button onClick={isLast ? handleFinish : () => setStep(step + 1)} className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-all duration-200">
+            {isLast ? "Aan de slag!" : "Volgende"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function shouldShowOnboarding() {
+  try { return !localStorage.getItem(ONBOARDING_KEY); } catch { return false; }
+}
+
+// ─── BARCODE SCANNER ──────────────────────────────────────────────────────
+function BarcodeScannerModal({ onScan, onClose }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const [error, setError] = useState(null);
+  const [scanning, setScanning] = useState(true);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+        }
+      } catch (err) {
+        if (mounted) setError("Camera niet beschikbaar. Controleer je browserinstellingen.");
+      }
+    }
+
+    startCamera();
+    return () => { mounted = false; stopCamera(); };
+  }, [stopCamera]);
+
+  const handleClose = () => {
+    stopCamera();
+    onClose();
+  };
+
+  const handleManualInput = () => {
+    stopCamera();
+    onScan(null); // null means: open registration without barcode
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black z-[60] flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-black/80">
+        <h3 className="text-white font-semibold flex items-center gap-2"><Camera size={20} /> Scanner</h3>
+        <button onClick={handleClose} className="text-white p-2"><X size={24} /></button>
+      </div>
+
+      {/* Camera view */}
+      <div className="flex-1 relative overflow-hidden">
+        {error ? (
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="text-center">
+              <AlertCircle size={48} className="text-red-400 mx-auto mb-4" />
+              <p className="text-white mb-2">{error}</p>
+              <button onClick={handleManualInput} className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold">
+                Handmatig invoeren
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+            <canvas ref={canvasRef} className="hidden" />
+
+            {/* Scan overlay */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-64 h-40 border-2 border-white/60 rounded-2xl relative">
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-xl" />
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-xl" />
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-xl" />
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-xl" />
+                {scanning && <div className="absolute left-2 right-2 h-0.5 bg-red-500 top-1/2 animate-pulse" />}
+              </div>
+            </div>
+
+            <p className="absolute bottom-24 left-0 right-0 text-center text-white/70 text-sm">
+              Richt de camera op een barcode
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Bottom bar */}
+      <div className="bg-black/80 px-4 py-4 safe-area-bottom">
+        <button onClick={handleManualInput} className="w-full py-3 bg-white/10 text-white rounded-xl font-semibold border border-white/20 hover:bg-white/20 transition-all duration-200">
+          Handmatig invoeren
+        </button>
+      </div>
     </div>
   );
 }
@@ -755,9 +933,22 @@ function MasterBeheer({ account, setAccount }) {
 // ─── MASTER LOGBOEK ───────────────────────────────────────────────────────────
 function MasterLogboek({ account, setAccount }) {
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [toast, setToast] = useState(null);
 
-  const filtered = account.transactions.filter(t => filter === "all" || t.type === filter);
+  const filtered = account.transactions
+    .filter(t => filter === "all" || t.type === filter)
+    .filter(t => !search || t.emballage.toLowerCase().includes(search.toLowerCase()) || t.supplier.toLowerCase().includes(search.toLowerCase()) || t.branch.toLowerCase().includes(search.toLowerCase()))
+    .filter(t => {
+      if (!dateFrom && !dateTo) return true;
+      const tDate = new Date(t.date);
+      if (dateFrom && tDate < new Date(dateFrom)) return false;
+      if (dateTo && tDate > new Date(dateTo)) return false;
+      return true;
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
 
   const handleDeleteTransaction = (id) => {
     setAccount({ ...account, transactions: account.transactions.filter(t => t.id !== id) });
@@ -768,15 +959,43 @@ function MasterLogboek({ account, setAccount }) {
     <div className="animate-fade-in space-y-6">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><ClipboardList size={28} /> Logboek</h2>
+
+      {/* Search */}
+      <div className="relative">
+        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Zoek op emballage, leverancier of filiaal..." className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+      </div>
+
+      {/* Date filters */}
+      <div className="flex gap-2">
+        <div className="flex-1 relative">
+          <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+        </div>
+        <div className="flex-1 relative">
+          <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+        </div>
+      </div>
+
+      {/* Type filter */}
       <div className="flex gap-2">
         <button onClick={() => setFilter("all")} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${filter === "all" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Alles</button>
         <button onClick={() => setFilter("IN")} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${filter === "IN" ? "bg-green-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Inkomend</button>
         <button onClick={() => setFilter("OUT")} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${filter === "OUT" ? "bg-red-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Uitgaand</button>
+        {(search || dateFrom || dateTo) && (
+          <button onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setFilter("all"); }} className="px-3 py-2 rounded-lg text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-all duration-200 flex items-center gap-1">
+            <X size={14} /> Reset
+          </button>
+        )}
       </div>
+
+      <p className="text-xs text-gray-400">{filtered.length} transactie{filtered.length !== 1 ? "s" : ""}</p>
+
       {filtered.length === 0 ? (
         <div className="bg-gray-50 rounded-xl p-8 text-center">
           <Inbox size={32} className="mx-auto text-gray-400 mb-2" />
-          <p className="text-gray-600">Geen transacties</p>
+          <p className="text-gray-600">{search ? "Geen resultaten" : "Geen transacties"}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -898,6 +1117,8 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
   const [screen, setScreen] = useState("overzicht");
   const [scanModal, setScanModal] = useState(false);
   const [exportModal, setExportModal] = useState(false);
+  const [barcodeScanner, setBarcodeScanner] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(shouldShowOnboarding());
   const [attViewer, setAttViewer] = useState(null);
   const [toast, setToast] = useState(null);
   const [logFilter, setLogFilter] = useState("all");
@@ -994,6 +1215,8 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {showOnboarding && <OnboardingOverlay onDone={() => setShowOnboarding(false)} />}
+      {barcodeScanner && <BarcodeScannerModal onScan={(barcode) => { setBarcodeScanner(false); setScanModal(true); }} onClose={() => setBarcodeScanner(false)} />}
       {scanModal && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} onClose={() => setScanModal(false)} onImport={handleImportTransaction} />}
       {exportModal && <ExportModal account={account} onClose={() => setExportModal(false)} />}
       {attViewer && <AttViewer att={attViewer} onClose={() => setAttViewer(null)} />}
@@ -1273,6 +1496,11 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
               <span className="text-[10px] font-semibold">{tab.label}</span>
             </button>
           ))}
+          {/* Scanner button */}
+          <button onClick={() => setBarcodeScanner(true)} className="flex flex-col items-center gap-1 py-3 px-3">
+            <Camera size={18} className="text-gray-400" />
+            <span className="text-[10px] font-semibold text-gray-400">Scan</span>
+          </button>
           {/* FAB-style register button */}
           <button onClick={() => setScanModal(true)} className="flex flex-col items-center gap-1 py-2 px-4">
             <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200 -mt-5 hover:bg-blue-700 transition-all duration-200">
