@@ -285,35 +285,224 @@ function NewAccountForm({ onSave, onCancel }) {
   );
 }
 
-// ─── EXPORT FUNCTIONS ────────────────────────────────────────────────────────────
-function exportToCSV(transactions, emballageTypes) {
-  const header = ["Datum", "Type", "Supplier", "Emballage", "Hoeveelheid", "Filiaal", "Opmerking"];
-  const rows = transactions.map(t => [t.date, t.type, t.supplier, t.emballage, t.qty, t.branch, t.note]);
-  const csv = [header, ...rows].map(row => row.map(cell => `"${(cell || "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+// ─── EXPORT HELPERS ──────────────────────────────────────────────────────────
+function buildSaldoData(transactions, emballageTypes, suppliers) {
+  const saldo = {};
+  transactions.forEach(t => {
+    if (!saldo[t.supplier]) saldo[t.supplier] = { in: 0, out: 0, items: {} };
+    const s = saldo[t.supplier];
+    if (t.type === "IN") s.in += t.qty; else s.out += t.qty;
+    if (!s.items[t.emballage]) s.items[t.emballage] = { in: 0, out: 0 };
+    if (t.type === "IN") s.items[t.emballage].in += t.qty; else s.items[t.emballage].out += t.qty;
+  });
+  // Add value calculations
+  Object.entries(saldo).forEach(([sup, data]) => {
+    data.value = Object.entries(data.items).reduce((sum, [name, qty]) => {
+      const emb = emballageTypes.find(e => e.name === name);
+      return sum + ((qty.in - qty.out) * (emb?.value || 0));
+    }, 0);
+  });
+  return saldo;
+}
+
+// ─── CSV EXPORT ──────────────────────────────────────────────────────────────
+function exportToCSV(transactions, emballageTypes, suppliers, companyName) {
+  const date = new Date().toLocaleDateString("nl-BE");
+  const lines = [];
+
+  // Header info
+  lines.push(["REGGY RAPPORT", companyName, "", "", "", "", ""]);
+  lines.push(["Datum:", date, "", "", "", "", ""]);
+  lines.push([]);
+
+  // Saldo per leverancier
+  lines.push(["SALDO PER LEVERANCIER", "", "", "", "", "", ""]);
+  lines.push(["Leverancier", "Inkomend", "Uitgaand", "Saldo", "Waarde", "", ""]);
+  const saldo = buildSaldoData(transactions, emballageTypes, suppliers);
+  let totalValue = 0;
+  Object.entries(saldo).forEach(([sup, data]) => {
+    const s = data.in - data.out;
+    totalValue += data.value;
+    lines.push([sup, data.in, data.out, s, `€ ${data.value.toFixed(2)}`, "", ""]);
+  });
+  lines.push(["TOTAAL", "", "", "", `€ ${totalValue.toFixed(2)}`, "", ""]);
+  lines.push([]);
+
+  // Detail per leverancier per emballage
+  lines.push(["DETAIL PER LEVERANCIER", "", "", "", "", "", ""]);
+  lines.push(["Leverancier", "Emballage", "Inkomend", "Uitgaand", "Saldo", "Stukprijs", "Waarde"]);
+  Object.entries(saldo).forEach(([sup, data]) => {
+    Object.entries(data.items).forEach(([item, qty]) => {
+      const emb = emballageTypes.find(e => e.name === item);
+      const itemSaldo = qty.in - qty.out;
+      const val = itemSaldo * (emb?.value || 0);
+      lines.push([sup, item, qty.in, qty.out, itemSaldo, `€ ${(emb?.value || 0).toFixed(2)}`, `€ ${val.toFixed(2)}`]);
+    });
+  });
+  lines.push([]);
+
+  // All transactions
+  lines.push(["TRANSACTIES", "", "", "", "", "", ""]);
+  lines.push(["Datum", "Type", "Leverancier", "Emballage", "Aantal", "Filiaal", "Opmerking"]);
+  [...transactions].sort((a, b) => b.date.localeCompare(a.date)).forEach(t => {
+    lines.push([t.date, t.type === "IN" ? "Inkomend" : "Uitgaand", t.supplier, t.emballage, t.qty, t.branch, t.note || ""]);
+  });
+
+  const csv = lines.map(row => row.map(cell => `"${(cell ?? "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
+  const bom = "\uFEFF"; // UTF-8 BOM for Excel
+  const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = "reggy_export.csv";
+  link.download = `reggy_export_${new Date().toISOString().split("T")[0]}.csv`;
   link.click();
 }
 
+// ─── PDF EXPORT (HTML → print) ───────────────────────────────────────────────
 function exportToPDF(transactions, emballageTypes, users, suppliers, companyName) {
-  const content = [
-    `REGGY RAPPORT - ${companyName}`,
-    `Datum: ${new Date().toLocaleDateString("nl-BE")}`,
-    "",
-    "TRANSACTIES:",
-    ...transactions.slice(0, 50).map(t => `${t.date} | ${t.type} | ${t.supplier} | ${t.emballage} (${t.qty}x) | ${t.branch}`),
-    "",
-    "EMBALLAGE TYPES:",
-    ...emballageTypes.map(e => `${e.name}: €${e.value}`),
-  ].join("\n");
+  const date = new Date().toLocaleDateString("nl-BE");
+  const saldo = buildSaldoData(transactions, emballageTypes, suppliers);
+  const totalIn = transactions.filter(t => t.type === "IN").reduce((s, t) => s + t.qty, 0);
+  const totalOut = transactions.filter(t => t.type === "OUT").reduce((s, t) => s + t.qty, 0);
+  let totalValue = 0;
+  Object.values(saldo).forEach(d => { totalValue += d.value; });
 
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8;" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = "reggy_rapport.txt";
-  link.click();
+  // Build saldo rows
+  const saldoRows = Object.entries(saldo).map(([sup, data]) => {
+    const s = data.in - data.out;
+    return `<tr><td style="font-weight:600">${sup}</td><td style="color:#059669">+${data.in}</td><td style="color:#e11d48">−${data.out}</td><td style="font-weight:700;color:${s >= 0 ? "#059669" : "#e11d48"}">${s >= 0 ? "+" : ""}${s}</td><td style="text-align:right">€ ${data.value.toFixed(2)}</td></tr>`;
+  }).join("");
+
+  // Build detail rows
+  const detailRows = Object.entries(saldo).map(([sup, data]) =>
+    Object.entries(data.items).map(([item, qty]) => {
+      const emb = emballageTypes.find(e => e.name === item);
+      const itemSaldo = qty.in - qty.out;
+      const val = itemSaldo * (emb?.value || 0);
+      return `<tr><td>${sup}</td><td>${item}</td><td style="color:#059669">+${qty.in}</td><td style="color:#e11d48">−${qty.out}</td><td style="font-weight:600;color:${itemSaldo >= 0 ? "#059669" : "#e11d48"}">${itemSaldo >= 0 ? "+" : ""}${itemSaldo}</td><td style="text-align:right">€ ${(emb?.value || 0).toFixed(2)}</td><td style="text-align:right">€ ${val.toFixed(2)}</td></tr>`;
+    }).join("")
+  ).join("");
+
+  // Build transaction rows (latest 100)
+  const transRows = [...transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 100).map(t => {
+    const color = t.type === "IN" ? "#059669" : "#e11d48";
+    const label = t.type === "IN" ? "↓ IN" : "↑ UIT";
+    return `<tr><td>${t.date}</td><td style="color:${color};font-weight:600">${label}</td><td>${t.supplier}</td><td>${t.emballage}</td><td style="text-align:center">${t.qty}</td><td>${t.branch}</td><td style="color:#71717a;font-size:11px">${t.note || "—"}</td></tr>`;
+  }).join("");
+
+  const branches = [...new Set(users.filter(u => u.role === "branch").map(u => u.branch))];
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reggy Rapport — ${companyName}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, sans-serif; color: #18181b; font-size: 13px; background: #fff; }
+  .page { max-width: 800px; margin: 0 auto; padding: 40px; }
+
+  /* Header */
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid #ede9fe; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-bars { display: flex; align-items: flex-end; gap: 2.5px; height: 28px; }
+  .logo-bars div { width: 4px; border-radius: 2px; }
+  .logo-text { font-size: 28px; font-weight: 800; letter-spacing: -0.04em; color: #18181b; }
+  .header-right { text-align: right; }
+  .header-right h2 { font-size: 18px; font-weight: 700; color: #18181b; }
+  .header-right p { font-size: 12px; color: #71717a; margin-top: 2px; }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 32px; }
+  .stat { background: #fafafa; border: 1px solid #e4e4e7; border-radius: 12px; padding: 16px; }
+  .stat .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #71717a; margin-bottom: 4px; }
+  .stat .val { font-size: 24px; font-weight: 800; }
+
+  /* Section */
+  .section { margin-bottom: 28px; }
+  .section h3 { font-size: 15px; font-weight: 700; color: #18181b; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #f4f4f5; display: flex; align-items: center; gap: 8px; }
+  .section h3 .badge { font-size: 11px; font-weight: 600; background: #ede9fe; color: #7c3aed; padding: 2px 8px; border-radius: 6px; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #71717a; padding: 8px 10px; background: #fafafa; border-bottom: 1px solid #e4e4e7; }
+  td { padding: 8px 10px; border-bottom: 1px solid #f4f4f5; }
+  tr:hover { background: #fafafa; }
+  .total-row td { font-weight: 700; border-top: 2px solid #e4e4e7; background: #f5f3ff; }
+
+  /* Footer */
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e4e4e7; text-align: center; font-size: 11px; color: #a1a1aa; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .page { padding: 20px; }
+    .no-print { display: none !important; }
+  }
+</style></head><body>
+<div class="page">
+  <div class="no-print" style="text-align:center;margin-bottom:20px">
+    <button onclick="window.print()" style="background:#7c3aed;color:#fff;border:none;padding:12px 32px;border-radius:10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer">Opslaan als PDF</button>
+    <p style="font-size:12px;color:#a1a1aa;margin-top:8px">Kies "Opslaan als PDF" in het printvenster</p>
+  </div>
+
+  <div class="header">
+    <div class="logo">
+      <div class="logo-bars">
+        <div style="height:100%;background:#a78bfa"></div>
+        <div style="height:65%;background:#8b5cf6"></div>
+        <div style="height:85%;background:#7c3aed"></div>
+        <div style="height:50%;background:#6d28d9"></div>
+        <div style="height:95%;background:#7c3aed"></div>
+        <div style="height:40%;background:#8b5cf6"></div>
+        <div style="height:75%;background:#a78bfa"></div>
+      </div>
+      <span class="logo-text">reggy</span>
+    </div>
+    <div class="header-right">
+      <h2>${companyName}</h2>
+      <p>Rapport gegenereerd op ${date}</p>
+      <p>${branches.length} locatie${branches.length !== 1 ? "s" : ""} • ${transactions.length} transacties</p>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="label">Transacties</div><div class="val" style="color:#18181b">${transactions.length}</div></div>
+    <div class="stat"><div class="label">Inkomend</div><div class="val" style="color:#059669">${totalIn}</div></div>
+    <div class="stat"><div class="label">Uitgaand</div><div class="val" style="color:#e11d48">${totalOut}</div></div>
+    <div class="stat"><div class="label">Inventariswaarde</div><div class="val" style="color:#7c3aed">€${totalValue.toFixed(0)}</div></div>
+  </div>
+
+  <div class="section">
+    <h3>Saldo per leverancier <span class="badge">${Object.keys(saldo).length} leveranciers</span></h3>
+    <table>
+      <thead><tr><th>Leverancier</th><th>Inkomend</th><th>Uitgaand</th><th>Saldo</th><th style="text-align:right">Waarde</th></tr></thead>
+      <tbody>${saldoRows}
+      <tr class="total-row"><td>Totaal</td><td style="color:#059669">+${totalIn}</td><td style="color:#e11d48">−${totalOut}</td><td style="font-weight:700">${totalIn - totalOut >= 0 ? "+" : ""}${totalIn - totalOut}</td><td style="text-align:right">€ ${totalValue.toFixed(2)}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h3>Detail per emballage type</h3>
+    <table>
+      <thead><tr><th>Leverancier</th><th>Emballage</th><th>In</th><th>Uit</th><th>Saldo</th><th style="text-align:right">Stukprijs</th><th style="text-align:right">Waarde</th></tr></thead>
+      <tbody>${detailRows}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h3>Transactiehistorie <span class="badge">${transactions.length > 100 ? "Laatste 100" : `${transactions.length} stuks`}</span></h3>
+    <table>
+      <thead><tr><th>Datum</th><th>Type</th><th>Leverancier</th><th>Emballage</th><th style="text-align:center">Aantal</th><th>Filiaal</th><th>Opmerking</th></tr></thead>
+      <tbody>${transRows}</tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <p>Gegenereerd door Reggy — Smart Packaging Tracker • reggy.com</p>
+  </div>
+</div>
+</body></html>`;
+
+  const w = window.open("", "_blank");
+  w.document.write(html);
+  w.document.close();
 }
 
 // ─── EXPORT MODAL ─────────────────────────────────────────────────────────────
@@ -324,19 +513,25 @@ function ExportModal({ account, onClose }) {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md lg:max-w-2xl xl:max-w-4xl w-full p-8 animate-slide-up">
         <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2"><Download size={24} /> Exporteren</h2>
-        <div className="space-y-4">
-          <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-            <input type="radio" name="format" value="csv" checked={format === "csv"} onChange={(e) => setFormat(e.target.value)} />
-            <div><p className="font-semibold text-gray-900">CSV</p><p className="text-sm text-gray-600">Excel-compatibel formaat</p></div>
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-all duration-200">
+            <input type="radio" name="format" value="csv" checked={format === "csv"} onChange={(e) => setFormat(e.target.value)} className="accent-blue-600" />
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900">CSV / Excel</p>
+              <p className="text-sm text-gray-500">Saldo-overzicht, detail per leverancier, alle transacties. Direct te openen in Excel.</p>
+            </div>
           </label>
-          <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-            <input type="radio" name="format" value="pdf" checked={format === "pdf"} onChange={(e) => setFormat(e.target.value)} />
-            <div><p className="font-semibold text-gray-900">PDF</p><p className="text-sm text-gray-600">Rapport formaat</p></div>
+          <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-all duration-200">
+            <input type="radio" name="format" value="pdf" checked={format === "pdf"} onChange={(e) => setFormat(e.target.value)} className="accent-blue-600" />
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900">PDF Rapport</p>
+              <p className="text-sm text-gray-500">Professioneel rapport met Reggy branding, statistieken, saldo en transactiehistorie.</p>
+            </div>
           </label>
         </div>
         <div className="flex gap-3 mt-6">
-          <button onClick={onClose} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Annuleren</button>
-          <button onClick={() => { format === "csv" ? exportToCSV(account.transactions, account.emballageTypes) : exportToPDF(account.transactions, account.emballageTypes, account.users, account.suppliers, account.companyName); onClose(); }} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Download size={20} /> Exporteren</button>
+          <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200">Annuleren</button>
+          <button onClick={() => { format === "csv" ? exportToCSV(account.transactions, account.emballageTypes, account.suppliers, account.companyName) : exportToPDF(account.transactions, account.emballageTypes, account.users, account.suppliers, account.companyName); onClose(); }} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Download size={20} /> Exporteren</button>
         </div>
       </div>
     </div>
