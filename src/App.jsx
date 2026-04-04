@@ -37,7 +37,7 @@ function BarcodeLogo({ size = "md" }) {
         ))}
       </div>
       <span className={`${s.text} font-bold text-gray-900`} style={{ fontFamily: "'Inter', sans-serif", letterSpacing: "-0.04em" }}>
-        reggy
+        Reggy
       </span>
     </div>
   );
@@ -452,7 +452,7 @@ function exportToPDF(transactions, emballageTypes, users, suppliers, companyName
         <div style="height:40%;background:#8b5cf6"></div>
         <div style="height:75%;background:#a78bfa"></div>
       </div>
-      <span class="logo-text">reggy</span>
+      <span class="logo-text">Reggy</span>
     </div>
     <div class="header-right">
       <h2>${companyName}</h2>
