@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Reggy | Smart packaging tracker for hospitality. Register, scan and manage your emballage inventory.">
 <meta name="theme-color" content="#4F46E5">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://reggy.com">
+<meta property="og:title" content="Reggy - Smart Packaging Tracker for Hospitality">
+<meta property="og:description" content="Track kegs, crates and packaging across all your locations. Know exactly what's out, what's in, and what it's worth.">
+<meta property="og:image" content="https://reggy.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Reggy - Smart Packaging Tracker for Hospitality">
+<meta name="twitter:description" content="Track kegs, crates and packaging across all your locations. Know exactly what's out, what's in, and what it's worth.">
+<meta name="twitter:image" content="https://reggy.com/og-image.png">
 <title>Reggy | Smart Packaging Tracker</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -141,6 +150,27 @@
     width: 36px; height: 36px; background: var(--purple-600); border-radius: 12px;
     margin: -12px auto 0; display: flex; align-items: center; justify-content: center;
     color: #fff; font-size: 20px; font-weight: 300; box-shadow: 0 4px 12px rgba(124,58,237,0.3);
+  }
+
+  /* ── HOW IT WORKS ── */
+  .how-it-works { padding: 80px 24px; background: #fff; }
+  .how-it-works-inner { max-width: 960px; margin: 0 auto; text-align: center; }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 32px; margin-top: 48px; position: relative; }
+  .step { position: relative; padding: 0 16px; }
+  .step-number {
+    width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-size: 24px; font-weight: 900; color: #fff; margin: 0 auto 20px;
+    background: linear-gradient(135deg, var(--purple-600), var(--purple-500));
+    box-shadow: 0 4px 16px rgba(124,58,237,0.25);
+  }
+  .step h3 { font-size: 18px; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
+  .step p { font-size: 14px; color: var(--gray-500); line-height: 1.6; }
+  .step-connector {
+    display: none; position: absolute; top: 28px; left: calc(50% + 44px); width: calc(100% - 88px);
+    height: 2px; background: var(--purple-200);
+  }
+  @media (min-width: 768px) {
+    .step-connector { display: block; }
   }
 
   /* ── FEATURES ── */
@@ -357,7 +387,7 @@
     <p data-i18n="hero_desc">Track kegs, crates and packaging across all your locations. Know exactly what's out, what's in, and what it's worth.</p>
     <div class="hero-buttons">
       <a href="https://app.reggy.com" class="btn-primary" data-i18n="hero_cta_primary">Get started →</a>
-      <a href="#features" class="btn-secondary" data-i18n="hero_cta_secondary">See how it works</a>
+      <a href="#how-it-works" class="btn-secondary" data-i18n="hero_cta_secondary">See how it works</a>
     </div>
   </div>
 </section>
@@ -427,6 +457,34 @@
       <div class="supplier-logo"><img src="https://logo.clearbit.com/vangeldernederland.nl" alt="Van Gelder" loading="lazy"></div>
       <div class="supplier-logo"><img src="https://logo.clearbit.com/heineken.nl" alt="Heineken" loading="lazy"></div>
       <div class="supplier-logo"><img src="https://logo.clearbit.com/cocacolaep.com" alt="Coca-Cola" loading="lazy"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ────────── HOW IT WORKS ────────── -->
+<section class="how-it-works" id="how-it-works">
+  <div class="how-it-works-inner">
+    <div class="section-label" data-i18n="hiw_label">How it works</div>
+    <h2 class="section-title" data-i18n="hiw_title">Up and running in 3 steps</h2>
+    <p class="section-desc" style="margin:0 auto" data-i18n="hiw_desc">No complex setup, no training. Your team can start tracking packaging today.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="step-connector"></div>
+        <div class="step-number">1</div>
+        <h3 data-i18n="hiw_s1_title">Create your account</h3>
+        <p data-i18n="hiw_s1_desc">Sign up, add your outlets and suppliers. The whole setup takes less than 5 minutes.</p>
+      </div>
+      <div class="step">
+        <div class="step-connector"></div>
+        <div class="step-number">2</div>
+        <h3 data-i18n="hiw_s2_title">Your staff registers packaging</h3>
+        <p data-i18n="hiw_s2_desc">Every delivery or return gets logged with one tap. Multiple items at once, straight from your phone.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">3</div>
+        <h3 data-i18n="hiw_s3_title">You see the full picture</h3>
+        <p data-i18n="hiw_s3_desc">Live overview of all outstanding packaging per supplier, per location. Export reports anytime.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -502,7 +560,7 @@
   <div class="pricing-inner">
     <div class="section-label" data-i18n="pricing_label">Pricing</div>
     <h2 class="section-title" data-i18n="pricing_title">Simple, transparent pricing</h2>
-    <p class="section-desc" style="margin:0 auto 0" data-i18n="pricing_desc">Start free. Scale as you grow. No hidden fees.</p>
+    <p class="section-desc" style="margin:0 auto 0" data-i18n="pricing_desc">No setup fees. Scale as you grow. Cancel anytime.</p>
     <div class="pricing-cards">
       <div class="pricing-card">
         <h3 data-i18n="plan1_name">Starter</h3>
@@ -625,7 +683,7 @@
 <!-- ────────── FOOTER ────────── -->
 <footer>
   <div class="footer-inner">
-    <p>© 2026 Reggy. <span data-i18n="footer_rights">All rights reserved.</span> · <a href="mailto:hello@reggy.com">hello@reggy.com</a></p>
+    <p>© 2026 Reggy. <span data-i18n="footer_rights">All rights reserved.</span> · <a href="mailto:hello@reggy.com">hello@reggy.com</a> · <a href="#" onclick="document.getElementById('privacy-modal').style.display='flex';return false" data-i18n="footer_privacy">Privacy Policy</a></p>
   </div>
 </footer>
 
@@ -638,6 +696,11 @@ const translations = {
     hero_title: 'Packaging tracking<br><span class="gradient">made simple.</span>',
     hero_desc: "Track kegs, crates and packaging across all your locations. Know exactly what's out, what's in, and what it's worth.",
     hero_cta_primary: "Get started →", hero_cta_secondary: "See how it works",
+    hiw_label: "How it works", hiw_title: "Up and running in 3 steps",
+    hiw_desc: "No complex setup, no training. Your team can start tracking packaging today.",
+    hiw_s1_title: "Create your account", hiw_s1_desc: "Sign up, add your outlets and suppliers. The whole setup takes less than 5 minutes.",
+    hiw_s2_title: "Your staff registers packaging", hiw_s2_desc: "Every delivery or return gets logged with one tap. Multiple items at once, straight from your phone.",
+    hiw_s3_title: "You see the full picture", hiw_s3_desc: "Live overview of all outstanding packaging per supplier, per location. Export reports anytime.",
     features_label: "Features", features_title: "Everything you need to<br>track your packaging",
     features_desc: "Built for bars, restaurants, and hospitality groups who are done losing money on untracked kegs and crates.",
     f1_title: "Supplier Balance", f1_desc: "See exactly how many kegs, crates and packaging you have outstanding per supplier. No more guessing.",
@@ -645,7 +708,7 @@ const translations = {
     f3_title: "Mobile-First", f3_desc: "Designed for busy bar staff. Quick registration with one tap, right from your phone. No training needed.",
     f4_title: "Export & Reports", f4_desc: "Export to CSV or PDF anytime. Perfect for your accountant, supplier negotiations, or internal audits.",
     pricing_label: "Pricing", pricing_title: "Simple, transparent pricing",
-    pricing_desc: "Start free. Scale as you grow. No hidden fees.",
+    pricing_desc: "No setup fees. Scale as you grow. Cancel anytime.",
     plan1_name: "Starter", plan1_desc: "Perfect for a single location", plan1_per: "1 outlet included",
     plan1_f1: "Unlimited transactions", plan1_f2: "Supplier balance tracking", plan1_f3: "CSV & PDF exports", plan1_f4: "Mobile-optimized app",
     plan2_name: "Business", plan2_desc: "For hospitality groups with multiple outlets", plan2_per: "2 outlets + master admin",
@@ -656,7 +719,7 @@ const translations = {
     cta_title: "Stop losing money on<br>untracked packaging",
     cta_desc: "Join the growing number of hospitality businesses who track their emballage with Reggy. Set up in under 2 minutes.",
     cta_button: "Get started →",
-    footer_rights: "All rights reserved.",
+    footer_rights: "All rights reserved.", footer_privacy: "Privacy Policy",
     suppliers_label: "Reggy works with all your suppliers, including",
     proof_s1: "Active outlets", proof_s2: "Transactions logged", proof_s3: "Packaging value tracked", proof_s4: "User rating",
     test1_quote: "We used to lose track of dozens of kegs every month. With Reggy, we know exactly what's out with each supplier. It paid for itself in the first week.",
@@ -684,6 +747,11 @@ const translations = {
     hero_title: 'Emballage tracking<br><span class="gradient">simpel gemaakt.</span>',
     hero_desc: "Houd vaten, kratten en verpakkingen bij over al je locaties. Weet precies wat er uit staat, wat er binnen is, en wat het waard is.",
     hero_cta_primary: "Aan de slag →", hero_cta_secondary: "Bekijk hoe het werkt",
+    hiw_label: "Hoe het werkt", hiw_title: "In 3 stappen aan de slag",
+    hiw_desc: "Geen ingewikkelde setup, geen training. Je team kan vandaag nog beginnen met emballage registreren.",
+    hiw_s1_title: "Maak je account aan", hiw_s1_desc: "Registreer je, voeg je locaties en leveranciers toe. De hele setup duurt minder dan 5 minuten.",
+    hiw_s2_title: "Je personeel registreert emballage", hiw_s2_desc: "Elke levering of retour wordt met een tik gelogd. Meerdere items tegelijk, direct vanaf de telefoon.",
+    hiw_s3_title: "Jij ziet het totaalbeeld", hiw_s3_desc: "Live overzicht van alle uitstaande emballage per leverancier, per locatie. Exporteer rapporten wanneer je wilt.",
     features_label: "Functies", features_title: "Alles wat je nodig hebt om<br>je emballage bij te houden",
     features_desc: "Gebouwd voor cafés, restaurants en horecagroepen die klaar zijn met geld verliezen aan ongeregistreerde vaten en kratten.",
     f1_title: "Saldo per leverancier", f1_desc: "Zie precies hoeveel vaten, kratten en verpakkingen je uitstaan hebt per leverancier. Niet meer gokken.",
@@ -691,7 +759,7 @@ const translations = {
     f3_title: "Mobile-First", f3_desc: "Ontworpen voor druk barpersoneel. Snelle registratie met één tik, direct vanaf je telefoon. Geen training nodig.",
     f4_title: "Export & Rapporten", f4_desc: "Exporteer naar CSV of PDF wanneer je wilt. Perfect voor je boekhouder, leveranciersonderhandelingen of interne audits.",
     pricing_label: "Prijzen", pricing_title: "Eenvoudige, transparante prijzen",
-    pricing_desc: "Start gratis. Schaal mee als je groeit. Geen verborgen kosten.",
+    pricing_desc: "Geen opstartkosten. Schaal mee als je groeit. Altijd opzegbaar.",
     plan1_name: "Starter", plan1_desc: "Perfect voor één locatie", plan1_per: "1 outlet inbegrepen",
     plan1_f1: "Onbeperkte transacties", plan1_f2: "Saldo per leverancier", plan1_f3: "CSV & PDF exports", plan1_f4: "Mobiel-geoptimaliseerde app",
     plan2_name: "Business", plan2_desc: "Voor horecagroepen met meerdere locaties", plan2_per: "2 outlets + master admin",
@@ -702,7 +770,7 @@ const translations = {
     cta_title: "Stop met geld verliezen aan<br>ongeregistreerde emballage",
     cta_desc: "Sluit je aan bij het groeiende aantal horecabedrijven die hun emballage bijhouden met Reggy. Opgezet in minder dan 2 minuten.",
     cta_button: "Aan de slag →",
-    footer_rights: "Alle rechten voorbehouden.",
+    footer_rights: "Alle rechten voorbehouden.", footer_privacy: "Privacybeleid",
     suppliers_label: "Reggy werkt met al je leveranciers, waaronder",
     proof_s1: "Actieve locaties", proof_s2: "Transacties gelogd", proof_s3: "Emballagewaarde bijgehouden", proof_s4: "Gebruikersbeoordeling",
     test1_quote: "We raakten elke maand tientallen vaten kwijt. Met Reggy weten we precies wat er uitstaat bij elke leverancier. Het verdiende zichzelf terug in de eerste week.",
@@ -750,6 +818,43 @@ function toggleLang() {
   if (featured) {
     featured.setAttribute("data-badge", currentLang === "en" ? "Most popular" : "Meest populair");
   }
+}
+</script>
+
+<!-- ────────── PRIVACY MODAL ────────── -->
+<div id="privacy-modal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;padding:24px">
+  <div style="background:#fff;border-radius:20px;max-width:640px;width:100%;max-height:80vh;overflow-y:auto;padding:40px;position:relative">
+    <button onclick="document.getElementById('privacy-modal').style.display='none'" style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:24px;cursor:pointer;color:#71717a">&times;</button>
+    <h2 style="font-size:24px;font-weight:800;margin-bottom:20px;color:#18181b">Privacy Policy</h2>
+    <div style="font-size:14px;line-height:1.8;color:#52525b">
+      <p style="margin-bottom:16px"><strong>Last updated:</strong> April 2026</p>
+      <p style="margin-bottom:16px">Reggy ("we", "our") respects your privacy. This policy explains what data we collect and how we use it.</p>
+      <p style="margin-bottom:8px"><strong>What we collect</strong></p>
+      <p style="margin-bottom:16px">Account information (name, email, company), packaging transaction data you enter, and basic usage analytics to improve our service.</p>
+      <p style="margin-bottom:8px"><strong>How we use it</strong></p>
+      <p style="margin-bottom:16px">Your data is used solely to provide and improve the Reggy service. We do not sell or share your data with third parties for marketing purposes.</p>
+      <p style="margin-bottom:8px"><strong>Data storage</strong></p>
+      <p style="margin-bottom:16px">All data is stored in EU data centers and encrypted in transit and at rest. We are fully GDPR/AVG compliant.</p>
+      <p style="margin-bottom:8px"><strong>Cookies</strong></p>
+      <p style="margin-bottom:16px">We use essential cookies to keep you logged in and remember your preferences. We do not use tracking or advertising cookies.</p>
+      <p style="margin-bottom:8px"><strong>Your rights</strong></p>
+      <p style="margin-bottom:16px">You can request access to, correction, or deletion of your personal data at any time by emailing <a href="mailto:hello@reggy.com" style="color:#7c3aed">hello@reggy.com</a>.</p>
+      <p><strong>Contact</strong></p>
+      <p>Questions about this policy? Reach us at <a href="mailto:hello@reggy.com" style="color:#7c3aed">hello@reggy.com</a>.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ────────── COOKIE BANNER ────────── -->
+<div id="cookie-banner" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:998;background:#18181b;color:#fff;padding:16px 24px;font-size:14px">
+  <div style="max-width:1120px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    <p style="margin:0;opacity:0.85" id="cookie-text">We use essential cookies to keep Reggy working. No tracking, no ads.</p>
+    <button onclick="document.getElementById('cookie-banner').style.display='none';localStorage.setItem('reggy_cookies','accepted')" style="background:#7c3aed;color:#fff;border:none;padding:10px 24px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap" id="cookie-btn">Got it</button>
+  </div>
+</div>
+<script>
+if (!localStorage.getItem('reggy_cookies')) {
+  document.getElementById('cookie-banner').style.display = 'block';
 }
 </script>
 
