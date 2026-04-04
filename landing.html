@@ -236,12 +236,14 @@
   .suppliers-strip { padding: 40px 24px; background: #fff; border-bottom: 1px solid var(--gray-100); }
   .suppliers-strip-inner { max-width: 1120px; margin: 0 auto; text-align: center; }
   .suppliers-strip p { font-size: 13px; font-weight: 500; color: var(--gray-400); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 0.06em; }
-  .supplier-logos { display: flex; align-items: center; justify-content: center; gap: 24px; flex-wrap: wrap; opacity: 0.7; }
+  .supplier-logos { display: flex; align-items: center; justify-content: center; gap: 32px; flex-wrap: wrap; }
   .supplier-logo {
-    display: flex; align-items: center; transition: opacity 0.2s;
+    display: flex; align-items: center; transition: all 0.3s;
+    filter: grayscale(100%); opacity: 0.5;
   }
-  .supplier-logo:hover { opacity: 0.9; }
-  .supplier-logo svg { border-radius: 8px; }
+  .supplier-logo:hover { filter: grayscale(0%); opacity: 1; }
+  .supplier-logo img { height: 36px; width: auto; object-fit: contain; }
+  @media (max-width: 640px) { .supplier-logo img { height: 28px; } }
 
   /* ── SOCIAL PROOF ── */
   .social-proof { padding: 80px 24px; background: var(--gray-50); }
@@ -419,36 +421,12 @@
   <div class="suppliers-strip-inner">
     <p data-i18n="suppliers_label">Reggy works with all your suppliers, including</p>
     <div class="supplier-logos">
-      <div class="supplier-logo">
-        <svg width="120" height="40" viewBox="0 0 120 40" fill="none">
-          <rect width="120" height="40" rx="8" fill="#003D6B"/>
-          <text x="60" y="26" text-anchor="middle" font-size="18" font-weight="800" fill="#fff" font-family="Inter,sans-serif" letter-spacing="2">HANOS</text>
-        </svg>
-      </div>
-      <div class="supplier-logo">
-        <svg width="120" height="40" viewBox="0 0 120 40" fill="none">
-          <rect width="120" height="40" rx="8" fill="#E30613"/>
-          <text x="60" y="26" text-anchor="middle" font-size="16" font-weight="800" fill="#fff" font-family="Inter,sans-serif" letter-spacing="1">Bidfood</text>
-        </svg>
-      </div>
-      <div class="supplier-logo">
-        <svg width="120" height="40" viewBox="0 0 120 40" fill="none">
-          <rect width="120" height="40" rx="8" fill="#F7941D"/>
-          <text x="60" y="26" text-anchor="middle" font-size="18" font-weight="800" fill="#fff" font-family="Inter,sans-serif" letter-spacing="1">SLIGRO</text>
-        </svg>
-      </div>
-      <div class="supplier-logo">
-        <svg width="80" height="40" viewBox="0 0 80 40" fill="none">
-          <rect width="80" height="40" rx="8" fill="#1B4D3E"/>
-          <text x="40" y="26" text-anchor="middle" font-size="18" font-weight="800" fill="#fff" font-family="Inter,sans-serif" letter-spacing="2">VHC</text>
-        </svg>
-      </div>
-      <div class="supplier-logo">
-        <svg width="140" height="40" viewBox="0 0 140 40" fill="none">
-          <rect width="140" height="40" rx="8" fill="#2D7A2D"/>
-          <text x="70" y="26" text-anchor="middle" font-size="15" font-weight="800" fill="#fff" font-family="Inter,sans-serif" letter-spacing="1">Van Gelder</text>
-        </svg>
-      </div>
+      <div class="supplier-logo"><img src="https://logo.clearbit.com/hanos.nl" alt="Hanos" loading="lazy"></div>
+      <div class="supplier-logo"><img src="https://logo.clearbit.com/bidfood.nl" alt="Bidfood" loading="lazy"></div>
+      <div class="supplier-logo"><img src="https://logo.clearbit.com/sligro.nl" alt="Sligro" loading="lazy"></div>
+      <div class="supplier-logo"><img src="https://logo.clearbit.com/vangeldernederland.nl" alt="Van Gelder" loading="lazy"></div>
+      <div class="supplier-logo"><img src="https://logo.clearbit.com/heineken.nl" alt="Heineken" loading="lazy"></div>
+      <div class="supplier-logo"><img src="https://logo.clearbit.com/cocacolaep.com" alt="Coca-Cola" loading="lazy"></div>
     </div>
   </div>
 </section>
