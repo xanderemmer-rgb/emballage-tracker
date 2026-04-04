@@ -1,7 +1,7 @@
 {
   "name": "Reggy - Packaging Tracker",
   "short_name": "Reggy",
-  "description": "Smart packaging tracker for hospitality. Register, scan and manage your emballage inventory with AI-powered insights.",
+  "description": "Smart packaging tracker for hospitality. Register, scan and manage your emballage inventory across all your locations.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

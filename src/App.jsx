@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
-  Store, Crown, Settings, BarChart3, ClipboardList, PenSquare, CreditCard, Package,
+  Settings, BarChart3, ClipboardList, CreditCard, Package,
   Truck, Download, ScanLine, ArrowDownCircle, ArrowUpCircle, Plus, PlusCircle, Pencil,
-  Trash2, Paperclip, Key, FileText, TrendingUp, CheckCircle, Check, X, RotateCcw, Eye,
-  EyeOff, Sparkles, Inbox, Lock, PackageOpen, AlertCircle, ChevronRight, Search, Filter,
-  Calendar, LogOut, User, Users, Building2, Shield, Camera, HelpCircle
+  Trash2, Key, TrendingUp, CheckCircle, Check, X,
+  Sparkles, Inbox, AlertCircle, Search,
+  Calendar, LogOut, User, Users, Building2, Camera
 } from "lucide-react";
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
