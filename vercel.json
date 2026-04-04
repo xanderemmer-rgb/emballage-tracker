@@ -1,7 +1,17 @@
 {
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "reggy.io"
+        }
+      ],
+      "destination": "/landing.html"
+    },
+    {
+      "source": "/((?!landing\\.html|assets|favicon|icons|og-|manifest).*)",
       "has": [
         {
           "type": "host",
