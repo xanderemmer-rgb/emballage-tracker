@@ -794,10 +794,11 @@ const translations = {
   }
 };
 
-let currentLang = "en";
+// Detect browser language — default to NL for Dutch speakers
+const browserLang = (navigator.language || navigator.userLanguage || "en").toLowerCase();
+let currentLang = browserLang.startsWith("nl") ? "nl" : "en";
 
-function toggleLang() {
-  currentLang = currentLang === "en" ? "nl" : "en";
+function applyLang() {
   document.querySelector(".lang-toggle").textContent = currentLang === "en" ? "NL" : "EN";
   document.documentElement.lang = currentLang;
 
@@ -819,6 +820,14 @@ function toggleLang() {
     featured.setAttribute("data-badge", currentLang === "en" ? "Most popular" : "Meest populair");
   }
 }
+
+function toggleLang() {
+  currentLang = currentLang === "en" ? "nl" : "en";
+  applyLang();
+}
+
+// Apply detected language on load
+applyLang();
 </script>
 
 <!-- ────────── PRIVACY MODAL ────────── -->
