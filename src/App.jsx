@@ -344,23 +344,28 @@ function ExportModal({ account, onClose }) {
 }
 
 // ─── BON SCAN MODAL ───────────────────────────────────────────────────────────
-function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport }) {
-  const [type, setType] = useState("IN");
-  const [supplier, setSupplier] = useState("");
-  const [emballage, setEmballage] = useState("");
-  const [qty, setQty] = useState(1);
-  const [note, setNote] = useState("");
+function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, isEdit = false, initialData = null }) {
+  const [type, setType] = useState(initialData?.type || "IN");
+  const [supplier, setSupplier] = useState(initialData?.supplier || "");
+  const [emballage, setEmballage] = useState(initialData?.emballage || "");
+  const [qty, setQty] = useState(initialData?.qty || 1);
+  const [note, setNote] = useState(initialData?.note || "");
 
   const handleImport = () => {
     if (!supplier || !emballage) return;
-    onImport({ type, supplier, emballage, qty: parseInt(qty), note, branch, date: new Date().toISOString().split("T")[0] });
-    setType("IN"); setSupplier(""); setEmballage(""); setQty(1); setNote("");
+    const data = isEdit
+      ? { ...initialData, type, supplier, emballage, qty: parseInt(qty), note }
+      : { type, supplier, emballage, qty: parseInt(qty), note, branch, date: new Date().toISOString().split("T")[0] };
+    onImport(data);
+    if (!isEdit) {
+      setType("IN"); setSupplier(""); setEmballage(""); setQty(1); setNote("");
+    }
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end z-50">
       <div className="bg-white rounded-t-3xl w-full max-w-md lg:max-w-2xl xl:max-w-4xl p-6 animate-slide-up shadow-2xl">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2"><ScanLine size={24} /> Bon scannen</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">{isEdit ? <Pencil size={24} /> : <ScanLine size={24} />} {isEdit ? "Transactie bewerken" : "Bon scannen"}</h2>
         <div className="space-y-4 max-h-96 overflow-y-auto">
           <div><label className="block text-sm font-semibold text-gray-700 mb-2">Type</label><select value={type} onChange={(e) => setType(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg"><option value="IN">Inkomend</option><option value="OUT">Uitgaand</option></select></div>
           <div><label className="block text-sm font-semibold text-gray-700 mb-2">Leverancier</label><select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg"><option value="">Selecteer...</option>{suppliers.map((s, i) => <option key={i} value={s}>{s}</option>)}</select></div>
@@ -370,7 +375,9 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport }) 
         </div>
         <div className="flex gap-3 mt-6">
           <button onClick={onClose} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Annuleren</button>
-          <button onClick={handleImport} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2"><Plus size={20} /> Toevoegen</button>
+          <button onClick={handleImport} className={`flex-1 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all duration-200 ${isEdit ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}>
+            {isEdit ? <><Check size={20} /> Opslaan</> : <><Plus size={20} /> Toevoegen</>}
+          </button>
         </div>
       </div>
     </div>
@@ -623,7 +630,7 @@ function MiniBarChart({ data, maxVal }) {
 }
 
 // ─── BRANCH APP ───────────────────────────────────────────────────────────────
-function BranchApp({ user, account, setAccount, onLogout }) {
+function BranchApp({ user, account, setAccount, onLogout, language, setLanguage }) {
   const [screen, setScreen] = useState("overzicht");
   const [scanModal, setScanModal] = useState(false);
   const [exportModal, setExportModal] = useState(false);
@@ -631,6 +638,10 @@ function BranchApp({ user, account, setAccount, onLogout }) {
   const [toast, setToast] = useState(null);
   const [logFilter, setLogFilter] = useState("all");
   const [logSearch, setLogSearch] = useState("");
+  const [logDateFrom, setLogDateFrom] = useState("");
+  const [logDateTo, setLogDateTo] = useState("");
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
   const branchTransactions = account.transactions.filter(t => t.branch === user.branch);
 
@@ -643,7 +654,19 @@ function BranchApp({ user, account, setAccount, onLogout }) {
 
   const handleDeleteTransaction = (id) => {
     setAccount({ ...account, transactions: account.transactions.filter(t => t.id !== id) });
+    setDeleteConfirm(null);
     setToast({ type: "success", message: "Transactie verwijderd!" });
+  };
+
+  const handleEditTransaction = (transaction) => {
+    setEditingTransaction(transaction);
+  };
+
+  const handleSaveTransaction = (updatedTrans) => {
+    const updatedTransactions = account.transactions.map(t => t.id === updatedTrans.id ? updatedTrans : t);
+    setAccount({ ...account, transactions: updatedTransactions });
+    setEditingTransaction(null);
+    setToast({ type: "success", message: "Transactie bijgewerkt!" });
   };
 
   // Stats
@@ -687,6 +710,13 @@ function BranchApp({ user, account, setAccount, onLogout }) {
   const filteredLog = branchTransactions
     .filter(t => logFilter === "all" || t.type === logFilter)
     .filter(t => !logSearch || t.emballage.toLowerCase().includes(logSearch.toLowerCase()) || t.supplier.toLowerCase().includes(logSearch.toLowerCase()))
+    .filter(t => {
+      if (!logDateFrom && !logDateTo) return true;
+      const tDate = new Date(t.date);
+      if (logDateFrom && tDate < new Date(logDateFrom)) return false;
+      if (logDateTo && tDate > new Date(logDateTo)) return false;
+      return true;
+    })
     .sort((a, b) => b.date.localeCompare(a.date));
 
   const tabs = [
@@ -701,6 +731,18 @@ function BranchApp({ user, account, setAccount, onLogout }) {
       {scanModal && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} onClose={() => setScanModal(false)} onImport={handleImportTransaction} />}
       {exportModal && <ExportModal account={account} onClose={() => setExportModal(false)} />}
       {attViewer && <AttViewer att={attViewer} onClose={() => setAttViewer(null)} />}
+      {editingTransaction && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} onClose={() => setEditingTransaction(null)} onImport={handleSaveTransaction} isEdit={true} initialData={editingTransaction} />}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full">
+            <p className="text-gray-900 font-semibold mb-6">Weet je zeker dat je deze transactie wilt verwijderen?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-all duration-200">Annuleren</button>
+              <button onClick={() => handleDeleteTransaction(deleteConfirm)} className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition-all duration-200">Verwijderen</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-30">
@@ -713,6 +755,10 @@ function BranchApp({ user, account, setAccount, onLogout }) {
             </div>
           </div>
           <div className="flex gap-1.5">
+            <select value={language} onChange={(e) => setLanguage(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white hover:bg-gray-50 transition-all duration-200">
+              <option value="nl">NL</option>
+              <option value="en">EN</option>
+            </select>
             <button onClick={() => setExportModal(true)} className="p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><Download size={18} className="text-gray-500" /></button>
             <button onClick={onLogout} className="p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><LogOut size={18} className="text-gray-500" /></button>
           </div>
@@ -894,6 +940,19 @@ function BranchApp({ user, account, setAccount, onLogout }) {
                 <input type="text" value={logSearch} onChange={(e) => setLogSearch(e.target.value)} placeholder="Zoek emballage of leverancier..." className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
               </div>
             </div>
+
+            {/* Date filters */}
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input type="date" value={logDateFrom} onChange={(e) => setLogDateFrom(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+              <div className="flex-1 relative">
+                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input type="date" value={logDateTo} onChange={(e) => setLogDateTo(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+            </div>
+
             <div className="flex gap-1.5">
               {[["all", "Alles"], ["IN", "Inkomend"], ["OUT", "Uitgaand"]].map(([val, label]) => (
                 <button key={val} onClick={() => setLogFilter(val)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${logFilter === val ? (val === "IN" ? "bg-emerald-100 text-emerald-700" : val === "OUT" ? "bg-rose-100 text-rose-700" : "bg-gray-900 text-white") : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"}`}>{label}</button>
@@ -928,7 +987,8 @@ function BranchApp({ user, account, setAccount, onLogout }) {
                         </div>
                         {t.note && <p className="text-xs text-gray-500 mt-1">{t.note}</p>}
                       </div>
-                      <button onClick={() => handleDeleteTransaction(t.id)} className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all duration-200 flex-shrink-0"><Trash2 size={16} /></button>
+                      <button onClick={() => handleEditTransaction(t)} className="p-2 hover:bg-blue-50 text-gray-300 hover:text-blue-500 rounded-lg transition-all duration-200 flex-shrink-0"><Pencil size={16} /></button>
+                      <button onClick={() => setDeleteConfirm(t.id)} className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all duration-200 flex-shrink-0"><Trash2 size={16} /></button>
                     </div>
                   );
                 })}
@@ -1056,12 +1116,43 @@ function LoginPage({ onLogin, onRegister, onReset }) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+// ─── TRANSLATIONS ─────────────────────────────────────────────────────────────
+const translations = {
+  nl: {
+    login: "Inloggen",
+    register: "Registreren",
+    username: "Gebruikersnaam",
+    password: "Wachtwoord",
+    language: "Taal",
+    logout: "Uitloggen",
+    settings: "Instellingen",
+    overview: "Overzicht",
+    balance: "Saldo",
+    logbook: "Logboek",
+    new: "Nieuw",
+  },
+  en: {
+    login: "Login",
+    register: "Register",
+    username: "Username",
+    password: "Password",
+    language: "Language",
+    logout: "Logout",
+    settings: "Settings",
+    overview: "Overview",
+    balance: "Balance",
+    logbook: "Logbook",
+    new: "New",
+  },
+};
+
 function App() {
   const [screen, setScreen] = useState("login");
   const [currentUser, setCurrentUser] = useState(null);
   const [currentAccountId, setCurrentAccountId] = useState(null);
   const [accounts, setAccounts] = useState(loadAccounts());
   const [apiKey, setApiKeyState] = useState(getApiKey());
+  const [language, setLanguage] = useState("nl");
 
   useEffect(() => {
     saveAccounts(accounts);
@@ -1115,7 +1206,7 @@ function App() {
     return <MasterApp account={currentAccount} user={currentUser} onLogout={handleLogout} setAccount={(acc) => setAccounts(accounts.map(a => a.id === acc.id ? acc : a))} />;
   }
 
-  return <BranchApp user={currentUser} account={currentAccount} setAccount={(acc) => setAccounts(accounts.map(a => a.id === acc.id ? acc : a))} onLogout={handleLogout} />;
+  return <BranchApp user={currentUser} account={currentAccount} setAccount={(acc) => setAccounts(accounts.map(a => a.id === acc.id ? acc : a))} onLogout={handleLogout} language={language} setLanguage={setLanguage} />;
 }
 
 export default App;
