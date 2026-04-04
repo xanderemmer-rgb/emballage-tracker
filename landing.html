@@ -385,9 +385,9 @@
       </div>
       <div class="preview-body">
         <div class="preview-stats">
-          <div class="preview-stat"><div class="label" style="color:#71717a">Total</div><div class="val" style="color:#18181b">12</div></div>
-          <div class="preview-stat"><div class="label" style="color:#10b981">↓ In</div><div class="val" style="color:#059669">8</div></div>
-          <div class="preview-stat"><div class="label" style="color:#f43f5e">↑ Out</div><div class="val" style="color:#e11d48">4</div></div>
+          <div class="preview-stat"><div class="label" style="color:#71717a" data-i18n="prev_total">Total</div><div class="val" style="color:#18181b">12</div></div>
+          <div class="preview-stat"><div class="label" style="color:#10b981" data-i18n="prev_in">↓ In</div><div class="val" style="color:#059669">8</div></div>
+          <div class="preview-stat"><div class="label" style="color:#f43f5e" data-i18n="prev_out">↑ Out</div><div class="val" style="color:#e11d48">4</div></div>
         </div>
         <div class="preview-supplier">
           <div class="preview-supplier-header">
@@ -405,10 +405,10 @@
         </div>
       </div>
       <div class="preview-bottom-nav">
-        <div class="preview-nav-item active"><div class="ico" style="background:#ede9fe"></div>Overview</div>
-        <div class="preview-nav-item"><div class="ico" style="background:#f4f4f5"></div>Balance</div>
-        <div style="text-align:center"><div class="preview-fab">+</div><div style="font-size:8px;font-weight:600;color:#7c3aed;margin-top:2px">New</div></div>
-        <div class="preview-nav-item"><div class="ico" style="background:#f4f4f5"></div>Log</div>
+        <div class="preview-nav-item active"><div class="ico" style="background:#ede9fe"></div><span data-i18n="prev_overview">Overview</span></div>
+        <div class="preview-nav-item"><div class="ico" style="background:#f4f4f5"></div><span data-i18n="prev_balance">Balance</span></div>
+        <div style="text-align:center"><div class="preview-fab">+</div><div style="font-size:8px;font-weight:600;color:#7c3aed;margin-top:2px" data-i18n="prev_new">New</div></div>
+        <div class="preview-nav-item"><div class="ico" style="background:#f4f4f5"></div><span data-i18n="prev_log">Log</span></div>
       </div>
     </div>
   </div>
@@ -584,11 +584,11 @@
       <div class="contact-row">
         <div>
           <label data-i18n="contact_name">Name</label>
-          <input type="text" placeholder="Your name" required>
+          <input type="text" placeholder="Your name" data-i18n="contact_ph_name" required>
         </div>
         <div>
           <label data-i18n="contact_email">Email</label>
-          <input type="email" placeholder="you@company.com" required>
+          <input type="email" placeholder="you@company.com" data-i18n="contact_ph_email" required>
         </div>
       </div>
       <div>
@@ -603,7 +603,7 @@
       </div>
       <div>
         <label data-i18n="contact_message">Message</label>
-        <textarea placeholder="Tell us how we can help..." required></textarea>
+        <textarea placeholder="Tell us how we can help..." data-i18n="contact_ph_message" required></textarea>
       </div>
       <button type="submit" class="btn-submit" data-i18n="contact_send">Send message</button>
     </form>
@@ -671,6 +671,9 @@ const translations = {
     contact_label: "Contact", contact_title: "Get in touch", contact_desc: "Questions, feedback, or partnership inquiries? We'd love to hear from you.",
     contact_name: "Name", contact_email: "Email", contact_subject: "Subject", contact_message: "Message", contact_send: "Send message",
     contact_opt1: "General question", contact_opt2: "Pricing & plans", contact_opt3: "Enterprise inquiry", contact_opt4: "Partnership", contact_opt5: "Bug report",
+    contact_ph_name: "Your name", contact_ph_email: "you@company.com", contact_ph_message: "Tell us how we can help...",
+    prev_total: "Total", prev_in: "↓ In", prev_out: "↑ Out",
+    prev_overview: "Overview", prev_balance: "Balance", prev_new: "New", prev_log: "Log",
   },
   nl: {
     nav_features: "Functies", nav_pricing: "Prijzen", nav_login: "Inloggen",
@@ -714,6 +717,9 @@ const translations = {
     contact_label: "Contact", contact_title: "Neem contact op", contact_desc: "Vragen, feedback of samenwerkingsverzoeken? We horen graag van je.",
     contact_name: "Naam", contact_email: "E-mail", contact_subject: "Onderwerp", contact_message: "Bericht", contact_send: "Verstuur bericht",
     contact_opt1: "Algemene vraag", contact_opt2: "Prijzen & abonnementen", contact_opt3: "Enterprise aanvraag", contact_opt4: "Samenwerking", contact_opt5: "Bug melden",
+    contact_ph_name: "Je naam", contact_ph_email: "jij@bedrijf.com", contact_ph_message: "Vertel ons hoe we kunnen helpen...",
+    prev_total: "Totaal", prev_in: "↓ In", prev_out: "↑ Uit",
+    prev_overview: "Overzicht", prev_balance: "Saldo", prev_new: "Nieuw", prev_log: "Log",
   }
 };
 
