@@ -589,6 +589,39 @@ function MasterApp({ account, user, onLogout, setAccount }) {
   );
 }
 
+// ─── SUPPLIER COLORS ─────────────────────────────────────────────────────────
+const SUPPLIER_COLORS = [
+  { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", bar: "#10b981", dot: "bg-emerald-500" },
+  { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700", bar: "#f59e0b", dot: "bg-amber-500" },
+  { bg: "bg-sky-50", border: "border-sky-200", text: "text-sky-700", bar: "#0ea5e9", dot: "bg-sky-500" },
+  { bg: "bg-rose-50", border: "border-rose-200", text: "text-rose-700", bar: "#f43f5e", dot: "bg-rose-500" },
+  { bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-700", bar: "#8b5cf6", dot: "bg-violet-500" },
+  { bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-700", bar: "#f97316", dot: "bg-orange-500" },
+];
+
+function getSupplierColor(supplier, allSuppliers) {
+  const idx = allSuppliers.indexOf(supplier);
+  return SUPPLIER_COLORS[idx % SUPPLIER_COLORS.length];
+}
+
+// ─── MINI BAR CHART ──────────────────────────────────────────────────────────
+function MiniBarChart({ data, maxVal }) {
+  if (!maxVal) maxVal = Math.max(...data.map(d => Math.max(d.in, d.out)), 1);
+  return (
+    <div className="flex items-end gap-1 h-24">
+      {data.map((d, i) => (
+        <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+          <div className="w-full flex gap-0.5 items-end" style={{ height: "80px" }}>
+            <div className="flex-1 bg-emerald-400 rounded-t-sm transition-all duration-500" style={{ height: `${(d.in / maxVal) * 100}%`, minHeight: d.in ? "4px" : "0" }} />
+            <div className="flex-1 bg-rose-400 rounded-t-sm transition-all duration-500" style={{ height: `${(d.out / maxVal) * 100}%`, minHeight: d.out ? "4px" : "0" }} />
+          </div>
+          <span className="text-[10px] text-gray-400 leading-none">{d.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─── BRANCH APP ───────────────────────────────────────────────────────────────
 function BranchApp({ user, account, setAccount, onLogout }) {
   const [screen, setScreen] = useState("overzicht");
@@ -596,6 +629,8 @@ function BranchApp({ user, account, setAccount, onLogout }) {
   const [exportModal, setExportModal] = useState(false);
   const [attViewer, setAttViewer] = useState(null);
   const [toast, setToast] = useState(null);
+  const [logFilter, setLogFilter] = useState("all");
+  const [logSearch, setLogSearch] = useState("");
 
   const branchTransactions = account.transactions.filter(t => t.branch === user.branch);
 
@@ -603,7 +638,7 @@ function BranchApp({ user, account, setAccount, onLogout }) {
     const t = { ...trans, id: Math.max(...account.transactions.map(x => x.id), 0) + 1 };
     setAccount({ ...account, transactions: [...account.transactions, t] });
     setScanModal(false);
-    setToast({ type: "success", message: "Transactie geïmporteerd!" });
+    setToast({ type: "success", message: "Transactie geregistreerd!" });
   };
 
   const handleDeleteTransaction = (id) => {
@@ -611,6 +646,7 @@ function BranchApp({ user, account, setAccount, onLogout }) {
     setToast({ type: "success", message: "Transactie verwijderd!" });
   };
 
+  // Stats
   const inCount = branchTransactions.filter(t => t.type === "IN").length;
   const outCount = branchTransactions.filter(t => t.type === "OUT").length;
   const value = branchTransactions.reduce((sum, t) => {
@@ -618,94 +654,307 @@ function BranchApp({ user, account, setAccount, onLogout }) {
     return sum + (t.type === "IN" ? (emb?.value || 0) * t.qty : -((emb?.value || 0) * t.qty));
   }, 0);
 
+  // Saldo per leverancier
+  const supplierSaldo = {};
+  branchTransactions.forEach(t => {
+    if (!supplierSaldo[t.supplier]) supplierSaldo[t.supplier] = { in: 0, out: 0, items: {} };
+    const s = supplierSaldo[t.supplier];
+    if (t.type === "IN") s.in += t.qty; else s.out += t.qty;
+    if (!s.items[t.emballage]) s.items[t.emballage] = { in: 0, out: 0 };
+    if (t.type === "IN") s.items[t.emballage].in += t.qty; else s.items[t.emballage].out += t.qty;
+  });
+
+  // Weekly chart data (last 4 weeks)
+  const weekData = [];
+  const now = new Date();
+  for (let w = 3; w >= 0; w--) {
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - (w * 7 + now.getDay()));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    const weekTrans = branchTransactions.filter(t => {
+      const d = new Date(t.date);
+      return d >= weekStart && d <= weekEnd;
+    });
+    weekData.push({
+      label: `W${Math.ceil((weekStart.getDate()) / 7)}`,
+      in: weekTrans.filter(t => t.type === "IN").reduce((s, t) => s + t.qty, 0),
+      out: weekTrans.filter(t => t.type === "OUT").reduce((s, t) => s + t.qty, 0),
+    });
+  }
+
+  // Filtered logboek
+  const filteredLog = branchTransactions
+    .filter(t => logFilter === "all" || t.type === logFilter)
+    .filter(t => !logSearch || t.emballage.toLowerCase().includes(logSearch.toLowerCase()) || t.supplier.toLowerCase().includes(logSearch.toLowerCase()))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const tabs = [
+    { id: "overzicht", label: "Overzicht", icon: <BarChart3 size={18} /> },
+    { id: "saldo", label: "Saldo", icon: <TrendingUp size={18} /> },
+    { id: "logboek", label: "Logboek", icon: <ClipboardList size={18} /> },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="min-h-screen bg-gray-50 pb-24">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       {scanModal && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} onClose={() => setScanModal(false)} onImport={handleImportTransaction} />}
       {exportModal && <ExportModal account={account} onClose={() => setExportModal(false)} />}
       {attViewer && <AttViewer att={attViewer} onClose={() => setAttViewer(null)} />}
 
-      <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-100 sticky top-0 z-30">
+        <div className="max-w-lg lg:max-w-2xl xl:max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
             <BarcodeLogo size="sm" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{user.branch}</h1>
-              <p className="text-sm text-gray-600">{account.companyName}</p>
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">{user.branch}</h1>
+              <p className="text-xs text-gray-500">{account.companyName}</p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={() => setExportModal(true)} className="p-3 bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-200"><Download size={20} className="text-blue-600" /></button>
-            <button onClick={() => setScanModal(true)} className="p-3 bg-blue-600 text-white rounded-lg shadow-sm hover:shadow-md transition-all duration-200 hover:bg-blue-700"><ScanLine size={20} /></button>
-            <button onClick={onLogout} className="p-3 bg-red-500 text-white rounded-lg shadow-sm hover:shadow-md hover:bg-red-600 transition-all duration-200"><LogOut size={20} /></button>
+          <div className="flex gap-1.5">
+            <button onClick={() => setExportModal(true)} className="p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><Download size={18} className="text-gray-500" /></button>
+            <button onClick={onLogout} className="p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><LogOut size={18} className="text-gray-500" /></button>
           </div>
         </div>
+      </div>
 
-        <div className="flex gap-2 mb-6 border-b border-gray-200">
-          <button onClick={() => setScreen("overzicht")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${screen === "overzicht" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Overzicht</button>
-          <button onClick={() => setScreen("registreren")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${screen === "registreren" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Registreren</button>
-          <button onClick={() => setScreen("logboek")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${screen === "logboek" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Logboek</button>
-        </div>
+      {/* Content */}
+      <div className="max-w-lg lg:max-w-2xl xl:max-w-4xl mx-auto px-4 pt-4">
 
         {screen === "overzicht" && (
-          <div className="animate-fade-in space-y-6">
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4"><p className="text-sm text-blue-600 font-semibold">Totaal</p><p className="text-3xl font-bold text-blue-900">{branchTransactions.length}</p></div>
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4"><p className="text-sm text-green-600 font-semibold flex items-center gap-1"><ArrowDownCircle size={16} /> In</p><p className="text-3xl font-bold text-green-900">{inCount}</p></div>
-              <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4"><p className="text-sm text-red-600 font-semibold flex items-center gap-1"><ArrowUpCircle size={16} /> Uit</p><p className="text-3xl font-bold text-red-900">{outCount}</p></div>
+          <div className="space-y-4 animate-fade-in">
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <p className="text-xs text-gray-500 font-medium mb-1">Totaal</p>
+                <p className="text-2xl font-bold text-gray-900">{branchTransactions.length}</p>
+              </div>
+              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-1 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <p className="text-xs text-gray-500 font-medium">In</p>
+                </div>
+                <p className="text-2xl font-bold text-emerald-600">{inCount}</p>
+              </div>
+              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-1 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-rose-500" />
+                  <p className="text-xs text-gray-500 font-medium">Uit</p>
+                </div>
+                <p className="text-2xl font-bold text-rose-600">{outCount}</p>
+              </div>
             </div>
-            <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6">
-              <p className="text-sm text-purple-600 font-semibold">Geschatte waarde inventaris</p>
-              <p className="text-3xl font-bold text-purple-900">{fmt(value)}</p>
+
+            {/* Inventory value */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Geschatte waarde inventaris</p>
+                  <p className="text-3xl font-bold text-gray-900">{fmt(value)}</p>
+                </div>
+                <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
+                  <Package size={24} className="text-purple-500" />
+                </div>
+              </div>
             </div>
+
+            {/* Weekly activity chart */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm font-semibold text-gray-900">Activiteit laatste 4 weken</p>
+                <div className="flex items-center gap-3 text-xs text-gray-500">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> In</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400" /> Uit</span>
+                </div>
+              </div>
+              <MiniBarChart data={weekData} />
+            </div>
+
+            {/* Top leveranciers quick view */}
+            {Object.keys(supplierSaldo).length > 0 && (
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold text-gray-900">Saldo per leverancier</p>
+                  <button onClick={() => setScreen("saldo")} className="text-xs text-blue-600 font-semibold hover:text-blue-700">Bekijk alles →</button>
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(supplierSaldo).slice(0, 3).map(([supplier, data]) => {
+                    const saldo = data.in - data.out;
+                    const color = getSupplierColor(supplier, account.suppliers);
+                    return (
+                      <div key={supplier} className={`flex items-center justify-between p-3 rounded-xl ${color.bg} border ${color.border}`}>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2.5 h-2.5 rounded-full ${color.dot}`} />
+                          <span className={`text-sm font-semibold ${color.text}`}>{supplier}</span>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm">
+                          <span className="text-emerald-600 font-medium">+{data.in}</span>
+                          <span className="text-rose-600 font-medium">−{data.out}</span>
+                          <span className={`font-bold ${saldo >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{saldo >= 0 ? "+" : ""}{saldo}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Recent activity */}
+            {branchTransactions.length > 0 && (
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                <p className="text-sm font-semibold text-gray-900 mb-3">Laatste registraties</p>
+                <div className="space-y-2">
+                  {branchTransactions.slice(-3).reverse().map(t => (
+                    <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${t.type === "IN" ? "bg-emerald-50" : "bg-rose-50"}`}>
+                        {t.type === "IN" ? <ArrowDownCircle size={16} className="text-emerald-600" /> : <ArrowUpCircle size={16} className="text-rose-600" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{t.emballage} ({t.qty}x)</p>
+                        <p className="text-xs text-gray-500">{t.supplier} • {t.date}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {screen === "registreren" && (
-          <div className="animate-fade-in space-y-4">
-            {branchTransactions.length === 0 ? (
-              <div className="bg-gray-50 rounded-xl p-8 text-center">
-                <Package size={32} className="mx-auto text-gray-400 mb-2" />
-                <p className="text-gray-600">Nog geen transacties</p>
+        {screen === "saldo" && (
+          <div className="space-y-4 animate-fade-in">
+            <h2 className="text-xl font-bold text-gray-900">Saldo per leverancier</h2>
+
+            {Object.keys(supplierSaldo).length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
+                <Truck size={32} className="mx-auto text-gray-300 mb-2" />
+                <p className="text-gray-500">Nog geen transacties geregistreerd</p>
               </div>
             ) : (
-              branchTransactions.map(t => (
-                <div key={t.id} className="bg-white rounded-lg p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
-                  <div className="flex items-center gap-3 flex-1">
-                    {t.type === "IN" ? <ArrowDownCircle size={20} className="text-green-600" /> : <ArrowUpCircle size={20} className="text-red-600" />}
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-900">{t.emballage} ({t.qty}x)</p>
-                      <p className="text-xs text-gray-600">{t.date} • {t.supplier} {t.note && `• ${t.note}`}</p>
+              Object.entries(supplierSaldo).map(([supplier, data]) => {
+                const saldo = data.in - data.out;
+                const color = getSupplierColor(supplier, account.suppliers);
+                const emb = account.emballageTypes.find(e => e.name === Object.keys(data.items)[0]);
+                const totalValue = Object.entries(data.items).reduce((sum, [name, qty]) => {
+                  const e = account.emballageTypes.find(x => x.name === name);
+                  return sum + ((qty.in - qty.out) * (e?.value || 0));
+                }, 0);
+
+                return (
+                  <div key={supplier} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    {/* Supplier header */}
+                    <div className={`px-5 py-4 ${color.bg} border-b ${color.border}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${color.dot}`} />
+                          <span className={`font-bold ${color.text}`}>{supplier}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-500">Saldo</span>
+                          <span className={`text-lg font-bold ${saldo >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{saldo >= 0 ? "+" : ""}{saldo}</span>
+                        </div>
+                      </div>
+                      <div className="flex gap-4 mt-2 text-xs">
+                        <span className="text-emerald-600 font-medium">↓ {data.in} in</span>
+                        <span className="text-rose-600 font-medium">↑ {data.out} uit</span>
+                        <span className="text-gray-600 font-medium">≈ {fmt(totalValue)}</span>
+                      </div>
+                    </div>
+
+                    {/* Item breakdown */}
+                    <div className="px-5 py-3">
+                      {Object.entries(data.items).map(([item, qty]) => {
+                        const itemSaldo = qty.in - qty.out;
+                        return (
+                          <div key={item} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                            <span className="text-sm text-gray-700">{item}</span>
+                            <div className="flex items-center gap-3 text-xs">
+                              <span className="text-emerald-600">+{qty.in}</span>
+                              <span className="text-rose-600">−{qty.out}</span>
+                              <span className={`font-bold min-w-[32px] text-right ${itemSaldo >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{itemSaldo >= 0 ? "+" : ""}{itemSaldo}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                  <button onClick={() => handleDeleteTransaction(t.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all duration-200"><Trash2 size={18} /></button>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
 
         {screen === "logboek" && (
-          <div className="animate-fade-in space-y-4">
-            {branchTransactions.length === 0 ? (
-              <div className="bg-gray-50 rounded-xl p-8 text-center">
-                <ClipboardList size={32} className="mx-auto text-gray-400 mb-2" />
-                <p className="text-gray-600">Geen transacties</p>
+          <div className="space-y-3 animate-fade-in">
+            {/* Search & filter bar */}
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input type="text" value={logSearch} onChange={(e) => setLogSearch(e.target.value)} placeholder="Zoek emballage of leverancier..." className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+            </div>
+            <div className="flex gap-1.5">
+              {[["all", "Alles"], ["IN", "Inkomend"], ["OUT", "Uitgaand"]].map(([val, label]) => (
+                <button key={val} onClick={() => setLogFilter(val)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${logFilter === val ? (val === "IN" ? "bg-emerald-100 text-emerald-700" : val === "OUT" ? "bg-rose-100 text-rose-700" : "bg-gray-900 text-white") : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"}`}>{label}</button>
+              ))}
+            </div>
+
+            {filteredLog.length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
+                <ClipboardList size={32} className="mx-auto text-gray-300 mb-2" />
+                <p className="text-gray-500">{logSearch ? "Geen resultaten" : "Geen transacties"}</p>
               </div>
             ) : (
-              branchTransactions.map(t => (
-                <div key={t.id} className="bg-white rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="font-semibold text-gray-900">{t.emballage}</p>
-                    <p className={`text-sm font-bold ${t.type === "IN" ? "text-green-600" : "text-red-600"}`}>{t.type === "IN" ? "+" : "−"}{t.qty}x</p>
-                  </div>
-                  <p className="text-xs text-gray-600 mb-2">{t.date} • {t.supplier}</p>
-                  {t.note && <p className="text-xs text-gray-700 mb-2">{t.note}</p>}
-                </div>
-              ))
+              <div className="space-y-2">
+                {filteredLog.map(t => {
+                  const color = getSupplierColor(t.supplier, account.suppliers);
+                  return (
+                    <div key={t.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${t.type === "IN" ? "bg-emerald-50" : "bg-rose-50"}`}>
+                        {t.type === "IN" ? <ArrowDownCircle size={20} className="text-emerald-600" /> : <ArrowUpCircle size={20} className="text-rose-600" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{t.emballage}</p>
+                          <span className={`text-sm font-bold ${t.type === "IN" ? "text-emerald-600" : "text-rose-600"}`}>{t.type === "IN" ? "+" : "−"}{t.qty}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`inline-flex items-center gap-1 text-xs font-medium ${color.text}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${color.dot}`} />{t.supplier}
+                          </span>
+                          <span className="text-xs text-gray-400">•</span>
+                          <span className="text-xs text-gray-400">{t.date}</span>
+                        </div>
+                        {t.note && <p className="text-xs text-gray-500 mt-1">{t.note}</p>}
+                      </div>
+                      <button onClick={() => handleDeleteTransaction(t.id)} className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all duration-200 flex-shrink-0"><Trash2 size={16} /></button>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
+      </div>
+
+      {/* Sticky bottom nav */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 safe-area-bottom">
+        <div className="max-w-lg lg:max-w-2xl xl:max-w-4xl mx-auto px-4 flex items-center justify-around">
+          {tabs.map(tab => (
+            <button key={tab.id} onClick={() => setScreen(tab.id)} className={`flex flex-col items-center gap-1 py-3 px-4 transition-all duration-200 ${screen === tab.id ? "text-blue-600" : "text-gray-400 hover:text-gray-600"}`}>
+              {tab.icon}
+              <span className="text-[10px] font-semibold">{tab.label}</span>
+            </button>
+          ))}
+          {/* FAB-style register button */}
+          <button onClick={() => setScanModal(true)} className="flex flex-col items-center gap-1 py-2 px-4">
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200 -mt-5 hover:bg-blue-700 transition-all duration-200">
+              <Plus size={24} className="text-white" />
+            </div>
+            <span className="text-[10px] font-semibold text-blue-600">Nieuw</span>
+          </button>
+        </div>
       </div>
     </div>
   );
