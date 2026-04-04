@@ -236,12 +236,12 @@
   .suppliers-strip { padding: 40px 24px; background: #fff; border-bottom: 1px solid var(--gray-100); }
   .suppliers-strip-inner { max-width: 1120px; margin: 0 auto; text-align: center; }
   .suppliers-strip p { font-size: 13px; font-weight: 500; color: var(--gray-400); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 0.06em; }
-  .supplier-logos { display: flex; align-items: center; justify-content: center; gap: 40px; flex-wrap: wrap; opacity: 0.5; }
+  .supplier-logos { display: flex; align-items: center; justify-content: center; gap: 24px; flex-wrap: wrap; opacity: 0.7; }
   .supplier-logo {
-    font-size: 20px; font-weight: 800; color: var(--gray-400); letter-spacing: -0.02em;
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; transition: opacity 0.2s;
   }
-  .supplier-logo .s-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .supplier-logo:hover { opacity: 0.9; }
+  .supplier-logo svg { border-radius: 8px; }
 
   /* ── SOCIAL PROOF ── */
   .social-proof { padding: 80px 24px; background: var(--gray-50); }
@@ -417,27 +417,37 @@
 <!-- ────────── SUPPLIER LOGOS ────────── -->
 <section class="suppliers-strip">
   <div class="suppliers-strip-inner">
-    <p data-i18n="suppliers_label">Works with all your suppliers, including</p>
+    <p data-i18n="suppliers_label">Reggy works with all your suppliers, including</p>
     <div class="supplier-logos">
       <div class="supplier-logo">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#003D6B"/><text x="16" y="20" text-anchor="middle" font-size="10" font-weight="800" fill="#fff" font-family="Inter,sans-serif">H</text></svg>
-        Hanos
+        <svg width="120" height="40" viewBox="0 0 120 40" fill="none">
+          <rect width="120" height="40" rx="8" fill="#003D6B"/>
+          <text x="60" y="26" text-anchor="middle" font-size="18" font-weight="800" fill="#fff" font-family="Inter,sans-serif" letter-spacing="2">HANOS</text>
+        </svg>
       </div>
       <div class="supplier-logo">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#E30613"/><text x="16" y="20" text-anchor="middle" font-size="10" font-weight="800" fill="#fff" font-family="Inter,sans-serif">B</text></svg>
-        Bidfood
+        <svg width="120" height="40" viewBox="0 0 120 40" fill="none">
+          <rect width="120" height="40" rx="8" fill="#E30613"/>
+          <text x="60" y="26" text-anchor="middle" font-size="16" font-weight="800" fill="#fff" font-family="Inter,sans-serif" letter-spacing="1">Bidfood</text>
+        </svg>
       </div>
       <div class="supplier-logo">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#F7941D"/><text x="16" y="20" text-anchor="middle" font-size="10" font-weight="800" fill="#fff" font-family="Inter,sans-serif">S</text></svg>
-        Sligro
+        <svg width="120" height="40" viewBox="0 0 120 40" fill="none">
+          <rect width="120" height="40" rx="8" fill="#F7941D"/>
+          <text x="60" y="26" text-anchor="middle" font-size="18" font-weight="800" fill="#fff" font-family="Inter,sans-serif" letter-spacing="1">SLIGRO</text>
+        </svg>
       </div>
       <div class="supplier-logo">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#1B4D3E"/><text x="16" y="20" text-anchor="middle" font-size="10" font-weight="800" fill="#fff" font-family="Inter,sans-serif">V</text></svg>
-        VHC
+        <svg width="80" height="40" viewBox="0 0 80 40" fill="none">
+          <rect width="80" height="40" rx="8" fill="#1B4D3E"/>
+          <text x="40" y="26" text-anchor="middle" font-size="18" font-weight="800" fill="#fff" font-family="Inter,sans-serif" letter-spacing="2">VHC</text>
+        </svg>
       </div>
       <div class="supplier-logo">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#2D5F2D"/><text x="16" y="20" text-anchor="middle" font-size="10" font-weight="800" fill="#fff" font-family="Inter,sans-serif">VG</text></svg>
-        Van Gelder
+        <svg width="140" height="40" viewBox="0 0 140 40" fill="none">
+          <rect width="140" height="40" rx="8" fill="#2D7A2D"/>
+          <text x="70" y="26" text-anchor="middle" font-size="15" font-weight="800" fill="#fff" font-family="Inter,sans-serif" letter-spacing="1">Van Gelder</text>
+        </svg>
       </div>
     </div>
   </div>
@@ -669,7 +679,7 @@ const translations = {
     cta_desc: "Join the growing number of hospitality businesses who track their emballage with Reggy. Set up in under 2 minutes.",
     cta_button: "Start your free trial →",
     footer_rights: "All rights reserved.",
-    suppliers_label: "Works with all your suppliers, including",
+    suppliers_label: "Reggy works with all your suppliers, including",
     proof_s1: "Outlets in beta", proof_s2: "Transactions logged", proof_s3: "Packaging value tracked", proof_s4: "Beta user rating",
     test1_quote: "We used to lose track of dozens of kegs every month. With Reggy, we know exactly what's out with each supplier. It paid for itself in the first week.",
     test1_name: "Rik Dewulf", test1_role: "Owner, Café Rosetta — Ghent",
@@ -715,7 +725,7 @@ const translations = {
     cta_desc: "Sluit je aan bij het groeiende aantal horecabedrijven die hun emballage bijhouden met Reggy. Opgezet in minder dan 2 minuten.",
     cta_button: "Start gratis proefperiode →",
     footer_rights: "Alle rechten voorbehouden.",
-    suppliers_label: "Werkt met al je leveranciers, waaronder",
+    suppliers_label: "Reggy werkt met al je leveranciers, waaronder",
     proof_s1: "Locaties in bèta", proof_s2: "Transacties gelogd", proof_s3: "Emballagewaarde bijgehouden", proof_s4: "Bèta-gebruikersbeoordeling",
     test1_quote: "We raakten elke maand tientallen vaten kwijt. Met Reggy weten we precies wat er uitstaat bij elke leverancier. Het verdiende zichzelf terug in de eerste week.",
     test1_name: "Rik Dewulf", test1_role: "Eigenaar, Café Rosetta — Gent",
