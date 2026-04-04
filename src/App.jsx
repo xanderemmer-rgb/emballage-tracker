@@ -345,38 +345,107 @@ function ExportModal({ account, onClose }) {
 
 // ─── BON SCAN MODAL ───────────────────────────────────────────────────────────
 function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, isEdit = false, initialData = null }) {
+  // Edit mode: single item
   const [type, setType] = useState(initialData?.type || "IN");
   const [supplier, setSupplier] = useState(initialData?.supplier || "");
-  const [emballage, setEmballage] = useState(initialData?.emballage || "");
-  const [qty, setQty] = useState(initialData?.qty || 1);
   const [note, setNote] = useState(initialData?.note || "");
 
+  // Multi-line mode (new registrations): array of {emballage, qty} rows
+  const [lines, setLines] = useState(
+    isEdit
+      ? [{ emballage: initialData?.emballage || "", qty: initialData?.qty || 1 }]
+      : [{ emballage: "", qty: 1 }]
+  );
+
+  const updateLine = (idx, field, value) => {
+    setLines(lines.map((l, i) => i === idx ? { ...l, [field]: value } : l));
+  };
+
+  const addLine = () => {
+    setLines([...lines, { emballage: "", qty: 1 }]);
+  };
+
+  const removeLine = (idx) => {
+    if (lines.length <= 1) return;
+    setLines(lines.filter((_, i) => i !== idx));
+  };
+
+  const validLines = lines.filter(l => l.emballage && parseInt(l.qty) > 0);
+
   const handleImport = () => {
-    if (!supplier || !emballage) return;
-    const data = isEdit
-      ? { ...initialData, type, supplier, emballage, qty: parseInt(qty), note }
-      : { type, supplier, emballage, qty: parseInt(qty), note, branch, date: new Date().toISOString().split("T")[0] };
-    onImport(data);
-    if (!isEdit) {
-      setType("IN"); setSupplier(""); setEmballage(""); setQty(1); setNote("");
+    if (!supplier || validLines.length === 0) return;
+    if (isEdit) {
+      const l = lines[0];
+      onImport({ ...initialData, type, supplier, emballage: l.emballage, qty: parseInt(l.qty), note });
+    } else {
+      // Send array of transactions
+      const items = validLines.map(l => ({
+        type, supplier, emballage: l.emballage, qty: parseInt(l.qty), note, branch, date: new Date().toISOString().split("T")[0]
+      }));
+      onImport(items);
     }
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end z-50">
-      <div className="bg-white rounded-t-3xl w-full max-w-md lg:max-w-2xl xl:max-w-4xl p-6 animate-slide-up shadow-2xl">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">{isEdit ? <Pencil size={24} /> : <ScanLine size={24} />} {isEdit ? "Transactie bewerken" : "Bon scannen"}</h2>
-        <div className="space-y-4 max-h-96 overflow-y-auto">
-          <div><label className="block text-sm font-semibold text-gray-700 mb-2">Type</label><select value={type} onChange={(e) => setType(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg"><option value="IN">Inkomend</option><option value="OUT">Uitgaand</option></select></div>
-          <div><label className="block text-sm font-semibold text-gray-700 mb-2">Leverancier</label><select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg"><option value="">Selecteer...</option>{suppliers.map((s, i) => <option key={i} value={s}>{s}</option>)}</select></div>
-          <div><label className="block text-sm font-semibold text-gray-700 mb-2">Emballage</label><select value={emballage} onChange={(e) => setEmballage(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg"><option value="">Selecteer...</option>{emballageTypes.map((e, i) => <option key={i} value={e.name}>{e.name} (€{e.value})</option>)}</select></div>
-          <div><label className="block text-sm font-semibold text-gray-700 mb-2">Hoeveelheid</label><input type="number" value={qty} onChange={(e) => setQty(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg" min="1" /></div>
-          <div><label className="block text-sm font-semibold text-gray-700 mb-2">Opmerking</label><input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Optioneel" /></div>
+      <div className="bg-white rounded-t-3xl w-full max-w-md lg:max-w-2xl xl:max-w-4xl p-6 animate-slide-up shadow-2xl" style={{ maxHeight: "90vh" }}>
+        <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">{isEdit ? <Pencil size={24} /> : <ScanLine size={24} />} {isEdit ? "Transactie bewerken" : "Registratie"}</h2>
+        <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "calc(90vh - 180px)" }}>
+          {/* Shared fields: type + supplier */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">Type</label>
+              <select value={type} onChange={(e) => setType(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                <option value="IN">↓ Inkomend</option>
+                <option value="OUT">↑ Uitgaand</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">Leverancier</label>
+              <select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                <option value="">Selecteer...</option>
+                {suppliers.map((s, i) => <option key={i} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Line items */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-gray-500">Artikelen</label>
+              {!isEdit && <span className="text-xs text-gray-400">{validLines.length} regel{validLines.length !== 1 ? "s" : ""}</span>}
+            </div>
+            <div className="space-y-2">
+              {lines.map((line, idx) => (
+                <div key={idx} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5 border border-gray-100">
+                  <select value={line.emballage} onChange={(e) => updateLine(idx, "emballage", e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-0">
+                    <option value="">Emballage...</option>
+                    {emballageTypes.map((e, i) => <option key={i} value={e.name}>{e.name} (€{e.value})</option>)}
+                  </select>
+                  <input type="number" value={line.qty} onChange={(e) => updateLine(idx, "qty", e.target.value)} className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm text-center bg-white focus:ring-2 focus:ring-blue-500 outline-none" min="1" placeholder="#" />
+                  {lines.length > 1 && (
+                    <button onClick={() => removeLine(idx)} className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 flex-shrink-0"><X size={16} /></button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {!isEdit && (
+              <button onClick={addLine} className="mt-2 w-full py-2 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 font-semibold hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50 transition-all duration-200 flex items-center justify-center gap-1.5">
+                <PlusCircle size={16} /> Regel toevoegen
+              </button>
+            )}
+          </div>
+
+          {/* Note */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5">Opmerking</label>
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Optioneel" />
+          </div>
         </div>
-        <div className="flex gap-3 mt-6">
-          <button onClick={onClose} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Annuleren</button>
-          <button onClick={handleImport} className={`flex-1 text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 transition-all duration-200 ${isEdit ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}>
-            {isEdit ? <><Check size={20} /> Opslaan</> : <><Plus size={20} /> Toevoegen</>}
+        <div className="flex gap-3 mt-4">
+          <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200">Annuleren</button>
+          <button onClick={handleImport} disabled={!supplier || validLines.length === 0} className={`flex-1 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${isEdit ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}>
+            {isEdit ? <><Check size={20} /> Opslaan</> : <><Check size={20} /> {validLines.length > 1 ? `${validLines.length} regels registreren` : "Registreren"}</>}
           </button>
         </div>
       </div>
@@ -645,11 +714,13 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
 
   const branchTransactions = account.transactions.filter(t => t.branch === user.branch);
 
-  const handleImportTransaction = (trans) => {
-    const t = { ...trans, id: Math.max(...account.transactions.map(x => x.id), 0) + 1 };
-    setAccount({ ...account, transactions: [...account.transactions, t] });
+  const handleImportTransaction = (transOrArray) => {
+    const items = Array.isArray(transOrArray) ? transOrArray : [transOrArray];
+    let maxId = Math.max(...account.transactions.map(x => x.id), 0);
+    const newTrans = items.map(trans => ({ ...trans, id: ++maxId }));
+    setAccount({ ...account, transactions: [...account.transactions, ...newTrans] });
     setScanModal(false);
-    setToast({ type: "success", message: "Transactie geregistreerd!" });
+    setToast({ type: "success", message: items.length > 1 ? `${items.length} transacties geregistreerd!` : "Transactie geregistreerd!" });
   };
 
   const handleDeleteTransaction = (id) => {
