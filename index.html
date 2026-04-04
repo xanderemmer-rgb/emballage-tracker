@@ -18,6 +18,12 @@
         50% { opacity: 1; transform: scaleY(1.15); }
       }
     </style>
+    <script>
+      // Redirect reggy.io (root domain) to the landing page
+      if (window.location.hostname === 'reggy.io') {
+        window.location.replace('/landing.html');
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
