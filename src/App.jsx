@@ -673,7 +673,7 @@ function exportToPDF(transactions, emballageTypes, users, suppliers, companyName
   </div>
 
   <div class="footer">
-    <p>Gegenereerd door Reggy | Smart Packaging Tracker • reggy.com</p>
+    <p>Gegenereerd door Reggy | Smart Packaging Tracker • reggy.io</p>
   </div>
 </div>
 </body></html>`;
