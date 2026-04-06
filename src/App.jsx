@@ -1540,20 +1540,28 @@ function LoginPage({ onLogin, onRegister }) {
 
     setLoading(true);
     try {
-      const { user, session } = await supabase.auth.signInWithPassword({ email, password });
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError) throw authError;
+
+      const user = data.user;
       if (user) {
         // Fetch profile to determine role
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from("profiles")
           .select("*")
           .eq("id", user.id)
           .single();
 
+        if (profileError) throw profileError;
+
         if (profile) {
           onLogin({ user, profile });
+        } else {
+          setError("Profiel niet gevonden. Neem contact op met de beheerder.");
         }
       }
     } catch (err) {
+      console.error("Login error:", err);
       setError(err.message || "Inloggen mislukt");
     } finally {
       setLoading(false);
