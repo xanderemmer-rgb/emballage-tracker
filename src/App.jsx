@@ -6,9 +6,9 @@ import {
   Sparkles, Inbox, AlertCircle, Search,
   Calendar, LogOut, User, Users, Building2, Camera
 } from "lucide-react";
-
-// ─── CONFIG ──────────────────────────────────────────────────────────────────
-const DEMO_MODE = true; // Set to false for production
+import { useAuth } from "./useAuth";
+import * as supabaseData from "./supabaseData";
+import { supabase } from "./supabaseClient";
 
 // ─── BARCODE LOGO ────────────────────────────────────────────────────────────
 function BarcodeLogo({ size = "md" }) {
@@ -53,63 +53,9 @@ function calcPrice(outlets) {
   return { outlets: outlets * PRICE_OUTLET, master, total: outlets * PRICE_OUTLET + master };
 }
 
-// ─── INITIAL STATE ────────────────────────────────────────────────────────────
-const INIT_EMBALLAGE = [
-  { name: "Biervat 50L", value: 30 }, { name: "Biervat 30L", value: 20 },
-  { name: "Biervat 20L", value: 15 }, { name: "Biervat 10L", value: 10 },
-  { name: "Kratje bier 24x", value: 4.5 }, { name: "Kratje bier 12x", value: 2.5 },
-  { name: "Flessenrek wijn", value: 8 }, { name: "Postmix bag", value: 5 },
-  { name: "CO2 fles", value: 50 }, { name: "Plastic krat", value: 3 },
-];
-const INIT_SUPPLIERS = ["Heineken", "AB InBev", "Duvel Moortgat", "Coca-Cola", "Karmeliet"];
-
-const INIT_ACCOUNTS = [
-  {
-    id: "acc_demo1", companyName: "Horeca Groep Demo", email: "demo@horeca.be",
-    plan: { outlets: 3, startDate: "2026-01-01", status: "active", nextBilling: "2026-04-01" },
-    users: [
-      { id: "master", name: "Master Admin", role: "master", password: "master123", branch: null },
-      { id: "b1", name: "De Gouden Tap", role: "branch", password: "tap123", branch: "De Gouden Tap" },
-      { id: "b2", name: "Café 't Hoekje", role: "branch", password: "hoekje123", branch: "Café 't Hoekje" },
-      { id: "b3", name: "Brasserie Zonne", role: "branch", password: "zonne123", branch: "Brasserie Zonne" },
-    ],
-    emballageTypes: INIT_EMBALLAGE, suppliers: INIT_SUPPLIERS,
-    transactions: [
-      { id: 1, date: "2026-03-01", type: "IN", supplier: "Heineken", emballage: "Biervat 50L", qty: 5, note: "", attachment: null, branch: "De Gouden Tap" },
-      { id: 2, date: "2026-03-02", type: "IN", supplier: "Heineken", emballage: "Kratje bier 24x", qty: 20, note: "", attachment: null, branch: "De Gouden Tap" },
-      { id: 3, date: "2026-03-03", type: "OUT", supplier: "Heineken", emballage: "Biervat 50L", qty: 3, note: "", attachment: null, branch: "De Gouden Tap" },
-      { id: 4, date: "2026-03-04", type: "IN", supplier: "AB InBev", emballage: "Biervat 50L", qty: 4, note: "", attachment: null, branch: "Café 't Hoekje" },
-      { id: 5, date: "2026-03-05", type: "OUT", supplier: "AB InBev", emballage: "Biervat 50L", qty: 1, note: "", attachment: null, branch: "Café 't Hoekje" },
-      { id: 6, date: "2026-03-06", type: "IN", supplier: "Coca-Cola", emballage: "Postmix bag", qty: 10, note: "", attachment: null, branch: "Brasserie Zonne" },
-      { id: 7, date: "2026-03-07", type: "OUT", supplier: "Heineken", emballage: "Kratje bier 24x", qty: 8, note: "", attachment: null, branch: "Brasserie Zonne" },
-    ]
-  },
-  {
-    id: "acc_demo2", companyName: "Café Solo", email: "solo@cafe.be",
-    plan: { outlets: 1, startDate: "2026-02-01", status: "active", nextBilling: "2026-04-01" },
-    users: [
-      { id: "solo1", name: "Café Solo", role: "branch", password: "solo123", branch: "Café Solo" },
-    ],
-    emballageTypes: INIT_EMBALLAGE, suppliers: INIT_SUPPLIERS, transactions: []
-  },
-  {
-    id: "acc_demo3", companyName: "Bar Expired", email: "expired@bar.be",
-    plan: { outlets: 2, startDate: "2026-01-01", status: "expired", nextBilling: "2026-03-01" },
-    users: [
-      { id: "exp_m", name: "Bar Manager", role: "master", password: "exp123", branch: null },
-      { id: "exp_b1", name: "Bar Noord", role: "branch", password: "noord123", branch: "Bar Noord" },
-      { id: "exp_b2", name: "Bar Zuid", role: "branch", password: "zuid123", branch: "Bar Zuid" },
-    ],
-    emballageTypes: INIT_EMBALLAGE, suppliers: INIT_SUPPLIERS, transactions: []
-  }
-];
-
-// Super admin (platform beheerder)
-const SUPER_ADMIN = { id: "superadmin", name: "Super Admin", role: "superadmin", password: "super123" };
-
+// ─── FORMATTING & UTILITIES ──────────────────────────────────────────────────
 const fmt = (v) => `€ ${parseFloat(v || 0).toFixed(2)}`;
 const uid = () => Math.random().toString(36).slice(2, 10);
-const STORAGE_KEY = "reggy_data";
 const API_KEY_STORAGE = "reggy_api_key";
 
 // ─── TOAST COMPONENT ──────────────────────────────────────────────────────────
@@ -335,32 +281,55 @@ function PricingCalc({ outlets, onChange }) {
 }
 
 // ─── REGISTRATION FLOW ────────────────────────────────────────────────────────
-function RegisterFlow({ accounts, setAccounts, onDone }) {
-  const [step, setStep] = useState(1); // 1: plan, 2: bedrijf, 3: outlets, 4: betaling, 5: bevestiging
+function RegisterFlow({ onDone }) {
+  const [step, setStep] = useState(1); // 1: plan, 2: bedrijf, 3: account, 4: bevestiging
   const [outlets, setOutlets] = useState(1);
   const [company, setCompany] = useState({ name: "", email: "", phone: "" });
-  const [masterUser, setMasterUser] = useState({ name: "", password: "" });
+  const [accountUser, setAccountUser] = useState({ email: "", password: "", password2: "" });
   const [toast, setToast] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleCreateAccount = () => {
-    if (!company.name || !company.email || !masterUser.name || !masterUser.password) {
+  const handleCreateAccount = async () => {
+    if (!company.name || !company.email || !accountUser.email || !accountUser.password) {
       setToast({ type: "error", message: "Alle velden zijn verplicht" });
       return;
     }
-    const newAcc = {
-      id: "acc_" + uid(),
-      companyName: company.name,
-      email: company.email,
-      phone: company.phone,
-      plan: { outlets, startDate: new Date().toISOString().split("T")[0], status: "active", nextBilling: "2026-05-02" },
-      users: [{ id: "m_" + uid(), name: masterUser.name, role: "master", password: masterUser.password, branch: null }],
-      emballageTypes: INIT_EMBALLAGE,
-      suppliers: INIT_SUPPLIERS,
-      transactions: [],
-    };
-    setAccounts([...accounts, newAcc]);
-    setToast({ type: "success", message: "Account aangemaakt!" });
-    setTimeout(() => onDone(), 1500);
+    if (accountUser.password !== accountUser.password2) {
+      setToast({ type: "error", message: "Wachtwoorden komen niet overeen" });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Step 1: Create Supabase Auth user
+      const { data: { user }, error: signupError } = await supabase.auth.signUp({
+        email: accountUser.email,
+        password: accountUser.password,
+        options: { data: { display_name: company.name } }
+      });
+
+      if (signupError) throw signupError;
+      if (!user) throw new Error("User creation failed");
+
+      // Step 2: Create account in database
+      const newAccount = await supabaseData.createAccount({
+        company_name: company.name,
+        email: company.email,
+        phone: company.phone || null,
+        plan: { outlets, startDate: new Date().toISOString().split("T")[0], status: "active", nextBilling: "2026-05-02" }
+      });
+
+      // Step 3: The trigger will auto-create profile with role='master' and account_id
+      // Step 4: Seed default emballage types and suppliers
+      await supabaseData.seedAccountDefaults(newAccount.id);
+
+      setToast({ type: "success", message: "Account aangemaakt! Je kunt nu inloggen." });
+      setTimeout(() => onDone(), 1500);
+    } catch (err) {
+      setToast({ type: "error", message: err.message || "Aanmaken mislukt" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -386,10 +355,11 @@ function RegisterFlow({ accounts, setAccounts, onDone }) {
         )}
         {step === 3 && (
           <div className="space-y-6">
-            <p className="text-gray-600">Stap 3: Master admin</p>
-            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Naam</label><input type="text" value={masterUser.name} onChange={(e) => setMasterUser({ ...masterUser, name: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Naam" /></div>
-            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Wachtwoord</label><input type="password" value={masterUser.password} onChange={(e) => setMasterUser({ ...masterUser, password: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Wachtwoord" /></div>
-            <div className="flex gap-3"><button onClick={() => setStep(2)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Terug</button><button onClick={handleCreateAccount} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2"><Sparkles size={20} /> Account aanmaken</button></div>
+            <p className="text-gray-600">Stap 3: Aanmeldgegevens</p>
+            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Email</label><input type="email" value={accountUser.email} onChange={(e) => setAccountUser({ ...accountUser, email: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Email" /></div>
+            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Wachtwoord</label><input type="password" value={accountUser.password} onChange={(e) => setAccountUser({ ...accountUser, password: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Wachtwoord" /></div>
+            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Wachtwoord herhalen</label><input type="password" value={accountUser.password2} onChange={(e) => setAccountUser({ ...accountUser, password2: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Wachtwoord herhalen" /></div>
+            <div className="flex gap-3"><button onClick={() => setStep(2)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Terug</button><button onClick={handleCreateAccount} disabled={loading} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"><Sparkles size={20} /> {loading ? "Bezig..." : "Account aanmaken"}</button></div>
           </div>
         )}
       </div>
@@ -398,19 +368,40 @@ function RegisterFlow({ accounts, setAccounts, onDone }) {
 }
 
 // ─── SUPER ADMIN PANEL ────────────────────────────────────────────────────────
-function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
+function SuperAdminPanel({ onLogout }) {
+  const [accounts, setAccounts] = useState([]);
   const [newForm, setNewForm] = useState(false);
-  const [newAccount, setNewAccount] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleDeleteAccount = (id) => {
+  useEffect(() => {
+    fetchAccounts();
+  }, []);
+
+  const fetchAccounts = async () => {
+    try {
+      const data = await supabaseData.fetchAllAccounts();
+      setAccounts(data || []);
+    } catch (err) {
+      console.error("Error fetching accounts:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async (id) => {
     if (confirm("Weet je zeker dat je dit account wilt verwijderen?")) {
-      setAccounts(accounts.filter(a => a.id !== id));
+      try {
+        await supabaseData.deleteAccount(id);
+        setAccounts(accounts.filter(a => a.id !== id));
+      } catch (err) {
+        console.error("Error deleting account:", err);
+      }
     }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 p-6">
-      {newForm && newAccount && <RegisterFlow accounts={accounts} setAccounts={setAccounts} onDone={() => setNewForm(false)} />}
+      {newForm && <RegisterFlow onDone={() => { setNewForm(false); fetchAccounts(); }} />}
       <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
@@ -420,27 +411,37 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
           <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
         </div>
 
-        <div className="grid gap-4 mb-8">
-          {accounts.map(acc => (
-            <div key={acc.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 p-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-bold text-gray-900">{acc.companyName}</h3>
-                  <p className="text-sm text-gray-600">{acc.email} • {acc.users.length} gebruikers</p>
-                </div>
-                <div className="text-right">
-                  <p className={`text-sm font-semibold ${acc.plan.status === "active" ? "text-green-600" : "text-red-600"}`}>{acc.plan.status.toUpperCase()}</p>
-                  <p className="text-xs text-gray-600">{acc.plan.outlets} outlet{acc.plan.outlets > 1 ? "s" : ""}</p>
-                </div>
-              </div>
-              <div className="mt-3 flex gap-2">
-                <button onClick={() => handleDeleteAccount(acc.id)} className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-semibold"><Trash2 size={16} /> Verwijderen</button>
-              </div>
+        {loading ? (
+          <div className="text-center py-8"><p className="text-gray-600">Laden...</p></div>
+        ) : (
+          <>
+            <div className="grid gap-4 mb-8">
+              {accounts.length === 0 ? (
+                <p className="text-gray-600 text-center py-8">Geen accounts gevonden</p>
+              ) : (
+                accounts.map(acc => (
+                  <div key={acc.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 p-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <h3 className="font-bold text-gray-900">{acc.company_name}</h3>
+                        <p className="text-sm text-gray-600">{acc.email}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-sm font-semibold ${acc.plan?.status === "active" ? "text-green-600" : "text-red-600"}`}>{(acc.plan?.status || "unknown").toUpperCase()}</p>
+                        <p className="text-xs text-gray-600">{acc.plan?.outlets || 0} outlet{(acc.plan?.outlets || 0) > 1 ? "s" : ""}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button onClick={() => handleDeleteAccount(acc.id)} className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-semibold"><Trash2 size={16} /> Verwijderen</button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          ))}
-        </div>
 
-        <button onClick={() => { setNewAccount(true); setNewForm(true); }} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Plus size={20} /> Nieuw account</button>
+            <button onClick={() => setNewForm(true)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Plus size={20} /> Nieuw account</button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1523,53 +1524,41 @@ function setApiKey(key) {
   try { localStorage.setItem(API_KEY_STORAGE, key); } catch {}
 }
 
-function loadAccounts() {
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : INIT_ACCOUNTS;
-  } catch {
-    return INIT_ACCOUNTS;
-  }
-}
-
-function saveAccounts(accounts) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(accounts));
-  } catch {}
-}
-
 // ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
-function LoginPage({ onLogin, onRegister, onReset }) {
-  const [username, setUsername] = useState("");
+function LoginPage({ onLogin, onRegister }) {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [accounts, setAccounts] = useState(loadAccounts());
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setError("");
-
-    if (username === SUPER_ADMIN.name && password === SUPER_ADMIN.password) {
-      onLogin({ ...SUPER_ADMIN, accountId: null });
+    if (!email || !password) {
+      setError("Vul alle velden in");
       return;
     }
 
-    for (const account of accounts) {
-      const user = account.users.find(u => (u.name === username || u.id === username) && u.password === password);
+    setLoading(true);
+    try {
+      const { user, session } = await supabase.auth.signInWithPassword({ email, password });
       if (user) {
-        onLogin({ ...user, accountId: account.id });
-        return;
+        // Fetch profile to determine role
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        if (profile) {
+          onLogin({ user, profile });
+        }
       }
+    } catch (err) {
+      setError(err.message || "Inloggen mislukt");
+    } finally {
+      setLoading(false);
     }
-
-    setError("Ongeldige gebruikersnaam of wachtwoord");
   };
-
-  const demoAccounts = [
-    { label: "Master Admin", user: "Master Admin", pass: "master123" },
-    { label: "De Gouden Tap", user: "De Gouden Tap", pass: "tap123" },
-    { label: "Café 't Hoekje", user: "Café 't Hoekje", pass: "hoekje123" },
-    { label: "Super Admin", user: "Super Admin", pass: "super123" },
-  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-400 to-purple-500 flex items-center justify-center p-4">
@@ -1579,30 +1568,18 @@ function LoginPage({ onLogin, onRegister, onReset }) {
         </div>
 
         <div className="space-y-4 mb-6">
-          <input type="text" placeholder="Gebruikersnaam" value={username} onChange={(e) => setUsername(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+          <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
           <input type="password" placeholder="Wachtwoord" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
         </div>
 
         {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm flex items-center gap-2"><AlertCircle size={18} /> {error}</div>}
 
-        <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 mb-4">Inloggen</button>
-
-        {DEMO_MODE && (
-          <div className="border-t border-gray-200 pt-6">
-            <p className="text-xs text-gray-600 mb-3">Demo accounts:</p>
-            <div className="grid grid-cols-2 gap-2">
-              {demoAccounts.map((demo, i) => (
-                <button key={i} onClick={() => { setUsername(demo.user); setPassword(demo.pass); }} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded-lg transition-all duration-200">
-                  {demo.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <button onClick={handleLogin} disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 mb-4 disabled:opacity-50">
+          {loading ? "Bezig..." : "Inloggen"}
+        </button>
 
         <div className="mt-6 flex gap-3 text-sm">
           <button onClick={onRegister} className="flex-1 text-blue-600 hover:text-blue-700 font-semibold">Registreren</button>
-          {DEMO_MODE && <button onClick={onReset} className="flex-1 text-gray-600 hover:text-gray-700 font-semibold">Reset</button>}
         </div>
       </div>
     </div>
@@ -1641,66 +1618,82 @@ const translations = {
 };
 
 function App() {
+  const { session, profile, loading: authLoading, signOut } = useAuth();
   const [screen, setScreen] = useState("login");
-  const [currentUser, setCurrentUser] = useState(null);
-  const [currentAccountId, setCurrentAccountId] = useState(null);
-  const [accounts, setAccounts] = useState(loadAccounts());
-  const [apiKey, setApiKeyState] = useState(getApiKey());
+  const [currentAccount, setCurrentAccount] = useState(null);
+  const [accountLoading, setAccountLoading] = useState(false);
   const [language, setLanguage] = useState("nl");
 
   useEffect(() => {
-    saveAccounts(accounts);
-  }, [accounts]);
+    if (!session) {
+      setScreen("login");
+      setCurrentAccount(null);
+    } else if (profile) {
+      // Determine screen based on profile role
+      if (profile.role === "superadmin") {
+        setScreen("superadmin");
+      } else if (profile.role === "master" || profile.role === "branch") {
+        setScreen("app");
+        // Load account data
+        loadAccount();
+      }
+    }
+  }, [session, profile]);
 
-  const currentAccount = accounts.find(a => a.id === currentAccountId);
-
-  const handleLogin = (user) => {
-    setCurrentUser(user);
-    setCurrentAccountId(user.accountId);
-    if (user.role === "superadmin") {
-      setScreen("superadmin");
-    } else if (user.role === "master") {
-      setScreen("app");
-    } else if (user.role === "branch") {
-      setScreen("app");
+  const loadAccount = async () => {
+    if (!profile?.account_id) return;
+    setAccountLoading(true);
+    try {
+      const account = await supabaseData.fetchAccount(profile.account_id);
+      setCurrentAccount(account);
+    } catch (err) {
+      console.error("Error loading account:", err);
+    } finally {
+      setAccountLoading(false);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogin = ({ user, profile }) => {
+    // Session is handled by useAuth hook
+    // Redirect happens via useEffect when session/profile change
+  };
+
+  const handleLogout = async () => {
+    await signOut();
     setScreen("login");
-    setCurrentUser(null);
-    setCurrentAccountId(null);
+    setCurrentAccount(null);
   };
 
-  const handleReset = () => {
-    if (confirm("Dit zal alle gegevens herstellen naar de standaardwaarden. Doorgaan?")) {
-      setAccounts(INIT_ACCOUNTS);
-      saveAccounts(INIT_ACCOUNTS);
-      handleLogout();
-    }
-  };
-
-  if (screen === "login") {
-    return <LoginPage onLogin={handleLogin} onRegister={() => setScreen("register")} onReset={handleReset} />;
-  }
-
-  if (screen === "register") {
-    return <RegisterFlow accounts={accounts} setAccounts={setAccounts} onDone={() => setScreen("login")} />;
-  }
-
-  if (screen === "superadmin") {
-    return <SuperAdminPanel accounts={accounts} setAccounts={setAccounts} onLogout={handleLogout} />;
-  }
-
-  if (!currentAccount || !currentUser) {
+  // Loading state for initial auth check
+  if (authLoading) {
     return <div className="min-h-screen flex items-center justify-center"><p>Laden...</p></div>;
   }
 
-  if (currentUser.role === "master") {
-    return <MasterApp account={currentAccount} user={currentUser} onLogout={handleLogout} setAccount={(acc) => setAccounts(accounts.map(a => a.id === acc.id ? acc : a))} />;
+  if (screen === "login") {
+    return <LoginPage onLogin={handleLogin} onRegister={() => setScreen("register")} />;
   }
 
-  return <BranchApp user={currentUser} account={currentAccount} setAccount={(acc) => setAccounts(accounts.map(a => a.id === acc.id ? acc : a))} onLogout={handleLogout} language={language} setLanguage={setLanguage} />;
+  if (screen === "register") {
+    return <RegisterFlow onDone={() => setScreen("login")} />;
+  }
+
+  if (screen === "superadmin") {
+    return <SuperAdminPanel onLogout={handleLogout} />;
+  }
+
+  if (screen === "app") {
+    if (accountLoading || !currentAccount || !profile) {
+      return <div className="min-h-screen flex items-center justify-center"><p>Laden...</p></div>;
+    }
+
+    if (profile.role === "master") {
+      return <MasterApp account={currentAccount} user={{ id: session.user.id, email: session.user.email, role: profile.role }} onLogout={handleLogout} setAccount={setCurrentAccount} />;
+    }
+
+    return <BranchApp user={{ id: session.user.id, email: session.user.email, role: profile.role }} account={currentAccount} setAccount={setCurrentAccount} onLogout={handleLogout} language={language} setLanguage={setLanguage} />;
+  }
+
+  return <div className="min-h-screen flex items-center justify-center"><p>Laden...</p></div>;
 }
 
 export default App;
