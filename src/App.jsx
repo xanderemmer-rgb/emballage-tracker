@@ -1392,6 +1392,28 @@ function MasterDashboard({ account }) {
         </div>
       </div>
 
+      {/* Saldo alerts - negative balances */}
+      {(() => {
+        const negItems = saldoEntries.filter(s => s.net < 0);
+        if (negItems.length === 0) return null;
+        return (
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertCircle size={18} className="text-rose-500" />
+              <p className="font-semibold text-rose-700 text-sm">Negatief saldo bij {negItems.length} emballagetype{negItems.length !== 1 ? "s" : ""}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {negItems.slice(0, 5).map(s => (
+                <span key={s.name} className="inline-flex items-center gap-1 px-2.5 py-1 bg-rose-100 text-rose-700 rounded-full text-xs font-semibold">
+                  {s.name}: {s.net}
+                </span>
+              ))}
+              {negItems.length > 5 && <span className="text-xs text-rose-500">+{negItems.length - 5} meer</span>}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Weekly activity chart */}
       {totalTrans > 0 && (
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
@@ -1945,13 +1967,105 @@ function AbonnementTab({ account, setAccount }) {
 }
 
 // ─── MASTER APP ──────────────────────────────────────────────────────────────
+// ─── TRIAL / DEMO BANNER ──────────────────────────────────────────────────────
+function TrialBanner({ account, onUpgrade }) {
+  if (!account.is_demo && account.plan_status === "active") return null;
+
+  // Calculate days left for demo accounts
+  const startDate = account.plan_start_date ? new Date(account.plan_start_date) : new Date();
+  const trialEnd = new Date(startDate);
+  trialEnd.setDate(trialEnd.getDate() + 14);
+  const daysLeft = Math.max(0, Math.ceil((trialEnd - new Date()) / (1000 * 60 * 60 * 24)));
+
+  if (account.is_demo) {
+    return (
+      <div className={`rounded-xl p-4 mb-4 flex items-center justify-between ${daysLeft <= 3 ? "bg-gradient-to-r from-red-500 to-orange-500" : "bg-gradient-to-r from-blue-500 to-purple-500"} text-white`}>
+        <div className="flex items-center gap-3">
+          <Sparkles size={20} />
+          <div>
+            <p className="font-bold text-sm">{daysLeft > 0 ? `Demo: nog ${daysLeft} dag${daysLeft !== 1 ? "en" : ""}` : "Je demo is verlopen"}</p>
+            <p className="text-xs opacity-90">{daysLeft > 0 ? "Upgrade naar een betaald plan voor onbeperkt gebruik" : "Activeer je account om verder te gaan"}</p>
+          </div>
+        </div>
+        <button onClick={onUpgrade} className="px-4 py-2 bg-white text-blue-600 rounded-lg font-bold text-sm hover:bg-blue-50 transition-all whitespace-nowrap">
+          {daysLeft > 0 ? "Upgrade nu" : "Activeer"}
+        </button>
+      </div>
+    );
+  }
+
+  if (account.plan_status !== "active") {
+    return (
+      <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-xl p-4 mb-4 flex items-center justify-between text-white">
+        <div className="flex items-center gap-3">
+          <AlertCircle size={20} />
+          <div>
+            <p className="font-bold text-sm">Account inactief</p>
+            <p className="text-xs opacity-90">Activeer je abonnement om alle functies te gebruiken</p>
+          </div>
+        </div>
+        <button onClick={onUpgrade} className="px-4 py-2 bg-white text-orange-600 rounded-lg font-bold text-sm hover:bg-orange-50 transition-all whitespace-nowrap">Activeer</button>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// ─── INACTIVITY NUDGE ──────────────────────────────────────────────────────
+function InactivityNudge({ transactions, onAddTransaction }) {
+  if (transactions.length === 0) {
+    return (
+      <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-5 border border-blue-100 text-center mb-4">
+        <Package size={28} className="mx-auto text-blue-400 mb-2" />
+        <p className="font-semibold text-gray-800 mb-1">Nog geen transacties</p>
+        <p className="text-sm text-gray-500 mb-3">Begin met het registreren van je eerste levering of retour.</p>
+        <button onClick={onAddTransaction} className="px-5 py-2 bg-blue-600 text-white rounded-lg font-semibold text-sm hover:bg-blue-700 transition-all">
+          <span className="flex items-center gap-2"><Plus size={16} /> Eerste transactie</span>
+        </button>
+      </div>
+    );
+  }
+
+  // Check if last transaction is older than 7 days
+  const sorted = [...transactions].sort((a, b) => b.date.localeCompare(a.date));
+  const lastDate = sorted[0]?.date ? new Date(sorted[0].date) : null;
+  if (!lastDate) return null;
+  const daysSince = Math.floor((new Date() - lastDate) / (1000 * 60 * 60 * 24));
+
+  if (daysSince >= 7) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Calendar size={20} className="text-amber-500" />
+          <div>
+            <p className="font-semibold text-amber-800 text-sm">{daysSince} dagen geen registratie</p>
+            <p className="text-xs text-amber-600">Houd je administratie up-to-date voor een accuraat saldo.</p>
+          </div>
+        </div>
+        <button onClick={onAddTransaction} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg font-semibold text-sm hover:bg-amber-600 transition-all whitespace-nowrap">Registreer</button>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 function MasterApp({ account, user, onLogout, setAccount }) {
   const [masterScreen, setMasterScreen] = useState("dashboard");
+
+  const masterTabs = [
+    { id: "dashboard", label: "Dashboard", icon: <BarChart3 size={16} /> },
+    { id: "logboek", label: "Logboek", icon: <ClipboardList size={16} /> },
+    { id: "beheer", label: "Beheer", icon: <Users size={16} /> },
+    { id: "locaties", label: "Locaties", icon: <Building2 size={16} /> },
+    { id: "abonnement", label: "Abonnement", icon: <CreditCard size={16} /> },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
             <BarcodeLogo size="sm" />
             <div>
@@ -1962,15 +2076,21 @@ function MasterApp({ account, user, onLogout, setAccount }) {
           <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
         </div>
 
-        <div className="flex gap-2 mb-6 border-b border-gray-200">
-          <button onClick={() => setMasterScreen("dashboard")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "dashboard" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Dashboard</button>
-          <button onClick={() => setMasterScreen("logboek")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "logboek" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Logboek</button>
-          <button onClick={() => setMasterScreen("beheer")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "beheer" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Beheer</button>
-          <button onClick={() => setMasterScreen("locaties")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "locaties" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Locaties</button>
-          <button onClick={() => setMasterScreen("abonnement")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "abonnement" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Abonnement</button>
+        <TrialBanner account={account} onUpgrade={() => setMasterScreen("abonnement")} />
+
+        {/* Scrollable tabs for mobile */}
+        <div className="flex gap-1 mb-6 border-b border-gray-200 overflow-x-auto scrollbar-hide -mx-2 px-2">
+          {masterTabs.map(tab => (
+            <button key={tab.id} onClick={() => setMasterScreen(tab.id)} className={`flex items-center gap-1.5 px-3 py-3 font-semibold transition-all duration-200 border-b-2 whitespace-nowrap text-sm ${masterScreen === tab.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>
+              {tab.icon} {tab.label}
+            </button>
+          ))}
         </div>
 
-        {masterScreen === "dashboard" && <MasterDashboard account={account} />}
+        {masterScreen === "dashboard" && <>
+          <InactivityNudge transactions={account.transactions} onAddTransaction={() => setMasterScreen("logboek")} />
+          <MasterDashboard account={account} />
+        </>}
         {masterScreen === "logboek" && <MasterLogboek account={account} setAccount={setAccount} />}
         {masterScreen === "beheer" && <MasterBeheer account={account} setAccount={setAccount} />}
         {masterScreen === "locaties" && <MasterLocaties account={account} setAccount={setAccount} />}
@@ -2187,6 +2307,10 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
 
       {/* Content */}
       <div className="max-w-lg lg:max-w-2xl xl:max-w-4xl mx-auto px-4 pt-4">
+
+        {/* Trial / inactivity banners */}
+        <TrialBanner account={account} onUpgrade={() => {}} />
+        {screen === "overzicht" && <InactivityNudge transactions={branchTransactions} onAddTransaction={() => setScanModal(true)} />}
 
         {screen === "overzicht" && (
           <div className="space-y-4 animate-fade-in">
@@ -2526,8 +2650,16 @@ function LoginPage({ onLogin, onRegister }) {
           } catch (err) { setError(err.message); }
         }} className="text-sm text-blue-600 hover:text-blue-800 font-semibold transition-all">Wachtwoord vergeten?</button>
 
-        <div className="mt-6 flex gap-3 text-sm">
-          <button onClick={onRegister} className="flex-1 text-blue-600 hover:text-blue-700 font-semibold">Registreren</button>
+        {/* Registration upsell */}
+        <div className="mt-8 pt-6 border-t border-gray-200">
+          <div className="text-center mb-4">
+            <p className="text-gray-700 font-semibold">Nog geen account?</p>
+            <p className="text-sm text-gray-500 mt-1">Start direct met emballage bijhouden vanaf <span className="font-bold text-blue-600">€10/maand</span> per locatie</p>
+          </div>
+          <button onClick={onRegister} className="w-full py-3 rounded-lg font-bold transition-all duration-200 bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 flex items-center justify-center gap-2">
+            <Sparkles size={18} /> Gratis uitproberen
+          </button>
+          <p className="text-xs text-gray-400 text-center mt-2">14 dagen gratis proberen, geen creditcard nodig</p>
         </div>
       </div>
     </div>
