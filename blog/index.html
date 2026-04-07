@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Reggy Blog - Tips, inzichten en nieuws over emballagebeheer in de horeca">
+  <title>Blog | Reggy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%23111113'/><rect x='18' y='22' width='5' height='56' rx='2' fill='%23a78bfa'/><rect x='27' y='32' width='5' height='46' rx='2' fill='%238b5cf6'/><rect x='36' y='26' width='5' height='48' rx='2' fill='%237c3aed'/><rect x='45' y='38' width='5' height='34' rx='2' fill='%236d28d9'/><rect x='54' y='24' width='5' height='52' rx='2' fill='%237c3aed'/><rect x='63' y='40' width='5' height='30' rx='2' fill='%238b5cf6'/><rect x='72' y='28' width='5' height='44' rx='2' fill='%23a78bfa'/></svg>">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --purple-50: #f5f3ff; --purple-100: #ede9fe; --purple-200: #ddd6fe;
+      --purple-500: #8b5cf6; --purple-600: #7c3aed; --purple-700: #6d28d9;
+      --gray-50: #fafafa; --gray-100: #f4f4f5; --gray-200: #e4e4e7;
+      --gray-400: #a1a1aa; --gray-500: #71717a; --gray-600: #52525b;
+      --gray-700: #3f3f46; --gray-800: #27272a; --gray-900: #18181b;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', -apple-system, sans-serif; color: var(--gray-900); background: #fff; -webkit-font-smoothing: antialiased; }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(255,255,255,0.85); backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .nav-inner {
+      max-width: 1120px; margin: 0 auto; padding: 0 24px;
+      display: flex; align-items: center; justify-content: space-between; height: 64px;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-bars { display: flex; align-items: flex-end; gap: 2.5px; height: 24px; }
+    .nav-bars .bar { width: 3px; border-radius: 1.5px; }
+    .nav-logo-text { font-size: 20px; font-weight: 800; color: var(--gray-900); letter-spacing: -0.04em; }
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+    .nav-links a { text-decoration: none; font-size: 14px; font-weight: 500; color: var(--gray-600); padding: 8px 12px; border-radius: 8px; transition: all 0.2s; }
+    .nav-links a:hover { color: var(--gray-900); background: var(--gray-50); }
+    .lang-toggle {
+      font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--gray-200); background: #fff; color: var(--gray-600);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .lang-toggle:hover { border-color: var(--purple-500); color: var(--purple-600); }
+    .btn-login {
+      font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 8px;
+      background: var(--gray-900); color: #fff; text-decoration: none; transition: all 0.2s;
+    }
+    .btn-login:hover { background: var(--gray-700); }
+
+    /* ── HERO ── */
+    .hero {
+      padding: 140px 24px 80px; text-align: center;
+      background: linear-gradient(180deg, var(--purple-50) 0%, #fff 100%);
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+      width: 800px; height: 800px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 70%);
+    }
+    .hero-inner { max-width: 720px; margin: 0 auto; position: relative; }
+    .hero h1 {
+      font-size: clamp(36px, 6vw, 56px); font-weight: 900; letter-spacing: -0.03em;
+      line-height: 1.05; margin-bottom: 20px; color: var(--gray-900);
+    }
+    .hero h1 .gradient {
+      background: linear-gradient(135deg, var(--purple-600), var(--purple-500));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .hero p { font-size: 18px; line-height: 1.6; color: var(--gray-500); max-width: 520px; margin: 0 auto 32px; }
+
+    /* ── BREADCRUMB ── */
+    .breadcrumb {
+      max-width: 1120px; margin: 0 auto; padding: 0 24px 24px;
+      font-size: 14px; color: var(--gray-500);
+      position: relative; z-index: 10;
+    }
+    .breadcrumb a { color: var(--purple-600); text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+
+    /* ── BLOG GRID ── */
+    .blog-grid {
+      max-width: 1120px; margin: 0 auto; padding: 0 24px 80px;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 28px;
+    }
+    .blog-card {
+      background: #fff; border-radius: 16px; overflow: hidden;
+      border: 1px solid var(--gray-100); transition: all 0.3s;
+      display: flex; flex-direction: column;
+    }
+    .blog-card:hover {
+      border-color: var(--purple-200); transform: translateY(-4px);
+      box-shadow: 0 12px 24px rgba(124,58,237,0.08);
+    }
+    .blog-card-header {
+      height: 200px; background: linear-gradient(135deg, var(--purple-50), var(--purple-100));
+      display: flex; align-items: center; justify-content: center; position: relative;
+    }
+    .blog-card-icon {
+      font-size: 48px; opacity: 0.8;
+    }
+    .blog-card-content { padding: 28px; display: flex; flex-direction: column; flex: 1; }
+    .blog-card-meta {
+      display: flex; align-items: center; gap: 16px; margin-bottom: 12px;
+      font-size: 13px; color: var(--gray-500);
+    }
+    .blog-card-meta-item { display: flex; align-items: center; gap: 4px; }
+    .blog-card-meta-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--purple-600); }
+    .blog-card h3 {
+      font-size: 18px; font-weight: 700; line-height: 1.4;
+      color: var(--gray-900); margin-bottom: 12px;
+    }
+    .blog-card p {
+      font-size: 15px; color: var(--gray-600); line-height: 1.6;
+      margin-bottom: 24px; flex: 1;
+    }
+    .blog-card-link {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 15px; font-weight: 600; color: var(--purple-600);
+      text-decoration: none; transition: all 0.2s;
+    }
+    .blog-card-link:hover { gap: 12px; }
+    .blog-card-link::after { content: '→'; }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 40px 24px; text-align: center; border-top: 1px solid var(--gray-100);
+    }
+    .footer-inner { max-width: 1120px; margin: 0 auto; }
+    .footer-inner p { font-size: 13px; color: var(--gray-400); }
+    .footer-inner a { color: var(--gray-500); text-decoration: none; }
+    .footer-inner a:hover { color: var(--purple-600); }
+
+    /* ── BARCODE ANIMATION ── */
+    @keyframes barPulse {
+      0%, 100% { opacity: 0.6; transform: scaleY(1); }
+      50% { opacity: 1; transform: scaleY(1.15); }
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
+      .hero { padding: 120px 20px 60px; }
+      .blog-grid { grid-template-columns: 1fr; padding-bottom: 60px; }
+      .nav-links a.hide-mobile { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ────────── NAV ────────── -->
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <div class="nav-bars">
+        <div class="bar" style="height:100%;background:#a78bfa;animation:barPulse 3s ease-in-out 0s infinite"></div>
+        <div class="bar" style="height:65%;background:#8b5cf6;animation:barPulse 3s ease-in-out 0.15s infinite"></div>
+        <div class="bar" style="height:85%;background:#7c3aed;animation:barPulse 3s ease-in-out 0.3s infinite"></div>
+        <div class="bar" style="height:50%;background:#6d28d9;animation:barPulse 3s ease-in-out 0.45s infinite"></div>
+        <div class="bar" style="height:95%;background:#7c3aed;animation:barPulse 3s ease-in-out 0.6s infinite"></div>
+        <div class="bar" style="height:40%;background:#8b5cf6;animation:barPulse 3s ease-in-out 0.75s infinite"></div>
+        <div class="bar" style="height:75%;background:#a78bfa;animation:barPulse 3s ease-in-out 0.9s infinite"></div>
+      </div>
+      <span class="nav-logo-text">Reggy</span>
+    </a>
+    <div class="nav-links">
+      <a href="/#features" class="hide-mobile">Functies</a>
+      <a href="/#pricing" class="hide-mobile">Prijzen</a>
+      <button class="lang-toggle">NL</button>
+      <a href="https://app.reggy.io" class="btn-login">Inloggen</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ────────── HERO ────────── -->
+<section class="hero">
+  <div class="hero-inner">
+    <h1>Reggy Blog</h1>
+    <p>Tips, inzichten en nieuws over emballagebeheer in de horeca</p>
+  </div>
+</section>
+
+<!-- ────────── BLOG GRID ────────── -->
+<section>
+  <div class="breadcrumb">
+    <a href="/">Home</a> / <span>Blog</span>
+  </div>
+
+  <div class="blog-grid">
+    <!-- Article 1 -->
+    <a href="emballage-kosten-horeca.html" style="text-decoration: none;">
+      <div class="blog-card">
+        <div class="blog-card-header">
+          <div class="blog-card-icon">💰</div>
+        </div>
+        <div class="blog-card-content">
+          <div class="blog-card-meta">
+            <div class="blog-card-meta-item"><span class="blog-card-meta-dot"></span> 2 april 2026</div>
+            <div class="blog-card-meta-item"><span class="blog-card-meta-dot"></span> 6 min</div>
+          </div>
+          <h3>Hoeveel kost emballage een horecabedrijf per jaar?</h3>
+          <p>Ontdek de verborgen kosten van verpakking in de horeca en hoe je deze kunt besparen met slimme tracking.</p>
+          <div class="blog-card-link">Lees meer</div>
+        </div>
+      </div>
+    </a>
+
+    <!-- Article 2 -->
+    <a href="emballage-statiegeld-regels.html" style="text-decoration: none;">
+      <div class="blog-card">
+        <div class="blog-card-header">
+          <div class="blog-card-icon">📋</div>
+        </div>
+        <div class="blog-card-content">
+          <div class="blog-card-meta">
+            <div class="blog-card-meta-item"><span class="blog-card-meta-dot"></span> 25 maart 2026</div>
+            <div class="blog-card-meta-item"><span class="blog-card-meta-dot"></span> 5 min</div>
+          </div>
+          <h3>Statiegeld en emballage regels in Nederland en België</h3>
+          <p>Alles wat je moet weten over statiegeld, retourplicht en de verschillen tussen landen.</p>
+          <div class="blog-card-link">Lees meer</div>
+        </div>
+      </div>
+    </a>
+
+    <!-- Article 3 -->
+    <a href="tips-emballagebeheer.html" style="text-decoration: none;">
+      <div class="blog-card">
+        <div class="blog-card-header">
+          <div class="blog-card-icon">✨</div>
+        </div>
+        <div class="blog-card-content">
+          <div class="blog-card-meta">
+            <div class="blog-card-meta-item"><span class="blog-card-meta-dot"></span> 18 maart 2026</div>
+            <div class="blog-card-meta-item"><span class="blog-card-meta-dot"></span> 4 min</div>
+          </div>
+          <h3>7 tips voor beter emballagebeheer in je restaurant</h3>
+          <p>Praktische tips om je emballagebeheer te verbeteren en kosten te besparen.</p>
+          <div class="blog-card-link">Lees meer</div>
+        </div>
+      </div>
+    </a>
+  </div>
+</section>
+
+<!-- ────────── FOOTER ────────── -->
+<footer>
+  <div class="footer-inner">
+    <p>© 2026 Reggy. Alle rechten voorbehouden.</p>
+  </div>
+</footer>
+
+</body>
+</html>

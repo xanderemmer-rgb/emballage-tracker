@@ -11,7 +11,27 @@
       "destination": "/landing.html"
     },
     {
-      "source": "/((?!landing\\.html|assets|favicon|icons|og-|manifest).*)",
+      "source": "/blog",
+      "has": [
+        {
+          "type": "host",
+          "value": "reggy.io"
+        }
+      ],
+      "destination": "/blog/index.html"
+    },
+    {
+      "source": "/blog/:slug",
+      "has": [
+        {
+          "type": "host",
+          "value": "reggy.io"
+        }
+      ],
+      "destination": "/blog/:slug.html"
+    },
+    {
+      "source": "/((?!landing\\.html|blog|assets|favicon|icons|og-|manifest).*)",
       "has": [
         {
           "type": "host",

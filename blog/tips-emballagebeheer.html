@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="7 praktische tips voor beter emballagebeheer in je restaurant, café of catering bedrijf.">
+  <title>7 tips voor beter emballagebeheer in je restaurant of café | Reggy Blog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%23111113'/><rect x='18' y='22' width='5' height='56' rx='2' fill='%23a78bfa'/><rect x='27' y='32' width='5' height='46' rx='2' fill='%238b5cf6'/><rect x='36' y='26' width='5' height='48' rx='2' fill='%237c3aed'/><rect x='45' y='38' width='5' height='34' rx='2' fill='%236d28d9'/><rect x='54' y='24' width='5' height='52' rx='2' fill='%237c3aed'/><rect x='63' y='40' width='5' height='30' rx='2' fill='%238b5cf6'/><rect x='72' y='28' width='5' height='44' rx='2' fill='%23a78bfa'/></svg>">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --purple-50: #f5f3ff; --purple-100: #ede9fe; --purple-200: #ddd6fe;
+      --purple-500: #8b5cf6; --purple-600: #7c3aed; --purple-700: #6d28d9;
+      --gray-50: #fafafa; --gray-100: #f4f4f5; --gray-200: #e4e4e7;
+      --gray-400: #a1a1aa; --gray-500: #71717a; --gray-600: #52525b;
+      --gray-700: #3f3f46; --gray-800: #27272a; --gray-900: #18181b;
+    }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', -apple-system, sans-serif; color: var(--gray-900); background: #fff; -webkit-font-smoothing: antialiased; }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      background: rgba(255,255,255,0.85); backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .nav-inner {
+      max-width: 1120px; margin: 0 auto; padding: 0 24px;
+      display: flex; align-items: center; justify-content: space-between; height: 64px;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-bars { display: flex; align-items: flex-end; gap: 2.5px; height: 24px; }
+    .nav-bars .bar { width: 3px; border-radius: 1.5px; }
+    .nav-logo-text { font-size: 20px; font-weight: 800; color: var(--gray-900); letter-spacing: -0.04em; }
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+    .nav-links a { text-decoration: none; font-size: 14px; font-weight: 500; color: var(--gray-600); padding: 8px 12px; border-radius: 8px; transition: all 0.2s; }
+    .nav-links a:hover { color: var(--gray-900); background: var(--gray-50); }
+    .lang-toggle {
+      font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--gray-200); background: #fff; color: var(--gray-600);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .lang-toggle:hover { border-color: var(--purple-500); color: var(--purple-600); }
+    .btn-login {
+      font-size: 14px; font-weight: 600; padding: 8px 16px; border-radius: 8px;
+      background: var(--gray-900); color: #fff; text-decoration: none; transition: all 0.2s;
+    }
+    .btn-login:hover { background: var(--gray-700); }
+
+    /* ── ARTICLE LAYOUT ── */
+    .article-container {
+      max-width: 720px; margin: 0 auto; padding: 140px 24px 80px;
+    }
+    .breadcrumb {
+      font-size: 14px; color: var(--gray-500); margin-bottom: 32px;
+    }
+    .breadcrumb a { color: var(--purple-600); text-decoration: none; }
+    .breadcrumb a:hover { text-decoration: underline; }
+
+    /* ── ARTICLE HEADER ── */
+    article h1 {
+      font-size: clamp(32px, 5vw, 48px); font-weight: 900; letter-spacing: -0.03em;
+      line-height: 1.1; margin-bottom: 24px; color: var(--gray-900);
+    }
+    .article-meta {
+      display: flex; align-items: center; gap: 24px; margin-bottom: 40px;
+      font-size: 14px; color: var(--gray-500); border-bottom: 1px solid var(--gray-100); padding-bottom: 24px;
+    }
+    .article-meta-item { display: flex; align-items: center; gap: 6px; }
+    .article-meta-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--purple-600); }
+
+    /* ── ARTICLE CONTENT ── */
+    article {
+      line-height: 1.8;
+    }
+    article p {
+      font-size: 16px; color: var(--gray-700); margin-bottom: 20px;
+    }
+    article h2 {
+      font-size: 28px; font-weight: 800; margin-top: 40px; margin-bottom: 16px;
+      color: var(--gray-900); letter-spacing: -0.02em;
+    }
+    article h3 {
+      font-size: 20px; font-weight: 700; margin-top: 28px; margin-bottom: 12px;
+      color: var(--gray-900);
+    }
+    article ul, article ol {
+      margin-left: 24px; margin-bottom: 20px;
+    }
+    article li {
+      font-size: 16px; color: var(--gray-700); margin-bottom: 10px;
+    }
+    article strong { color: var(--purple-600); font-weight: 700; }
+    article em { color: var(--gray-600); font-style: italic; }
+
+    /* ── TIP BOX ── */
+    .tip-box {
+      margin: 32px 0; padding: 24px; border-radius: 12px;
+      border-left: 4px solid var(--purple-600);
+      background: var(--purple-50);
+    }
+    .tip-box h4 {
+      font-size: 16px; font-weight: 700; margin-bottom: 8px;
+      color: var(--gray-900);
+    }
+    .tip-box p {
+      margin-bottom: 0;
+    }
+
+    /* ── CTA SECTION ── */
+    .cta-section {
+      margin-top: 60px; padding: 40px; border-radius: 16px;
+      background: linear-gradient(135deg, var(--purple-50), var(--purple-100));
+      border: 1px solid var(--purple-200); text-align: center;
+    }
+    .cta-section h3 {
+      font-size: 24px; margin-bottom: 12px; margin-top: 0;
+      color: var(--gray-900);
+    }
+    .cta-section p {
+      color: var(--gray-600); margin-bottom: 24px; font-size: 16px;
+    }
+    .cta-button {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 14px 28px; border-radius: 12px; font-size: 16px; font-weight: 700;
+      background: var(--purple-600); color: #fff; text-decoration: none;
+      box-shadow: 0 4px 16px rgba(124,58,237,0.3); transition: all 0.2s;
+    }
+    .cta-button:hover { background: var(--purple-700); transform: translateY(-1px); }
+
+    /* ── FOOTER ── */
+    footer {
+      padding: 40px 24px; text-align: center; border-top: 1px solid var(--gray-100);
+    }
+    .footer-inner { max-width: 1120px; margin: 0 auto; }
+    .footer-inner p { font-size: 13px; color: var(--gray-400); }
+    .footer-inner a { color: var(--gray-500); text-decoration: none; }
+    .footer-inner a:hover { color: var(--purple-600); }
+
+    /* ── BARCODE ANIMATION ── */
+    @keyframes barPulse {
+      0%, 100% { opacity: 0.6; transform: scaleY(1); }
+      50% { opacity: 1; transform: scaleY(1.15); }
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 640px) {
+      .article-container { padding: 120px 20px 60px; }
+      .nav-links a.hide-mobile { display: none; }
+      article h2 { font-size: 24px; }
+      article h3 { font-size: 18px; }
+      .cta-section { padding: 24px; }
+    }
+  </style>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "headline": "7 tips voor beter emballagebeheer in je restaurant of café",
+    "description": "7 praktische tips voor beter emballagebeheer in je restaurant, café of catering bedrijf.",
+    "datePublished": "2026-03-18",
+    "author": {
+      "@type": "Organization",
+      "name": "Reggy",
+      "url": "https://reggy.io"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Reggy",
+      "url": "https://reggy.io"
+    },
+    "mainEntityOfPage": {
+      "@type": "WebPage",
+      "@id": "https://reggy.io/blog/tips-emballagebeheer"
+    },
+    "wordCount": 950,
+    "inLanguage": "nl"
+  }
+  </script>
+</head>
+<body>
+
+<!-- ────────── NAV ────────── -->
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <div class="nav-bars">
+        <div class="bar" style="height:100%;background:#a78bfa;animation:barPulse 3s ease-in-out 0s infinite"></div>
+        <div class="bar" style="height:65%;background:#8b5cf6;animation:barPulse 3s ease-in-out 0.15s infinite"></div>
+        <div class="bar" style="height:85%;background:#7c3aed;animation:barPulse 3s ease-in-out 0.3s infinite"></div>
+        <div class="bar" style="height:50%;background:#6d28d9;animation:barPulse 3s ease-in-out 0.45s infinite"></div>
+        <div class="bar" style="height:95%;background:#7c3aed;animation:barPulse 3s ease-in-out 0.6s infinite"></div>
+        <div class="bar" style="height:40%;background:#8b5cf6;animation:barPulse 3s ease-in-out 0.75s infinite"></div>
+        <div class="bar" style="height:75%;background:#a78bfa;animation:barPulse 3s ease-in-out 0.9s infinite"></div>
+      </div>
+      <span class="nav-logo-text">Reggy</span>
+    </a>
+    <div class="nav-links">
+      <a href="/#features" class="hide-mobile">Functies</a>
+      <a href="/#pricing" class="hide-mobile">Prijzen</a>
+      <button class="lang-toggle">NL</button>
+      <a href="https://app.reggy.io" class="btn-login">Inloggen</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ────────── ARTICLE ────────── -->
+<div class="article-container">
+  <div class="breadcrumb">
+    <a href="/">Home</a> / <a href="index.html">Blog</a> / <span>7 tips voor beter emballagebeheer</span>
+  </div>
+
+  <article>
+    <h1>7 tips voor beter emballagebeheer in je restaurant of café</h1>
+    <div class="article-meta">
+      <div class="article-meta-item"><span class="article-meta-dot"></span> 18 maart 2026</div>
+      <div class="article-meta-item"><span class="article-meta-dot"></span> 4 min leestijd</div>
+      <div class="article-meta-item"><span class="article-meta-dot"></span> Reggy Team</div>
+    </div>
+
+    <h2>Waarom emballagebeheer moeilijk is</h2>
+    <p>Emballagetracking voelt voor veel horeca bedrijven als een onzichtbare taak—totdat er iets misgaat. Je medewerkers vergeten items in te scannen, flessen verdwijnen, statiegeld blijft op je balans staan. Het gevolg? Geld dat weglekt.</p>
+
+    <p>Goed nieuws: met een paar praktische stappen kun je dit drastisch verbeteren. Hier zijn onze 7 best practices.</p>
+
+    <h2>1. Track álles van dag één</h2>
+    <p>Begin met een volledige inventaris van alle emballage die je hebt. Dit omvat:</p>
+    <ul>
+      <li>Bierkraten (nummering per merk)</li>
+      <li>Wijnflessen en flessenrekken</li>
+      <li>Statiegeldglazen en drinkglazen</li>
+      <li>Kleine verpakkingen (bakjes, doosjes)</li>
+      <li>Ijs- en vruchtenkisten</li>
+    </ul>
+
+    <p>Zorg dat elke inkomende en uitgaande leverantie wordt geregistreerd. Dit hoeft niet ingewikkeld te zijn—zelfs een eenvoudig spreadsheet helpt enorm.</p>
+
+    <div class="tip-box">
+      <h4>💡 Pro tip</h4>
+      <p>Maak foto's van je emballageopslag zodat je altijd weet hoe het eruit hoort te zien. Dit helpt medewerkers en leveranciers beter samen werken.</p>
+    </div>
+
+    <h2>2. Wijs één persoon verantwoordelijk aan</h2>
+    <p>Emballagebeheer werkt niet als niemand verantwoordelijk is. Benoem één of twee medewerkers (afhankelijk van bedrijfsgrootte) als "emballage manager".</p>
+
+    <p>Hun taken:</p>
+    <ul>
+      <li>Dagelijkse registratie van in- en uitgaande items</li>
+      <li>Communicatie met leveranciers</li>
+      <li>Maandelijkse controle van inventaris</li>
+      <li>Escalatie bij discrepanties</li>
+    </ul>
+
+    <p>Dit zorgt ervoor dat één persoon eigenaarschap heeft en verantwoording aflegt.</p>
+
+    <h2>3. Voer wekelijkse (niet maandelijkse) controles uit</h2>
+    <p>Veel bedrijven tellen hun emballage maar maandelijks. Dit is te laat—op dat moment kan je al een probleem hebben gemist.</p>
+
+    <p>Beter: <strong>wekelijkse snelle controles</strong> (30 minuten). Tellen hoeveel je van elk type hebt en vergelijk met je administratie. Als er een gat is, kan je het direct adresseren.</p>
+
+    <div class="tip-box">
+      <h4>⏰ Efficiëntievoorstel</h4>
+      <p>Stel een vaste dag en tijd in (bijvoorbeeld vrijdagmiddag 15:00). Dit helpt je team om het in hun routine in te passen.</p>
+    </div>
+
+    <h2>4. Gebruik software (geen papier)</h2>
+    <p>Handmatige spreadsheets werken, maar zijn foutgevoelig. Als je meer dan één locatie hebt, wordt het snel chaotisch.</p>
+
+    <p>Software biedt voordelen:</p>
+    <ul>
+      <li>Real-time zicht op je voorraad</li>
+      <li>Automatische waarschuwingen als iets niet klopt</li>
+      <li>Geen dubbele invoer</li>
+      <li>Makkelijker delen tussen medewerkers en locations</li>
+      <li>Automatische rapportage naar je accountant</li>
+    </ul>
+
+    <p>Dit hoeft niet duur te zijn—veel tools starten al onder €50/maand.</p>
+
+    <h2>5. Onderhandel regelmatig met leveranciers</h2>
+    <p>Elke maand of kwartaal moet je afrekenen met je leveranciers over statiegeld. Bij deze afrekening:</p>
+    <ul>
+      <li><strong>Controleer getallen.</strong> Wat zeggen zij dat je hebt? Komt dit overeen met jouw tracking?</li>
+      <li><strong>Vraag om duidelijkheid.</strong> Als er verschil is, vraag waarom.</li>
+      <li><strong>Onderhandel.</strong> Heb je veel items die je niet terug kunt geven? Misschien kunnen jullie iets afspreken.</li>
+    </ul>
+
+    <p>Dit gesprek helpt problemen voorkomen en bouwt vertrouwen op.</p>
+
+    <h2>6. Train je team goed</h2>
+    <p>Het beste system werkt niet als je team niet begrijpt waarom het belangrijk is.</p>
+
+    <p><strong>Wat je team moet weten:</strong></p>
+    <ul>
+      <li>Dit directe impact op de winstgevendheid van het bedrijf</li>
+      <li>Hoe items moeten worden geregistreerd</li>
+      <li>Waar dingen moeten worden opgeslagen (voorkoming verlies)</li>
+      <li>Wat schoon en intact betekent (voor retour)</li>
+      <li>Wie zij moeten contacten bij vragen</li>
+    </ul>
+
+    <div class="tip-box">
+      <h4>🎓 Training idea</h4>
+      <p>Geef nieuw personeel een korte training (10-15 minuten) in hun eerste week. Een poster in het opslaggedeelte helpt als reminder.</p>
+    </div>
+
+    <h2>7. Plan regelmatige returns en cleanups</h2>
+    <p>Veel verlies ontstaat omdat items zich ophopen en dan ergens verdwijnen. <strong>Plan vaste retourdata</strong>—bijvoorbeeld elke maandag en donderdag.</p>
+
+    <p>Op deze dagen:</p>
+    <ul>
+      <li>Verzamel alle items die terug moeten</li>
+      <li>Zorg dat ze schoon zijn</li>
+      <li>Registreer ze</li>
+      <li>Zorg voor afhaling of bezorging</li>
+    </ul>
+
+    <p>Dit voorkómt dat items per ongeluk in de opslag blijven en uiteindelijk als verlies worden afgeschreven.</p>
+
+    <h2>Samenvatting</h2>
+
+    <p>Goed emballagebeheer vraagt niet zoveel—het vraagt slechts <strong>structuur en consistentie</strong>. Met deze 7 tips kun je:</p>
+    <ul>
+      <li>Minimaal 10-15% verlies reduceren</li>
+      <li>Geschillen met leveranciers voorkomen</li>
+      <li>Beter inzicht krijgen in je kosten</li>
+      <li>Je team meer eigenaarschap geven</li>
+    </ul>
+
+    <p>Begin klein: pick one tip die het meest van toepassing is op je bedrijf, en start daar.</p>
+
+    <!-- ── CTA ── -->
+    <div class="cta-section">
+      <h3>Wil je je emballagebeheer automatiseren?</h3>
+      <p>Reggy maakt het makkelijk. Registreer, track en rapporteer—allemaal vanuit je telefoon. Geen spreadsheets meer, geen verwarring.</p>
+      <a href="https://app.reggy.io" class="cta-button">Start gratis met Reggy →</a>
+    </div>
+  </article>
+</div>
+
+<!-- ────────── FOOTER ────────── -->
+<footer>
+  <div class="footer-inner">
+    <p>© 2026 Reggy. Alle rechten voorbehouden.</p>
+  </div>
+</footer>
+
+</body>
+</html>

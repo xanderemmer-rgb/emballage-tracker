@@ -12,6 +12,10 @@ export default defineConfig({
       input: {
         main: resolve(__dirname, 'index.html'),
         landing: resolve(__dirname, 'landing.html'),
+        blog: resolve(__dirname, 'blog/index.html'),
+        'blog-emballage-kosten': resolve(__dirname, 'blog/emballage-kosten-horeca.html'),
+        'blog-statiegeld': resolve(__dirname, 'blog/emballage-statiegeld-regels.html'),
+        'blog-tips': resolve(__dirname, 'blog/tips-emballagebeheer.html'),
       },
     },
   },
