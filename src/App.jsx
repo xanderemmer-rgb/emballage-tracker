@@ -1172,7 +1172,7 @@ function ExportModal({ account, onClose }) {
 }
 
 // ─── BON SCAN MODAL ───────────────────────────────────────────────────────────
-function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, isEdit = false, initialData = null }) {
+function BonScanModal({ emballageTypes, suppliers, branch, branchId, onClose, onImport, isEdit = false, initialData = null }) {
   // Edit mode: single item
   const [type, setType] = useState(initialData?.type || "IN");
   const [supplier, setSupplier] = useState(initialData?.supplier || "");
@@ -1208,7 +1208,7 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
     } else {
       // Send array of transactions
       const items = validLines.map(l => ({
-        type, supplier, emballage: l.emballage, qty: parseInt(l.qty), note, branch, date: new Date().toISOString().split("T")[0]
+        type, supplier, emballage: l.emballage, qty: parseInt(l.qty), note, branch, branch_id: branchId, date: new Date().toISOString().split("T")[0]
       }));
       onImport(items);
     }
@@ -1469,59 +1469,139 @@ function MasterLocaties({ account, setAccount }) {
 // ─── MASTER BEHEER (USER MANAGEMENT) ───────────────────────────────────────────
 function MasterBeheer({ account, setAccount }) {
   const [showForm, setShowForm] = useState(false);
-  const [newUser, setNewUser] = useState({ name: "", password: "", branch: null });
+  const [newUser, setNewUser] = useState({ email: "", password: "", branch_id: "" });
   const [toast, setToast] = useState(null);
-
-  const handleAddUser = () => {
-    if (!newUser.name || !newUser.password) return;
-    const user = { id: "u_" + uid(), name: newUser.name, role: "branch", password: newUser.password, branch: newUser.branch };
-    setAccount({ ...account, users: [...account.users, user] });
-    setNewUser({ name: "", password: "", branch: null });
-    setShowForm(false);
-    setToast({ type: "success", message: "Gebruiker toegevoegd!" });
-  };
-
-  const handleDeleteUser = (id) => {
-    if (id === "master") return;
-    setAccount({ ...account, users: account.users.filter(u => u.id !== id) });
-    setToast({ type: "success", message: "Gebruiker verwijderd!" });
-  };
+  const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(null);
 
   const branches = account.branches || [];
+
+  const handleAddUser = async () => {
+    if (!newUser.email || !newUser.password) {
+      setToast({ type: "error", message: "Email en wachtwoord zijn verplicht" });
+      return;
+    }
+    if (newUser.password.length < 6) {
+      setToast({ type: "error", message: "Wachtwoord moet minimaal 6 tekens zijn" });
+      return;
+    }
+    if (!newUser.branch_id) {
+      setToast({ type: "error", message: "Selecteer een locatie" });
+      return;
+    }
+    setLoading(true);
+    try {
+      // Create auth user with metadata
+      const { data: { user }, error: signupError } = await supabase.auth.signUp({
+        email: newUser.email,
+        password: newUser.password,
+        options: {
+          data: {
+            display_name: newUser.email.split("@")[0],
+            role: "branch",
+            account_id: account.id,
+            branch_id: newUser.branch_id,
+          }
+        }
+      });
+      if (signupError) throw signupError;
+      if (!user) throw new Error("Gebruiker aanmaken mislukt");
+
+      // Update the profile that was auto-created by the trigger
+      await supabase.from("profiles").update({
+        account_id: account.id,
+        branch_id: newUser.branch_id,
+        role: "branch",
+      }).eq("id", user.id);
+
+      // Reload users from DB
+      const { data: updatedProfiles } = await supabase.from("profiles").select("*").eq("account_id", account.id);
+      setAccount({ ...account, users: updatedProfiles || [] });
+      setNewUser({ email: "", password: "", branch_id: "" });
+      setShowForm(false);
+      setToast({ type: "success", message: "Gebruiker aangemaakt!" });
+    } catch (err) {
+      setToast({ type: "error", message: err.message || "Aanmaken mislukt" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (userId) => {
+    if (userId === account.users.find(u => u.role === "master")?.id) return;
+    try {
+      // We can't delete auth users from client side, so just remove the profile link
+      await supabase.from("profiles").update({ account_id: null, branch_id: null }).eq("id", userId);
+      setAccount({ ...account, users: account.users.filter(u => u.id !== userId) });
+      setDeleting(null);
+      setToast({ type: "success", message: "Gebruiker verwijderd!" });
+    } catch (err) {
+      setToast({ type: "error", message: err.message });
+    }
+  };
 
   return (
     <div className="animate-fade-in space-y-6">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><Users size={28} /> Gebruikers</h2>
+
       <div className="space-y-3">
-        {account.users.map(u => (
-          <div key={u.id} className="bg-white rounded-lg p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold">{(u.display_name || u.email || "?")[0].toUpperCase()}</div>
-              <div>
-                <p className="font-semibold text-gray-900">{u.display_name || u.email}</p>
-                <p className="text-xs text-gray-600">{u.role === "master" ? "Master Admin" : (branches.find(b => b.id === u.branch_id)?.name || u.branch || "Geen locatie")}</p>
+        {account.users.map(u => {
+          const branchName = branches.find(b => b.id === u.branch_id)?.name;
+          return (
+            <div key={u.id} className="bg-white rounded-lg p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${u.role === "master" ? "bg-gradient-to-br from-purple-400 to-purple-600" : "bg-gradient-to-br from-blue-400 to-blue-600"}`}>
+                  {(u.display_name || u.email || "?")[0].toUpperCase()}
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">{u.display_name || u.email}</p>
+                  <p className="text-xs text-gray-500">{u.email}</p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    {u.role === "master" ? (
+                      <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">Master Admin</span>
+                    ) : (
+                      <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">{branchName || "Geen locatie"}</span>
+                    )}
+                  </p>
+                </div>
               </div>
+              {u.role !== "master" && (
+                deleting === u.id ? (
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => handleDeleteUser(u.id)} className="px-2 py-1 bg-red-600 text-white rounded text-xs font-bold">Ja</button>
+                    <button onClick={() => setDeleting(null)} className="px-2 py-1 bg-gray-300 text-gray-700 rounded text-xs font-bold">Nee</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setDeleting(u.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all duration-200"><Trash2 size={18} /></button>
+                )
+              )}
             </div>
-            {u.role !== "master" && <button onClick={() => handleDeleteUser(u.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all duration-200"><Trash2 size={18} /></button>}
-          </div>
-        ))}
+          );
+        })}
       </div>
+
       {showForm && (
         <div className="bg-blue-50 rounded-xl p-4 space-y-3">
-          <input type="text" placeholder="Naam" value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
-          <input type="password" placeholder="Wachtwoord" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
-          <select value={newUser.branch || ""} onChange={(e) => setNewUser({ ...newUser, branch: e.target.value || null })} className="w-full px-4 py-2 border border-gray-300 rounded-lg">
+          <p className="font-semibold text-gray-900">Nieuwe filiaalgebruiker</p>
+          <input type="email" placeholder="Email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          <input type="password" placeholder="Wachtwoord (min. 6 tekens)" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          <select value={newUser.branch_id} onChange={(e) => setNewUser({ ...newUser, branch_id: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
             <option value="">Kies locatie...</option>
             {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+          {branches.length === 0 && <p className="text-xs text-orange-600">Maak eerst een locatie aan via het tabblad "Locaties"</p>}
           <div className="flex gap-2">
-            <button onClick={() => setShowForm(false)} className="flex-1 bg-gray-300 text-gray-800 py-2 rounded-lg font-bold hover:bg-gray-400 transition-all duration-200">Annuleren</button>
-            <button onClick={handleAddUser} className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2"><Plus size={18} /> Toevoegen</button>
+            <button onClick={() => { setShowForm(false); setNewUser({ email: "", password: "", branch_id: "" }); }} className="flex-1 bg-gray-300 text-gray-800 py-2.5 rounded-lg font-bold hover:bg-gray-400 transition-all">Annuleren</button>
+            <button onClick={handleAddUser} disabled={loading} className="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-bold hover:bg-green-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+              <Plus size={18} /> {loading ? "Bezig..." : "Aanmaken"}
+            </button>
           </div>
         </div>
       )}
-      {!showForm && <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><PlusCircle size={20} /> Gebruiker toevoegen</button>}
+      {!showForm && (
+        <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><PlusCircle size={20} /> Gebruiker toevoegen</button>
+      )}
     </div>
   );
 }
@@ -1533,6 +1613,7 @@ function MasterLogboek({ account, setAccount }) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [toast, setToast] = useState(null);
+  const [branchFilter, setBranchFilter] = useState("all");
 
   const filtered = account.transactions
     .filter(t => filter === "all" || t.type === filter)
@@ -1544,6 +1625,7 @@ function MasterLogboek({ account, setAccount }) {
       if (dateTo && tDate > new Date(dateTo)) return false;
       return true;
     })
+    .filter(t => branchFilter === "all" || t.branch_id === branchFilter)
     .sort((a, b) => b.date.localeCompare(a.date));
 
   const handleDeleteTransaction = (id) => {
@@ -1579,6 +1661,10 @@ function MasterLogboek({ account, setAccount }) {
         <button onClick={() => setFilter("all")} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${filter === "all" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Alles</button>
         <button onClick={() => setFilter("IN")} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${filter === "IN" ? "bg-green-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Inkomend</button>
         <button onClick={() => setFilter("OUT")} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${filter === "OUT" ? "bg-red-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Uitgaand</button>
+        <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold text-gray-700 focus:ring-2 focus:ring-blue-500 outline-none">
+          <option value="all">Alle locaties</option>
+          {(account.branches || []).map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
         {(search || dateFrom || dateTo) && (
           <button onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setFilter("all"); }} className="px-3 py-2 rounded-lg text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-all duration-200 flex items-center gap-1">
             <X size={14} /> Reset
@@ -1808,30 +1894,58 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
     ? account.transactions.filter(t => t.branch_id === user.branch_id)
     : account.transactions;
 
-  const handleImportTransaction = (transOrArray) => {
+  const handleImportTransaction = async (transOrArray) => {
     const items = Array.isArray(transOrArray) ? transOrArray : [transOrArray];
-    let maxId = Math.max(...account.transactions.map(x => x.id), 0);
-    const newTrans = items.map(trans => ({ ...trans, id: ++maxId }));
-    setAccount({ ...account, transactions: [...account.transactions, ...newTrans] });
-    setScanModal(false);
-    setToast({ type: "success", message: items.length > 1 ? `${items.length} transacties geregistreerd!` : "Transactie geregistreerd!" });
+    try {
+      const saved = [];
+      for (const trans of items) {
+        const row = await supabaseData.createTransaction({
+          account_id: account.id,
+          branch_id: trans.branch_id || user.branch_id || null,
+          type: trans.type,
+          supplier: trans.supplier,
+          emballage: trans.emballage,
+          qty: trans.qty,
+          note: trans.note || null,
+          date: trans.date,
+          branch: trans.branch || user.branch || null,
+        });
+        saved.push(row);
+      }
+      setAccount({ ...account, transactions: [...saved, ...account.transactions] });
+      setScanModal(false);
+      setToast({ type: "success", message: items.length > 1 ? `${items.length} transacties geregistreerd!` : "Transactie geregistreerd!" });
+    } catch (err) {
+      setToast({ type: "error", message: "Opslaan mislukt: " + err.message });
+    }
   };
 
-  const handleDeleteTransaction = (id) => {
-    setAccount({ ...account, transactions: account.transactions.filter(t => t.id !== id) });
-    setDeleteConfirm(null);
-    setToast({ type: "success", message: "Transactie verwijderd!" });
+  const handleDeleteTransaction = async (id) => {
+    try {
+      await supabaseData.deleteTransaction(id);
+      setAccount({ ...account, transactions: account.transactions.filter(t => t.id !== id) });
+      setDeleteConfirm(null);
+      setToast({ type: "success", message: "Transactie verwijderd!" });
+    } catch (err) {
+      setToast({ type: "error", message: "Verwijderen mislukt: " + err.message });
+    }
   };
 
   const handleEditTransaction = (transaction) => {
     setEditingTransaction(transaction);
   };
 
-  const handleSaveTransaction = (updatedTrans) => {
-    const updatedTransactions = account.transactions.map(t => t.id === updatedTrans.id ? updatedTrans : t);
-    setAccount({ ...account, transactions: updatedTransactions });
-    setEditingTransaction(null);
-    setToast({ type: "success", message: "Transactie bijgewerkt!" });
+  const handleSaveTransaction = async (updatedTrans) => {
+    try {
+      const { id, ...updates } = updatedTrans;
+      await supabase.from("transactions").update(updates).eq("id", id);
+      const updatedTransactions = account.transactions.map(t => t.id === updatedTrans.id ? updatedTrans : t);
+      setAccount({ ...account, transactions: updatedTransactions });
+      setEditingTransaction(null);
+      setToast({ type: "success", message: "Transactie bijgewerkt!" });
+    } catch (err) {
+      setToast({ type: "error", message: "Bijwerken mislukt: " + err.message });
+    }
   };
 
   // Stats
@@ -1895,10 +2009,10 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       {showOnboarding && <OnboardingOverlay onDone={() => setShowOnboarding(false)} />}
       {barcodeScanner && <BarcodeScannerModal onScan={(barcode) => { setBarcodeScanner(false); setScanModal(true); }} onClose={() => setBarcodeScanner(false)} />}
-      {scanModal && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} onClose={() => setScanModal(false)} onImport={handleImportTransaction} />}
+      {scanModal && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} branchId={user.branch_id} onClose={() => setScanModal(false)} onImport={handleImportTransaction} />}
       {exportModal && <ExportModal account={account} onClose={() => setExportModal(false)} />}
       {attViewer && <AttViewer att={attViewer} onClose={() => setAttViewer(null)} />}
-      {editingTransaction && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} onClose={() => setEditingTransaction(null)} onImport={handleSaveTransaction} isEdit={true} initialData={editingTransaction} />}
+      {editingTransaction && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} branchId={user.branch_id} onClose={() => setEditingTransaction(null)} onImport={handleSaveTransaction} isEdit={true} initialData={editingTransaction} />}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full">
@@ -1917,7 +2031,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
           <div className="flex items-center gap-3">
             <BarcodeLogo size="sm" />
             <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight">{user.branch}</h1>
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">{(account.branches || []).find(b => b.id === user.branch_id)?.name || account.company_name}</h1>
               <p className="text-xs text-gray-500">{account.company_name}</p>
             </div>
           </div>
@@ -2262,6 +2376,16 @@ function LoginPage({ onLogin, onRegister }) {
         <button onClick={handleLogin} disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 mb-4 disabled:opacity-50">
           {loading ? "Bezig..." : "Inloggen"}
         </button>
+
+        <button onClick={async () => {
+          if (!email) { setError("Vul je email in"); return; }
+          try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+            if (error) throw error;
+            setError("");
+            alert("Reset link verstuurd naar " + email);
+          } catch (err) { setError(err.message); }
+        }} className="text-sm text-blue-600 hover:text-blue-800 font-semibold transition-all">Wachtwoord vergeten?</button>
 
         <div className="mt-6 flex gap-3 text-sm">
           <button onClick={onRegister} className="flex-1 text-blue-600 hover:text-blue-700 font-semibold">Registreren</button>
