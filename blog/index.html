@@ -100,7 +100,10 @@
       display: flex; align-items: center; justify-content: center; position: relative;
     }
     .blog-card-icon {
-      font-size: 48px; opacity: 0.8;
+      width: 100%; height: 100%; position: absolute; top: 0; left: 0;
+    }
+    .blog-card-header svg {
+      width: 100%; height: 100%;
     }
     .blog-card-content { padding: 28px; display: flex; flex-direction: column; flex: 1; }
     .blog-card-meta {
@@ -190,10 +193,27 @@
 
   <div class="blog-grid">
     <!-- Article 1 -->
-    <a href="emballage-kosten-horeca.html" style="text-decoration: none;">
+    <a href="/blog/emballage-kosten-horeca" style="text-decoration: none; color: inherit;">
       <div class="blog-card">
         <div class="blog-card-header">
-          <div class="blog-card-icon">💰</div>
+          <div class="blog-card-icon">
+            <svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f5f3ff"/><stop offset="100%" stop-color="#ede9fe"/></linearGradient>
+              </defs>
+              <rect width="400" height="200" fill="url(#g1)"/>
+              <circle cx="200" cy="100" r="50" fill="#ddd6fe" opacity="0.6"/>
+              <rect x="175" y="70" width="50" height="60" rx="6" fill="#8b5cf6"/>
+              <rect x="182" y="80" width="36" height="3" rx="1.5" fill="#f5f3ff"/>
+              <rect x="182" y="88" width="28" height="3" rx="1.5" fill="#f5f3ff"/>
+              <rect x="182" y="96" width="32" height="3" rx="1.5" fill="#f5f3ff"/>
+              <circle cx="200" cy="115" r="8" fill="#7c3aed" opacity="0.8"/>
+              <text x="197" y="119" font-family="Inter,sans-serif" font-size="10" fill="#f5f3ff" font-weight="700">€</text>
+              <rect x="100" y="140" width="60" height="8" rx="4" fill="#ddd6fe" opacity="0.5"/>
+              <rect x="240" y="140" width="60" height="8" rx="4" fill="#ddd6fe" opacity="0.5"/>
+              <rect x="170" y="155" width="60" height="6" rx="3" fill="#ede9fe" opacity="0.4"/>
+            </svg>
+          </div>
         </div>
         <div class="blog-card-content">
           <div class="blog-card-meta">
@@ -208,10 +228,29 @@
     </a>
 
     <!-- Article 2 -->
-    <a href="emballage-statiegeld-regels.html" style="text-decoration: none;">
+    <a href="/blog/emballage-statiegeld-regels" style="text-decoration: none; color: inherit;">
       <div class="blog-card">
         <div class="blog-card-header">
-          <div class="blog-card-icon">📋</div>
+          <div class="blog-card-icon">
+            <svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="g2" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f5f3ff"/><stop offset="100%" stop-color="#ede9fe"/></linearGradient>
+              </defs>
+              <rect width="400" height="200" fill="url(#g2)"/>
+              <rect x="130" y="40" width="140" height="120" rx="10" fill="#ddd6fe" opacity="0.5"/>
+              <rect x="140" y="50" width="120" height="100" rx="8" fill="#fff" stroke="#8b5cf6" stroke-width="2"/>
+              <rect x="155" y="65" width="50" height="4" rx="2" fill="#8b5cf6"/>
+              <rect x="155" y="78" width="80" height="3" rx="1.5" fill="#ddd6fe"/>
+              <rect x="155" y="88" width="70" height="3" rx="1.5" fill="#ddd6fe"/>
+              <rect x="155" y="98" width="75" height="3" rx="1.5" fill="#ddd6fe"/>
+              <circle cx="155" cy="118" r="5" fill="#7c3aed"/>
+              <path d="M153 118 L155 120 L158 116" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+              <rect x="165" y="115" width="40" height="3" rx="1.5" fill="#a78bfa"/>
+              <circle cx="155" cy="132" r="5" fill="#7c3aed"/>
+              <path d="M153 132 L155 134 L158 130" stroke="#fff" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+              <rect x="165" y="129" width="50" height="3" rx="1.5" fill="#a78bfa"/>
+            </svg>
+          </div>
         </div>
         <div class="blog-card-content">
           <div class="blog-card-meta">
@@ -226,10 +265,28 @@
     </a>
 
     <!-- Article 3 -->
-    <a href="tips-emballagebeheer.html" style="text-decoration: none;">
+    <a href="/blog/tips-emballagebeheer" style="text-decoration: none; color: inherit;">
       <div class="blog-card">
         <div class="blog-card-header">
-          <div class="blog-card-icon">✨</div>
+          <div class="blog-card-icon">
+            <svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="g3" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#f5f3ff"/><stop offset="100%" stop-color="#ede9fe"/></linearGradient>
+              </defs>
+              <rect width="400" height="200" fill="url(#g3)"/>
+              <circle cx="200" cy="90" r="40" fill="#ddd6fe" opacity="0.4"/>
+              <rect x="180" y="60" width="40" height="55" rx="4" fill="#8b5cf6"/>
+              <rect x="175" y="55" width="50" height="8" rx="4" fill="#7c3aed"/>
+              <rect x="188" y="72" width="5" height="35" rx="2" fill="#f5f3ff" opacity="0.6"/>
+              <rect x="196" y="72" width="5" height="35" rx="2" fill="#f5f3ff" opacity="0.6"/>
+              <circle cx="152" cy="70" r="4" fill="#a78bfa"/><rect x="150" y="74" width="4" height="14" rx="2" fill="#a78bfa"/>
+              <circle cx="248" cy="70" r="4" fill="#a78bfa"/><rect x="246" y="74" width="4" height="14" rx="2" fill="#a78bfa"/>
+              <circle cx="170" cy="130" r="4" fill="#a78bfa"/><rect x="168" y="134" width="4" height="14" rx="2" fill="#a78bfa"/>
+              <circle cx="230" cy="130" r="4" fill="#a78bfa"/><rect x="228" y="134" width="4" height="14" rx="2" fill="#a78bfa"/>
+              <rect x="120" y="165" width="160" height="6" rx="3" fill="#ede9fe" opacity="0.5"/>
+              <rect x="160" y="177" width="80" height="4" rx="2" fill="#ede9fe" opacity="0.3"/>
+            </svg>
+          </div>
         </div>
         <div class="blog-card-content">
           <div class="blog-card-meta">
