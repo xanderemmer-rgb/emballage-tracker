@@ -153,6 +153,29 @@ function shouldShowOnboarding() {
   try { return !localStorage.getItem(ONBOARDING_KEY); } catch { return false; }
 }
 
+// ─── SKELETON LOADING ──────────────────────────────────────────────────────
+function SkeletonCard({ rows = 3 }) {
+  return (
+    <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 animate-pulse">
+      <div className="h-4 bg-gray-200 rounded w-1/3 mb-4" />
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="h-3 bg-gray-100 rounded mb-2" style={{ width: `${85 - i * 15}%` }} />
+      ))}
+    </div>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="inline-block w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4" />
+        <p className="text-gray-500 font-medium">Even laden...</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── BARCODE SCANNER ──────────────────────────────────────────────────────
 function BarcodeScannerModal({ onScan, onClose }) {
   const videoRef = useRef(null);
@@ -808,6 +831,21 @@ function SuperAdminPanel({ onLogout }) {
                             </div>
                           </div>
 
+                          {/* Branches */}
+                          {(detailData.branches || []).length > 0 && (
+                            <div className="bg-gray-50 rounded-lg p-3">
+                              <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><Building2 size={14} /> Locaties ({detailData.branches.length})</h4>
+                              <div className="space-y-1.5">
+                                {detailData.branches.map(b => (
+                                  <div key={b.id} className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-700 font-medium">{b.name}</span>
+                                    <span className="text-gray-400">{b.address || "—"}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Recent Transactions */}
                           {detailData.transactions.length > 0 && (
                             <div className="bg-gray-50 rounded-lg p-3">
@@ -1293,10 +1331,49 @@ function MasterDashboard({ account }) {
   const outCount = account.transactions.filter(t => t.type === "OUT").length;
   const branches = account.branches || [];
 
+  // Weekly chart data (last 8 weeks)
+  const weekData = [];
+  const now = new Date();
+  for (let w = 7; w >= 0; w--) {
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - (w * 7 + now.getDay()));
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
+    const weekTrans = account.transactions.filter(t => {
+      const d = new Date(t.date);
+      return d >= weekStart && d <= weekEnd;
+    });
+    const weekNum = Math.ceil((weekStart.getDate()) / 7);
+    weekData.push({
+      label: `W${weekNum}`,
+      in: weekTrans.filter(t => t.type === "IN").reduce((s, t) => s + t.qty, 0),
+      out: weekTrans.filter(t => t.type === "OUT").reduce((s, t) => s + t.qty, 0),
+    });
+  }
+
+  // Emballage saldo overview
+  const saldo = {};
+  account.transactions.forEach(t => {
+    if (!saldo[t.emballage]) saldo[t.emballage] = { in: 0, out: 0 };
+    if (t.type === "IN") saldo[t.emballage].in += t.qty;
+    else saldo[t.emballage].out += t.qty;
+  });
+  const saldoEntries = Object.entries(saldo).map(([name, v]) => ({ name, net: v.in - v.out, in: v.in, out: v.out })).sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+
+  // Estimated total value
+  const totalValue = account.transactions.reduce((sum, t) => {
+    const emb = (account.emballageTypes || []).find(e => e.name === t.emballage);
+    return sum + (t.type === "IN" ? (emb?.value || 0) * t.qty : -((emb?.value || 0) * t.qty));
+  }, 0);
+
   return (
     <div className="animate-fade-in space-y-6">
       <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><BarChart3 size={28} /> Dashboard</h2>
-      <div className="grid grid-cols-3 gap-4">
+
+      {/* Stats row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4">
           <p className="text-sm text-blue-600 font-semibold">Totaal transacties</p>
           <p className="text-3xl font-bold text-blue-900">{totalTrans}</p>
@@ -1309,8 +1386,48 @@ function MasterDashboard({ account }) {
           <p className="text-sm text-red-600 font-semibold flex items-center gap-1"><ArrowUpCircle size={16} /> Uitgaand</p>
           <p className="text-3xl font-bold text-red-900">{outCount}</p>
         </div>
+        <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-4">
+          <p className="text-sm text-purple-600 font-semibold">Geschatte waarde</p>
+          <p className="text-3xl font-bold text-purple-900">{fmt(totalValue)}</p>
+        </div>
       </div>
 
+      {/* Weekly activity chart */}
+      {totalTrans > 0 && (
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <p className="font-semibold text-gray-700 mb-3">Activiteit (laatste 8 weken)</p>
+          <MiniBarChart data={weekData} />
+          <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-emerald-400 inline-block" /> Inkomend</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-rose-400 inline-block" /> Uitgaand</span>
+          </div>
+        </div>
+      )}
+
+      {/* Emballage saldo overview */}
+      {saldoEntries.length > 0 && (
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <p className="font-semibold text-gray-700 mb-3">Emballage saldo overzicht</p>
+          <div className="space-y-2">
+            {saldoEntries.slice(0, 8).map(s => {
+              const maxAbs = Math.max(...saldoEntries.map(e => Math.abs(e.net)), 1);
+              const pct = Math.abs(s.net) / maxAbs * 100;
+              return (
+                <div key={s.name} className="flex items-center gap-3">
+                  <span className="text-sm text-gray-700 w-36 truncate font-medium">{s.name}</span>
+                  <div className="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden relative">
+                    <div className={`h-full rounded-full transition-all duration-500 ${s.net >= 0 ? "bg-emerald-400" : "bg-rose-400"}`} style={{ width: `${Math.max(pct, 4)}%` }} />
+                  </div>
+                  <span className={`text-sm font-bold w-16 text-right ${s.net >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{s.net >= 0 ? "+" : ""}{s.net}</span>
+                </div>
+              );
+            })}
+            {saldoEntries.length > 8 && <p className="text-xs text-gray-400 mt-1">+{saldoEntries.length - 8} meer types</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Locaties */}
       <div className="space-y-3">
         <p className="font-semibold text-gray-700">Locaties ({branches.length})</p>
         {branches.length === 0 ? (
@@ -1628,9 +1745,14 @@ function MasterLogboek({ account, setAccount }) {
     .filter(t => branchFilter === "all" || t.branch_id === branchFilter)
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  const handleDeleteTransaction = (id) => {
-    setAccount({ ...account, transactions: account.transactions.filter(t => t.id !== id) });
-    setToast({ type: "success", message: "Transactie verwijderd!" });
+  const handleDeleteTransaction = async (id) => {
+    try {
+      await supabaseData.deleteTransaction(id);
+      setAccount({ ...account, transactions: account.transactions.filter(t => t.id !== id) });
+      setToast({ type: "success", message: "Transactie verwijderd!" });
+    } catch (err) {
+      setToast({ type: "error", message: "Verwijderen mislukt: " + err.message });
+    }
   };
 
   return (
@@ -1672,7 +1794,24 @@ function MasterLogboek({ account, setAccount }) {
         )}
       </div>
 
-      <p className="text-xs text-gray-400">{filtered.length} transactie{filtered.length !== 1 ? "s" : ""}</p>
+      {/* Results header with export */}
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-400">{filtered.length} transactie{filtered.length !== 1 ? "s" : ""}</p>
+        {filtered.length > 0 && (
+          <button onClick={() => {
+            const csv = ["Datum,Type,Leverancier,Emballage,Aantal,Locatie"].concat(
+              filtered.map(t => `${t.date},${t.type},${t.supplier},${t.emballage},${t.qty},${t.branch || ""}`)
+            ).join("\n");
+            const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `reggy-logboek-${new Date().toISOString().slice(0,10)}.csv`;
+            link.click();
+          }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-semibold hover:bg-blue-100 transition-colors">
+            <Download size={14} /> CSV Export
+          </button>
+        )}
+      </div>
 
       {filtered.length === 0 ? (
         <div className="bg-gray-50 rounded-xl p-8 text-center">
@@ -2474,6 +2613,17 @@ function App() {
     }
   };
 
+  // Auto-refresh data when tab regains focus
+  useEffect(() => {
+    const handleFocus = () => {
+      if (profile?.account_id && (profile.role === "master" || profile.role === "branch")) {
+        loadAccount();
+      }
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [profile]);
+
   const handleLogin = ({ user, profile }) => {
     // Session is handled by useAuth hook
     // Redirect happens via useEffect when session/profile change
@@ -2487,7 +2637,7 @@ function App() {
 
   // Loading state for initial auth check
   if (authLoading) {
-    return <div className="min-h-screen flex items-center justify-center"><p>Laden...</p></div>;
+    return <LoadingScreen />;
   }
 
   if (screen === "login") {
@@ -2504,7 +2654,7 @@ function App() {
 
   if (screen === "app") {
     if (accountLoading) {
-      return <div className="min-h-screen flex items-center justify-center"><p>Laden...</p></div>;
+      return <LoadingScreen />;
     }
     if (!currentAccount || !profile?.account_id) {
       return (
