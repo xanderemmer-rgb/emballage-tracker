@@ -2694,7 +2694,7 @@ const translations = {
 };
 
 function App() {
-  const { session, profile, loading: authLoading, signOut } = useAuth();
+  const { session, profile, loading: authLoading, signOut, fetchProfile } = useAuth();
   const [screen, setScreen] = useState("login");
   const [currentAccount, setCurrentAccount] = useState(null);
   const [accountLoading, setAccountLoading] = useState(false);
@@ -2705,14 +2705,17 @@ function App() {
       setScreen("login");
       setCurrentAccount(null);
     } else if (profile) {
-      // Determine screen based on profile role
-      if (profile.role === "superadmin") {
-        setScreen("superadmin");
-      } else if (profile.role === "master" || profile.role === "branch") {
-        setScreen("app");
-        // Load account data
-        loadAccount();
-      }
+      // Don't interrupt the registration flow — signUp triggers onAuthStateChange
+      // which would redirect away from the wizard before it finishes setup
+      setScreen(prev => {
+        if (prev === "register") return "register";
+        if (profile.role === "superadmin") return "superadmin";
+        if (profile.role === "master" || profile.role === "branch") {
+          loadAccount();
+          return "app";
+        }
+        return prev;
+      });
     }
   }, [session, profile]);
 
@@ -2773,7 +2776,12 @@ function App() {
   }
 
   if (screen === "register") {
-    return <RegisterFlow onDone={() => setScreen("login")} />;
+    return <RegisterFlow onDone={() => {
+      // Registration complete — refetch the updated profile to trigger redirect
+      if (session?.user) fetchProfile(session.user.id);
+      setScreen("app");
+      loadAccount();
+    }} />;
   }
 
   if (screen === "superadmin") {
