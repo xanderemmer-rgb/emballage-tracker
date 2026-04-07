@@ -983,7 +983,7 @@ function ExportModal({ account, onClose }) {
         </div>
         <div className="flex gap-3 mt-6">
           <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200">Annuleren</button>
-          <button onClick={() => { format === "csv" ? exportToCSV(account.transactions, account.emballageTypes, account.suppliers, account.companyName) : exportToPDF(account.transactions, account.emballageTypes, account.users, account.suppliers, account.companyName); onClose(); }} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Download size={20} /> Exporteren</button>
+          <button onClick={() => { format === "csv" ? exportToCSV(account.transactions, account.emballageTypes, account.suppliers, account.company_name) : exportToPDF(account.transactions, account.emballageTypes, account.users, account.suppliers, account.company_name); onClose(); }} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Download size={20} /> Exporteren</button>
         </div>
       </div>
     </div>
@@ -1299,7 +1299,7 @@ function AbonnementTab({ account }) {
       <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-gray-700">Status</p>
-          <p className={`font-bold ${account.plan_status === "active" ? "text-green-600" : "text-red-600"}`}>{account.plan_status.toUpperCase()}</p>
+          <p className={`font-bold ${account.plan_status === "active" ? "text-green-600" : "text-red-600"}`}>{(account.plan_status || "unknown").toUpperCase()}</p>
         </div>
         <div className="flex items-center justify-between">
           <p className="text-gray-700">Outlets</p>
@@ -1330,8 +1330,8 @@ function MasterApp({ account, user, onLogout, setAccount }) {
           <div className="flex items-center gap-4">
             <BarcodeLogo size="sm" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{account.companyName}</h1>
-              <p className="text-sm text-gray-600">{user.name}</p>
+              <h1 className="text-2xl font-bold text-gray-900">{account.company_name}</h1>
+              <p className="text-sm text-gray-600">{user.email}</p>
             </div>
           </div>
           <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
@@ -1514,7 +1514,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
             <BarcodeLogo size="sm" />
             <div>
               <h1 className="text-lg font-bold text-gray-900 leading-tight">{user.branch}</h1>
-              <p className="text-xs text-gray-500">{account.companyName}</p>
+              <p className="text-xs text-gray-500">{account.company_name}</p>
             </div>
           </div>
           <div className="flex gap-1.5">
@@ -1929,7 +1929,14 @@ function App() {
     }
     setAccountLoading(true);
     try {
-      const account = await supabaseData.fetchAccount(profile.account_id);
+      const detail = await supabaseData.fetchAccountDetail(profile.account_id);
+      const account = {
+        ...detail.account,
+        users: detail.profiles || [],
+        transactions: detail.transactions || [],
+        emballageTypes: detail.emballageTypes || [],
+        suppliers: detail.suppliers || [],
+      };
       setCurrentAccount(account);
     } catch (err) {
       console.error("Error loading account:", err);

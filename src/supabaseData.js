@@ -15,7 +15,7 @@ export async function fetchAccountDetail(accountId) {
   const [account, profiles, transactions, emballageTypes, suppliers] = await Promise.all([
     supabase.from("accounts").select("*").eq("id", accountId).single(),
     supabase.from("profiles").select("*").eq("account_id", accountId),
-    supabase.from("transactions").select("*").eq("account_id", accountId).order("date", { ascending: false }).limit(50),
+    supabase.from("transactions").select("*").eq("account_id", accountId).order("date", { ascending: false }),
     supabase.from("emballage_types").select("*").eq("account_id", accountId),
     supabase.from("suppliers").select("*").eq("account_id", accountId),
   ]);
