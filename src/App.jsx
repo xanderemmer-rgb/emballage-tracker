@@ -1038,7 +1038,7 @@ function exportToCSV(transactions, emballageTypes, suppliers, companyName) {
 
   // All transactions
   lines.push(["TRANSACTIES", "", "", "", "", "", ""]);
-  lines.push(["Datum", "Type", "Leverancier", "Emballage", "Aantal", "Filiaal", "Opmerking"]);
+  lines.push(["Datum", "Type", "Leverancier", "Emballage", "Aantal", "Outlet", "Opmerking"]);
   [...transactions].sort((a, b) => b.date.localeCompare(a.date)).forEach(t => {
     lines.push([t.date, t.type === "IN" ? "Inkomend" : "Uitgaand", t.supplier, t.emballage, t.qty, t.branch, t.note || ""]);
   });
@@ -1184,7 +1184,7 @@ function exportToPDF(transactions, emballageTypes, users, suppliers, companyName
   <div class="section">
     <h3>Transactiehistorie <span class="badge">${transactions.length > 100 ? "Laatste 100" : `${transactions.length} stuks`}</span></h3>
     <table>
-      <thead><tr><th>Datum</th><th>Type</th><th>Leverancier</th><th>Emballage</th><th style="text-align:center">Aantal</th><th>Filiaal</th><th>Opmerking</th></tr></thead>
+      <thead><tr><th>Datum</th><th>Type</th><th>Leverancier</th><th>Emballage</th><th style="text-align:center">Aantal</th><th>Outlet</th><th>Opmerking</th></tr></thead>
       <tbody>${transRows}</tbody>
     </table>
   </div>
@@ -1592,7 +1592,7 @@ function MasterLocaties({ account, setAccount, user }) {
         <div className="bg-blue-50 rounded-xl p-8 text-center">
           <Building2 size={40} className="mx-auto text-blue-400 mb-3" />
           <p className="text-gray-700 font-semibold mb-1">Nog geen locaties</p>
-          <p className="text-sm text-gray-500 mb-4">Voeg je eerste vestiging toe om filiaalgebruikers te kunnen koppelen.</p>
+          <p className="text-sm text-gray-500 mb-4">Voeg je eerste vestiging toe om outletgebruikers te kunnen koppelen.</p>
         </div>
       )}
 
@@ -1778,7 +1778,7 @@ function MasterBeheer({ account, setAccount, user }) {
 
       {showForm && (
         <div className="bg-blue-50 rounded-xl p-4 space-y-3">
-          <p className="font-semibold text-gray-900">Nieuwe filiaalgebruiker</p>
+          <p className="font-semibold text-gray-900">Nieuwe outletgebruiker</p>
           <input type="email" placeholder="Email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
           <input type="password" placeholder="Wachtwoord (min. 6 tekens)" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
           <select value={newUser.branch_id} onChange={(e) => setNewUser({ ...newUser, branch_id: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none">
@@ -1847,7 +1847,7 @@ function MasterLogboek({ account, setAccount, user }) {
       {/* Search */}
       <div className="relative">
         <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Zoek op emballage, leverancier of filiaal..." className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Zoek op emballage, leverancier of outlet..." className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
       </div>
 
       {/* Date filters */}
@@ -2088,7 +2088,7 @@ function AuditTrail({ account }) {
   const describeAction = (log) => {
     const d = log.details || {};
     switch (log.action) {
-      case "gebruiker_toegevoegd": return `${d.email} als ${d.role} voor ${d.branch_name || "—"}`;
+      case "gebruiker_toegevoegd": return `${d.email} als ${d.role === "branch" ? "outlet" : d.role} voor ${d.branch_name || "—"}`;
       case "gebruiker_verwijderd": return `${d.email || "Gebruiker"} (${d.role || "—"})`;
       case "transactie_aangemaakt": return `${d.type === "IN" ? "Inkomend" : "Uitgaand"}: ${d.qty}x ${d.emballage} — ${d.supplier}${d.branch ? ` (${d.branch})` : ""}`;
       case "transactie_verwijderd": return `${d.type === "IN" ? "Inkomend" : "Uitgaand"}: ${d.qty}x ${d.emballage} — ${d.supplier}`;
