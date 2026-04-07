@@ -282,16 +282,40 @@ function PricingCalc({ outlets, onChange }) {
 
 // ─── REGISTRATION FLOW ────────────────────────────────────────────────────────
 function RegisterFlow({ onDone }) {
-  const [step, setStep] = useState(1); // 1: plan, 2: bedrijf, 3: account, 4: bevestiging
-  const [outlets, setOutlets] = useState(1);
-  const [company, setCompany] = useState({ name: "", email: "", phone: "" });
+  const [step, setStep] = useState(1); // 1: plan type, 2: locations, 3: company, 4: credentials
+  const [planType, setPlanType] = useState(null); // "single" or "multi"
+  const [outlets, setOutlets] = useState(2);
+  const [locations, setLocations] = useState([{ name: "", address: "" }]);
+  const [company, setCompany] = useState({ name: "", email: "" });
   const [accountUser, setAccountUser] = useState({ email: "", password: "", password2: "" });
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  const totalOutlets = planType === "single" ? 1 : outlets;
+  const price = calcPrice(totalOutlets);
+
+  // Sync locations array with outlet count
+  const handleOutletChange = (n) => {
+    setOutlets(n);
+    setLocations(prev => {
+      if (n > prev.length) return [...prev, ...Array(n - prev.length).fill(null).map(() => ({ name: "", address: "" }))];
+      return prev.slice(0, n);
+    });
+  };
+
+  const updateLocation = (i, field, value) => {
+    setLocations(prev => prev.map((loc, idx) => idx === i ? { ...loc, [field]: value } : loc));
+  };
+
+  const canProceedStep2 = locations.every(l => l.name.trim());
+
   const handleCreateAccount = async () => {
     if (!company.name || !company.email || !accountUser.email || !accountUser.password) {
       setToast({ type: "error", message: "Alle velden zijn verplicht" });
+      return;
+    }
+    if (accountUser.password.length < 6) {
+      setToast({ type: "error", message: "Wachtwoord moet minimaal 6 tekens zijn" });
       return;
     }
     if (accountUser.password !== accountUser.password2) {
@@ -301,32 +325,46 @@ function RegisterFlow({ onDone }) {
 
     setLoading(true);
     try {
-      // Step 1: Create Supabase Auth user
+      // 1. Create Supabase Auth user
       const { data: { user }, error: signupError } = await supabase.auth.signUp({
         email: accountUser.email,
         password: accountUser.password,
         options: { data: { display_name: company.name } }
       });
-
       if (signupError) throw signupError;
       if (!user) throw new Error("User creation failed");
 
-      // Step 2: Create account in database
+      // 2. Create account
       const newAccount = await supabaseData.createAccount({
         company_name: company.name,
         email: company.email,
-        plan_outlets: outlets,
+        plan_outlets: totalOutlets,
         plan_status: "active",
         plan_start_date: new Date().toISOString().split("T")[0],
         plan_next_billing: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
       });
 
-      // Step 3: The trigger will auto-create profile with role='master' and account_id
-      // Step 4: Seed default emballage types and suppliers
+      // 3. Create branches
+      const branchPromises = locations.map(loc =>
+        supabaseData.createBranch({
+          account_id: newAccount.id,
+          name: loc.name.trim(),
+          address: loc.address.trim() || null,
+        })
+      );
+      const createdBranches = await Promise.all(branchPromises);
+
+      // 4. Update profile: set account_id and branch_id (for single outlet)
+      const profileUpdate = { account_id: newAccount.id, role: "master" };
+      if (planType === "single" && createdBranches.length === 1) {
+        profileUpdate.branch_id = createdBranches[0].id;
+      }
+      await supabase.from("profiles").update(profileUpdate).eq("id", user.id);
+
+      // 5. Seed defaults
       await supabaseData.seedAccountDefaults(newAccount.id);
 
-      setToast({ type: "success", message: "Account aangemaakt! Je kunt nu inloggen." });
-      setTimeout(() => onDone(), 1500);
+      setStep(5); // success screen
     } catch (err) {
       setToast({ type: "error", message: err.message || "Aanmaken mislukt" });
     } finally {
@@ -337,32 +375,175 @@ function RegisterFlow({ onDone }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={(e) => { if (e.target === e.currentTarget) onDone(); }}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md lg:max-w-2xl xl:max-w-4xl w-full p-8 animate-slide-up relative">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md lg:max-w-2xl xl:max-w-4xl w-full p-8 animate-slide-up relative max-h-[90vh] overflow-y-auto">
         <button onClick={onDone} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors" aria-label="Sluiten"><X size={24} /></button>
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Nieuw account</h2>
+
+        {/* Progress indicator */}
+        {step < 5 && (
+          <div className="flex items-center gap-2 mb-6">
+            {[1,2,3,4].map(s => (
+              <div key={s} className={`h-1.5 flex-1 rounded-full transition-all ${s <= step ? "bg-blue-600" : "bg-gray-200"}`} />
+            ))}
+          </div>
+        )}
+
+        {/* STEP 1: Plan type */}
         {step === 1 && (
           <div className="space-y-6">
-            <p className="text-gray-600">Stap 1: Kies uw abonnement</p>
-            <PricingCalc outlets={outlets} onChange={setOutlets} />
-            <button onClick={() => setStep(2)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200">Volgende</button>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Kies je plan</h2>
+              <p className="text-gray-500 mt-1">Heb je één locatie of meerdere vestigingen?</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button
+                onClick={() => { setPlanType("single"); setLocations([{ name: "", address: "" }]); }}
+                className={`p-6 rounded-xl border-2 text-left transition-all ${planType === "single" ? "border-blue-600 bg-blue-50 shadow-md" : "border-gray-200 hover:border-gray-300"}`}
+              >
+                <Building2 size={28} className={planType === "single" ? "text-blue-600" : "text-gray-400"} />
+                <p className="font-bold text-lg text-gray-900 mt-3">Eén locatie</p>
+                <p className="text-sm text-gray-500 mt-1">Perfect voor een enkel restaurant, café of bar</p>
+                <p className="text-2xl font-bold text-blue-600 mt-3">€ {PRICE_OUTLET}<span className="text-sm font-normal text-gray-500">/maand</span></p>
+              </button>
+
+              <button
+                onClick={() => { setPlanType("multi"); handleOutletChange(2); }}
+                className={`p-6 rounded-xl border-2 text-left transition-all ${planType === "multi" ? "border-blue-600 bg-blue-50 shadow-md" : "border-gray-200 hover:border-gray-300"}`}
+              >
+                <Users size={28} className={planType === "multi" ? "text-blue-600" : "text-gray-400"} />
+                <p className="font-bold text-lg text-gray-900 mt-3">Meerdere locaties</p>
+                <p className="text-sm text-gray-500 mt-1">Voor horecagroepen met meerdere vestigingen</p>
+                <p className="text-2xl font-bold text-blue-600 mt-3">Vanaf € {(2 * PRICE_OUTLET + PRICE_MASTER)}<span className="text-sm font-normal text-gray-500">/maand</span></p>
+              </button>
+            </div>
+
+            {planType === "multi" && (
+              <div className="mt-4">
+                <PricingCalc outlets={outlets} onChange={handleOutletChange} />
+              </div>
+            )}
+
+            <button
+              onClick={() => planType && setStep(2)}
+              disabled={!planType}
+              className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Volgende
+            </button>
           </div>
         )}
+
+        {/* STEP 2: Location details */}
         {step === 2 && (
           <div className="space-y-6">
-            <p className="text-gray-600">Stap 2: Bedrijfsgegevens</p>
-            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Bedrijfsnaam</label><input type="text" value={company.name} onChange={(e) => setCompany({ ...company, name: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Naam" /></div>
-            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Email</label><input type="email" value={company.email} onChange={(e) => setCompany({ ...company, email: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Email" /></div>
-            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Telefoon (optioneel)</label><input type="tel" value={company.phone} onChange={(e) => setCompany({ ...company, phone: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Telefoon" /></div>
-            <div className="flex gap-3"><button onClick={() => setStep(1)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Terug</button><button onClick={() => setStep(3)} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200">Volgende</button></div>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">{planType === "single" ? "Je locatie" : `Je ${locations.length} locaties`}</h2>
+              <p className="text-gray-500 mt-1">Geef elke vestiging een naam{planType === "multi" ? " zodat je ze later makkelijk herkent" : ""}</p>
+            </div>
+
+            <div className="space-y-4">
+              {locations.map((loc, i) => (
+                <div key={i} className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  {locations.length > 1 && <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Locatie {i + 1}</p>}
+                  <input
+                    type="text"
+                    placeholder={locations.length > 1 ? `Naam locatie ${i + 1} (bijv. Hoofdvestiging)` : "Naam (bijv. Restaurant De Brug)"}
+                    value={loc.name}
+                    onChange={e => updateLocation(i, "name", e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Adres (optioneel)"
+                    value={loc.address}
+                    onChange={e => updateLocation(i, "address", e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setStep(1)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all">Terug</button>
+              <button onClick={() => canProceedStep2 && setStep(3)} disabled={!canProceedStep2} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed">Volgende</button>
+            </div>
           </div>
         )}
+
+        {/* STEP 3: Company details */}
         {step === 3 && (
           <div className="space-y-6">
-            <p className="text-gray-600">Stap 3: Aanmeldgegevens</p>
-            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Email</label><input type="email" value={accountUser.email} onChange={(e) => setAccountUser({ ...accountUser, email: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Email" /></div>
-            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Wachtwoord</label><input type="password" value={accountUser.password} onChange={(e) => setAccountUser({ ...accountUser, password: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Wachtwoord" /></div>
-            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Wachtwoord herhalen</label><input type="password" value={accountUser.password2} onChange={(e) => setAccountUser({ ...accountUser, password2: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Wachtwoord herhalen" /></div>
-            <div className="flex gap-3"><button onClick={() => setStep(2)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Terug</button><button onClick={handleCreateAccount} disabled={loading} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"><Sparkles size={20} /> {loading ? "Bezig..." : "Account aanmaken"}</button></div>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Bedrijfsgegevens</h2>
+              <p className="text-gray-500 mt-1">Vul de gegevens van je bedrijf in</p>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Bedrijfsnaam</label>
+              <input type="text" value={company.name} onChange={e => setCompany({ ...company, name: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Naam van je bedrijf" />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Bedrijfsemail</label>
+              <input type="email" value={company.email} onChange={e => setCompany({ ...company, email: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="info@jedrijf.nl" />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setStep(2)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all">Terug</button>
+              <button onClick={() => company.name && company.email && setStep(4)} disabled={!company.name || !company.email} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed">Volgende</button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: Account credentials */}
+        {step === 4 && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Maak je account aan</h2>
+              <p className="text-gray-500 mt-1">Hiermee log je straks in</p>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+              <input type="email" value={accountUser.email} onChange={e => setAccountUser({ ...accountUser, email: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="je@email.nl" />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Wachtwoord</label>
+              <input type="password" value={accountUser.password} onChange={e => setAccountUser({ ...accountUser, password: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Minimaal 6 tekens" />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Wachtwoord herhalen</label>
+              <input type="password" value={accountUser.password2} onChange={e => setAccountUser({ ...accountUser, password2: e.target.value })} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Herhaal je wachtwoord" />
+            </div>
+
+            {/* Summary */}
+            <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+              <p className="font-bold text-gray-900">Samenvatting</p>
+              <div className="flex justify-between text-gray-600"><span>Bedrijf</span><span className="font-semibold text-gray-900">{company.name}</span></div>
+              <div className="flex justify-between text-gray-600"><span>Locaties</span><span className="font-semibold text-gray-900">{locations.map(l => l.name).join(", ")}</span></div>
+              <div className="flex justify-between text-gray-600"><span>Plan</span><span className="font-semibold text-gray-900">{totalOutlets} outlet{totalOutlets > 1 ? "s" : ""}</span></div>
+              <div className="border-t border-gray-200 pt-2 flex justify-between"><span className="font-bold text-gray-900">Totaal per maand</span><span className="font-bold text-blue-600">€ {price.total.toFixed(2)}</span></div>
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setStep(3)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all">Terug</button>
+              <button onClick={handleCreateAccount} disabled={loading} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                <Sparkles size={20} /> {loading ? "Bezig..." : "Account aanmaken"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 5: Success */}
+        {step === 5 && (
+          <div className="text-center py-8 space-y-4">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle size={32} className="text-green-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">Account aangemaakt!</h2>
+            <p className="text-gray-500">Je account is klaar. Je kunt nu inloggen met je gekozen email en wachtwoord.</p>
+            <div className="bg-blue-50 rounded-xl p-4 text-left space-y-2 text-sm max-w-sm mx-auto">
+              <div className="flex justify-between"><span className="text-gray-600">Bedrijf</span><span className="font-semibold text-gray-900">{company.name}</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Locatie{locations.length > 1 ? "s" : ""}</span><span className="font-semibold text-gray-900">{locations.length}</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Email</span><span className="font-semibold text-gray-900">{accountUser.email}</span></div>
+            </div>
+            <button onClick={onDone} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 transition-all">Naar inloggen</button>
           </div>
         )}
       </div>
@@ -1433,10 +1614,63 @@ function MasterLogboek({ account, setAccount }) {
 }
 
 // ─── ABONNEMENT TAB ───────────────────────────────────────────────────────────
-function AbonnementTab({ account }) {
+function AbonnementTab({ account, setAccount }) {
+  const [upgradeMode, setUpgradeMode] = useState(false);
+  const [newOutlets, setNewOutlets] = useState(account.plan_outlets || 1);
+  const [newLocName, setNewLocName] = useState("");
+  const [newLocAddress, setNewLocAddress] = useState("");
+  const [toast, setToast] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const currentPrice = calcPrice(account.plan_outlets || 1);
+  const newPrice = calcPrice(newOutlets);
+  const branches = account.branches || [];
+
+  const handleUpgrade = async () => {
+    if (newOutlets === account.plan_outlets) {
+      setUpgradeMode(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      await supabaseData.updateAccount(account.id, { plan_outlets: newOutlets });
+      setAccount({ ...account, plan_outlets: newOutlets });
+      setUpgradeMode(false);
+      setToast({ type: "success", message: `Plan bijgewerkt naar ${newOutlets} outlet${newOutlets > 1 ? "s" : ""}!` });
+    } catch (err) {
+      setToast({ type: "error", message: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddLocation = async () => {
+    if (!newLocName.trim()) return;
+    setLoading(true);
+    try {
+      const branch = await supabaseData.createBranch({ account_id: account.id, name: newLocName.trim(), address: newLocAddress.trim() || null });
+      const updatedBranches = [...branches, branch];
+      const newOutletCount = Math.max(account.plan_outlets, updatedBranches.length);
+      if (newOutletCount > account.plan_outlets) {
+        await supabaseData.updateAccount(account.id, { plan_outlets: newOutletCount });
+      }
+      setAccount({ ...account, branches: updatedBranches, plan_outlets: newOutletCount });
+      setNewLocName("");
+      setNewLocAddress("");
+      setToast({ type: "success", message: "Locatie toegevoegd en plan bijgewerkt!" });
+    } catch (err) {
+      setToast({ type: "error", message: err.message });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="animate-fade-in space-y-6">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><CreditCard size={28} /> Abonnement</h2>
+
+      {/* Current plan */}
       <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-gray-700">Status</p>
@@ -1447,15 +1681,40 @@ function AbonnementTab({ account }) {
           <p className="font-bold text-gray-900">{account.plan_outlets}</p>
         </div>
         <div className="flex items-center justify-between">
+          <p className="text-gray-700">Actieve locaties</p>
+          <p className="font-bold text-gray-900">{branches.length}</p>
+        </div>
+        <div className="flex items-center justify-between">
           <p className="text-gray-700">Maandelijks bedrag</p>
-          <p className="text-xl font-bold text-blue-900">{fmt(calcPrice(account.plan_outlets).total)}</p>
+          <p className="text-xl font-bold text-blue-900">{fmt(currentPrice.total)}</p>
         </div>
         <div className="border-t border-blue-200 pt-4 flex items-center justify-between">
           <p className="text-gray-700">Volgende facturering</p>
           <p className="font-semibold text-gray-900">{account.plan_next_billing}</p>
         </div>
       </div>
-      <p className="text-xs text-gray-500">Het abonnement kan alleen gewijzigd worden via de administrateur van uw bedrijf.</p>
+
+      {/* Upgrade section */}
+      {!upgradeMode ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+          <h3 className="font-bold text-gray-900 flex items-center gap-2"><TrendingUp size={20} /> Uitbreiden</h3>
+          <p className="text-sm text-gray-600">Voeg een nieuwe locatie toe aan je account. Je plan wordt automatisch bijgewerkt.</p>
+          <div className="space-y-3">
+            <input type="text" placeholder="Naam nieuwe locatie" value={newLocName} onChange={e => setNewLocName(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+            <input type="text" placeholder="Adres (optioneel)" value={newLocAddress} onChange={e => setNewLocAddress(e.target.value)} className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+            {newLocName.trim() && (
+              <div className="bg-blue-50 rounded-lg p-3 text-sm">
+                <p className="text-gray-600">Nieuw maandbedrag: <span className="font-bold text-blue-700">{fmt(calcPrice(Math.max(account.plan_outlets, branches.length + 1)).total)}</span></p>
+              </div>
+            )}
+            <button onClick={handleAddLocation} disabled={!newLocName.trim() || loading} className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              <PlusCircle size={18} /> {loading ? "Bezig..." : "Locatie toevoegen & plan upgraden"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <p className="text-xs text-gray-500">Neem contact op met support@reggy.io voor het downgraden of opzeggen van je abonnement.</p>
     </div>
   );
 }
@@ -1490,7 +1749,7 @@ function MasterApp({ account, user, onLogout, setAccount }) {
         {masterScreen === "logboek" && <MasterLogboek account={account} setAccount={setAccount} />}
         {masterScreen === "beheer" && <MasterBeheer account={account} setAccount={setAccount} />}
         {masterScreen === "locaties" && <MasterLocaties account={account} setAccount={setAccount} />}
-        {masterScreen === "abonnement" && <AbonnementTab account={account} />}
+        {masterScreen === "abonnement" && <AbonnementTab account={account} setAccount={setAccount} />}
       </div>
     </div>
   );
