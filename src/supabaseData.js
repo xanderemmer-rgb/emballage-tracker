@@ -243,6 +243,26 @@ export async function deleteBranch(id) {
   if (error) throw error;
 }
 
+// ─── AUDIT LOG ──────────────────────────────────────────────────────────────
+
+export async function logAudit({ account_id, user_id, user_email, action, entity_type, entity_id, details }) {
+  const { error } = await supabase
+    .from("audit_log")
+    .insert({ account_id, user_id, user_email, action, entity_type, entity_id: entity_id?.toString(), details });
+  if (error) console.error("[Audit] Failed to log:", error.message);
+}
+
+export async function fetchAuditLog(accountId, { limit = 50, offset = 0 } = {}) {
+  const { data, error } = await supabase
+    .from("audit_log")
+    .select("*")
+    .eq("account_id", accountId)
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+  if (error) throw error;
+  return data;
+}
+
 // ─── SEED DEFAULT DATA ──────────────────────────────────────────────────────
 
 const DEFAULT_EMBALLAGE = [

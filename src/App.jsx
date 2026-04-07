@@ -4,7 +4,7 @@ import {
   Truck, Download, ScanLine, ArrowDownCircle, ArrowUpCircle, Plus, PlusCircle, Pencil,
   Trash2, Key, TrendingUp, CheckCircle, Check, X,
   Sparkles, Inbox, AlertCircle, Search,
-  Calendar, LogOut, User, Users, Building2, Camera
+  Calendar, LogOut, User, Users, Building2, Camera, Clock, FileText
 } from "lucide-react";
 import { useAuth } from "./useAuth";
 import * as supabaseData from "./supabaseData";
@@ -1509,7 +1509,7 @@ function MasterDashboard({ account }) {
 }
 
 // ─── MASTER LOCATIES (BRANCH MANAGEMENT) ─────────────────────────────────────
-function MasterLocaties({ account, setAccount }) {
+function MasterLocaties({ account, setAccount, user }) {
   const [showForm, setShowForm] = useState(false);
   const [editBranch, setEditBranch] = useState(null);
   const [form, setForm] = useState({ name: "", address: "" });
@@ -1520,6 +1520,11 @@ function MasterLocaties({ account, setAccount }) {
     if (!form.name.trim()) return;
     try {
       const branch = await supabaseData.createBranch({ account_id: account.id, name: form.name.trim(), address: form.address.trim() || null });
+      supabaseData.logAudit({
+        account_id: account.id, user_id: user?.id, user_email: user?.display_name || user?.email,
+        action: "locatie_toegevoegd", entity_type: "branch", entity_id: branch.id,
+        details: { name: form.name.trim(), address: form.address.trim() || null }
+      });
       setAccount({ ...account, branches: [...(account.branches || []), branch] });
       setForm({ name: "", address: "" });
       setShowForm(false);
@@ -1533,6 +1538,11 @@ function MasterLocaties({ account, setAccount }) {
     if (!form.name.trim() || !editBranch) return;
     try {
       const updated = await supabaseData.updateBranch(editBranch.id, { name: form.name.trim(), address: form.address.trim() || null });
+      supabaseData.logAudit({
+        account_id: account.id, user_id: user?.id, user_email: user?.display_name || user?.email,
+        action: "locatie_bewerkt", entity_type: "branch", entity_id: editBranch.id,
+        details: { name: form.name.trim(), address: form.address.trim() || null, old_name: editBranch.name }
+      });
       setAccount({ ...account, branches: account.branches.map(b => b.id === editBranch.id ? updated : b) });
       setForm({ name: "", address: "" });
       setEditBranch(null);
@@ -1544,7 +1554,13 @@ function MasterLocaties({ account, setAccount }) {
 
   const handleDelete = async (id) => {
     try {
+      const deleted = account.branches.find(b => b.id === id);
       await supabaseData.deleteBranch(id);
+      supabaseData.logAudit({
+        account_id: account.id, user_id: user?.id, user_email: user?.display_name || user?.email,
+        action: "locatie_verwijderd", entity_type: "branch", entity_id: id,
+        details: { name: deleted?.name }
+      });
       setAccount({ ...account, branches: account.branches.filter(b => b.id !== id) });
       setDeleting(null);
       setToast({ type: "success", message: "Locatie verwijderd!" });
@@ -1630,7 +1646,7 @@ function MasterLocaties({ account, setAccount }) {
 }
 
 // ─── MASTER BEHEER (USER MANAGEMENT) ───────────────────────────────────────────
-function MasterBeheer({ account, setAccount }) {
+function MasterBeheer({ account, setAccount, user }) {
   const [showForm, setShowForm] = useState(false);
   const [newUser, setNewUser] = useState({ email: "", password: "", branch_id: "" });
   const [toast, setToast] = useState(null);
@@ -1677,6 +1693,13 @@ function MasterBeheer({ account, setAccount }) {
         role: "branch",
       }).eq("id", user.id);
 
+      // Audit log
+      supabaseData.logAudit({
+        account_id: account.id, user_id: user?.id, user_email: user?.display_name || user?.email,
+        action: "gebruiker_toegevoegd", entity_type: "profile", entity_id: user.id,
+        details: { email: newUser.email, role: "branch", branch_id: newUser.branch_id, branch_name: branches.find(b => b.id === newUser.branch_id)?.name }
+      });
+
       // Reload users from DB
       const { data: updatedProfiles } = await supabase.from("profiles").select("*").eq("account_id", account.id);
       setAccount({ ...account, users: updatedProfiles || [] });
@@ -1693,8 +1716,17 @@ function MasterBeheer({ account, setAccount }) {
   const handleDeleteUser = async (userId) => {
     if (userId === account.users.find(u => u.role === "master")?.id) return;
     try {
+      const deletedUser = account.users.find(u => u.id === userId);
       // We can't delete auth users from client side, so just remove the profile link
       await supabase.from("profiles").update({ account_id: null, branch_id: null }).eq("id", userId);
+
+      // Audit log
+      supabaseData.logAudit({
+        account_id: account.id, user_id: user?.id, user_email: user?.display_name || user?.email,
+        action: "gebruiker_verwijderd", entity_type: "profile", entity_id: userId,
+        details: { email: deletedUser?.display_name || deletedUser?.email, role: deletedUser?.role }
+      });
+
       setAccount({ ...account, users: account.users.filter(u => u.id !== userId) });
       setDeleting(null);
       setToast({ type: "success", message: "Gebruiker verwijderd!" });
@@ -1770,7 +1802,7 @@ function MasterBeheer({ account, setAccount }) {
 }
 
 // ─── MASTER LOGBOEK ───────────────────────────────────────────────────────────
-function MasterLogboek({ account, setAccount }) {
+function MasterLogboek({ account, setAccount, user }) {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -1793,7 +1825,13 @@ function MasterLogboek({ account, setAccount }) {
 
   const handleDeleteTransaction = async (id) => {
     try {
+      const deleted = account.transactions.find(t => t.id === id);
       await supabaseData.deleteTransaction(id);
+      supabaseData.logAudit({
+        account_id: account.id, user_id: user?.id, user_email: user?.display_name || user?.email,
+        action: "transactie_verwijderd", entity_type: "transaction", entity_id: id,
+        details: { type: deleted?.type, supplier: deleted?.supplier, emballage: deleted?.emballage, qty: deleted?.qty, branch: deleted?.branch }
+      });
       setAccount({ ...account, transactions: account.transactions.filter(t => t.id !== id) });
       setToast({ type: "success", message: "Transactie verwijderd!" });
     } catch (err) {
@@ -1885,7 +1923,7 @@ function MasterLogboek({ account, setAccount }) {
 }
 
 // ─── ABONNEMENT TAB ───────────────────────────────────────────────────────────
-function AbonnementTab({ account, setAccount }) {
+function AbonnementTab({ account, setAccount, user }) {
   const [upgradeMode, setUpgradeMode] = useState(false);
   const [newOutlets, setNewOutlets] = useState(account.plan_outlets || 1);
   const [newLocName, setNewLocName] = useState("");
@@ -1905,6 +1943,11 @@ function AbonnementTab({ account, setAccount }) {
     setLoading(true);
     try {
       await supabaseData.updateAccount(account.id, { plan_outlets: newOutlets });
+      supabaseData.logAudit({
+        account_id: account.id, user_id: user?.id, user_email: user?.display_name || user?.email,
+        action: "plan_gewijzigd", entity_type: "account", entity_id: account.id,
+        details: { old_outlets: account.plan_outlets, new_outlets: newOutlets }
+      });
       setAccount({ ...account, plan_outlets: newOutlets });
       setUpgradeMode(false);
       setToast({ type: "success", message: `Plan bijgewerkt naar ${newOutlets} outlet${newOutlets > 1 ? "s" : ""}!` });
@@ -1925,6 +1968,11 @@ function AbonnementTab({ account, setAccount }) {
       if (newOutletCount > account.plan_outlets) {
         await supabaseData.updateAccount(account.id, { plan_outlets: newOutletCount });
       }
+      supabaseData.logAudit({
+        account_id: account.id, user_id: user?.id, user_email: user?.display_name || user?.email,
+        action: "locatie_toegevoegd", entity_type: "branch", entity_id: branch.id,
+        details: { name: newLocName.trim(), address: newLocAddress.trim() || null, plan_upgraded: newOutletCount > account.plan_outlets }
+      });
       setAccount({ ...account, branches: updatedBranches, plan_outlets: newOutletCount });
       setNewLocName("");
       setNewLocAddress("");
@@ -1986,6 +2034,119 @@ function AbonnementTab({ account, setAccount }) {
       ) : null}
 
       <p className="text-xs text-gray-500">Neem contact op met support@reggy.io voor het downgraden of opzeggen van je abonnement.</p>
+    </div>
+  );
+}
+
+// ─── AUDIT TRAIL ─────────────────────────────────────────────────────────────
+
+const AUDIT_LABELS = {
+  gebruiker_toegevoegd: { label: "Gebruiker toegevoegd", color: "bg-green-100 text-green-700", icon: "➕" },
+  gebruiker_verwijderd: { label: "Gebruiker verwijderd", color: "bg-red-100 text-red-700", icon: "🗑" },
+  transactie_aangemaakt: { label: "Transactie aangemaakt", color: "bg-blue-100 text-blue-700", icon: "📦" },
+  transactie_verwijderd: { label: "Transactie verwijderd", color: "bg-red-100 text-red-700", icon: "🗑" },
+  transactie_bewerkt: { label: "Transactie bewerkt", color: "bg-yellow-100 text-yellow-700", icon: "✏️" },
+  locatie_toegevoegd: { label: "Locatie toegevoegd", color: "bg-green-100 text-green-700", icon: "🏢" },
+  locatie_bewerkt: { label: "Locatie bewerkt", color: "bg-yellow-100 text-yellow-700", icon: "✏️" },
+  locatie_verwijderd: { label: "Locatie verwijderd", color: "bg-red-100 text-red-700", icon: "🗑" },
+  plan_gewijzigd: { label: "Plan gewijzigd", color: "bg-purple-100 text-purple-700", icon: "💳" },
+};
+
+function AuditTrail({ account }) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("all");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await supabaseData.fetchAuditLog(account.id, { limit: 100 });
+        setLogs(data || []);
+      } catch (err) {
+        console.error("[Audit] Failed to fetch:", err);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [account.id]);
+
+  const entityTypes = [...new Set(logs.map(l => l.entity_type))];
+
+  const filtered = filter === "all" ? logs : logs.filter(l => l.entity_type === filter);
+
+  const formatTime = (ts) => {
+    const d = new Date(ts);
+    const now = new Date();
+    const diff = now - d;
+    if (diff < 60000) return "Zojuist";
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} min geleden`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)} uur geleden`;
+    if (diff < 172800000) return "Gisteren " + d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleDateString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  };
+
+  const describeAction = (log) => {
+    const d = log.details || {};
+    switch (log.action) {
+      case "gebruiker_toegevoegd": return `${d.email} als ${d.role} voor ${d.branch_name || "—"}`;
+      case "gebruiker_verwijderd": return `${d.email || "Gebruiker"} (${d.role || "—"})`;
+      case "transactie_aangemaakt": return `${d.type === "IN" ? "Inkomend" : "Uitgaand"}: ${d.qty}x ${d.emballage} — ${d.supplier}${d.branch ? ` (${d.branch})` : ""}`;
+      case "transactie_verwijderd": return `${d.type === "IN" ? "Inkomend" : "Uitgaand"}: ${d.qty}x ${d.emballage} — ${d.supplier}`;
+      case "transactie_bewerkt": return `${d.type === "IN" ? "Inkomend" : "Uitgaand"}: ${d.qty}x ${d.emballage} — ${d.supplier}`;
+      case "locatie_toegevoegd": return `"${d.name}"${d.address ? ` — ${d.address}` : ""}`;
+      case "locatie_bewerkt": return `"${d.old_name}" → "${d.name}"`;
+      case "locatie_verwijderd": return `"${d.name}"`;
+      case "plan_gewijzigd": return `${d.old_outlets} → ${d.new_outlets} outlets`;
+      default: return JSON.stringify(d);
+    }
+  };
+
+  if (loading) return <div className="text-center py-12 text-gray-400">Laden...</div>;
+
+  return (
+    <div className="animate-fade-in space-y-6">
+      <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><Clock size={28} /> Activiteitenlog</h2>
+      <p className="text-sm text-gray-500">Overzicht van alle wijzigingen: wie, wat en wanneer.</p>
+
+      {/* Filters */}
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={() => setFilter("all")} className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${filter === "all" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}>Alles</button>
+        {entityTypes.map(t => (
+          <button key={t} onClick={() => setFilter(t)} className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all capitalize ${filter === t ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700 hover:bg-gray-300"}`}>
+            {t === "transaction" ? "Transacties" : t === "profile" ? "Gebruikers" : t === "branch" ? "Locaties" : t === "account" ? "Account" : t}
+          </button>
+        ))}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="bg-gray-50 rounded-xl p-8 text-center">
+          <FileText size={40} className="mx-auto text-gray-300 mb-3" />
+          <p className="text-gray-500 font-semibold">Nog geen activiteiten</p>
+          <p className="text-sm text-gray-400">Wijzigingen worden hier automatisch bijgehouden.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(log => {
+            const meta = AUDIT_LABELS[log.action] || { label: log.action, color: "bg-gray-100 text-gray-700", icon: "📝" };
+            return (
+              <div key={log.id} className="bg-white rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200 border-l-4 border-blue-400">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${meta.color}`}>{meta.icon} {meta.label}</span>
+                      <span className="text-xs text-gray-400">{formatTime(log.created_at)}</span>
+                    </div>
+                    <p className="text-sm text-gray-800 truncate">{describeAction(log)}</p>
+                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                      <User size={12} /> {log.user_email || "Systeem"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -2057,6 +2218,7 @@ function MasterApp({ account, user, onLogout, setAccount }) {
     { id: "beheer", label: "Beheer", icon: <Users size={16} /> },
     { id: "locaties", label: "Locaties", icon: <Building2 size={16} /> },
     { id: "abonnement", label: "Abonnement", icon: <CreditCard size={16} /> },
+    { id: "activiteit", label: "Activiteit", icon: <Clock size={16} /> },
   ];
 
   return (
@@ -2088,10 +2250,11 @@ function MasterApp({ account, user, onLogout, setAccount }) {
           <InactivityNudge transactions={account.transactions} onAddTransaction={() => setMasterScreen("logboek")} />
           <MasterDashboard account={account} />
         </>}
-        {masterScreen === "logboek" && <MasterLogboek account={account} setAccount={setAccount} />}
-        {masterScreen === "beheer" && <MasterBeheer account={account} setAccount={setAccount} />}
-        {masterScreen === "locaties" && <MasterLocaties account={account} setAccount={setAccount} />}
-        {masterScreen === "abonnement" && <AbonnementTab account={account} setAccount={setAccount} />}
+        {masterScreen === "logboek" && <MasterLogboek account={account} setAccount={setAccount} user={user} />}
+        {masterScreen === "beheer" && <MasterBeheer account={account} setAccount={setAccount} user={user} />}
+        {masterScreen === "locaties" && <MasterLocaties account={account} setAccount={setAccount} user={user} />}
+        {masterScreen === "abonnement" && <AbonnementTab account={account} setAccount={setAccount} user={user} />}
+        {masterScreen === "activiteit" && <AuditTrail account={account} />}
       </div>
     </div>
   );
@@ -2168,6 +2331,14 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
         });
         saved.push(row);
       }
+      // Audit log
+      for (const s of saved) {
+        supabaseData.logAudit({
+          account_id: account.id, user_id: user.id, user_email: user.display_name || user.email,
+          action: "transactie_aangemaakt", entity_type: "transaction", entity_id: s.id,
+          details: { type: s.type, supplier: s.supplier, emballage: s.emballage, qty: s.qty, branch: s.branch }
+        });
+      }
       setAccount({ ...account, transactions: [...saved, ...account.transactions] });
       setScanModal(false);
       setToast({ type: "success", message: items.length > 1 ? `${items.length} transacties geregistreerd!` : "Transactie geregistreerd!" });
@@ -2178,7 +2349,13 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
 
   const handleDeleteTransaction = async (id) => {
     try {
+      const deleted = account.transactions.find(t => t.id === id);
       await supabaseData.deleteTransaction(id);
+      supabaseData.logAudit({
+        account_id: account.id, user_id: user.id, user_email: user.display_name || user.email,
+        action: "transactie_verwijderd", entity_type: "transaction", entity_id: id,
+        details: { type: deleted?.type, supplier: deleted?.supplier, emballage: deleted?.emballage, qty: deleted?.qty }
+      });
       setAccount({ ...account, transactions: account.transactions.filter(t => t.id !== id) });
       setDeleteConfirm(null);
       setToast({ type: "success", message: "Transactie verwijderd!" });
@@ -2195,6 +2372,11 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
     try {
       const { id, ...updates } = updatedTrans;
       await supabase.from("transactions").update(updates).eq("id", id);
+      supabaseData.logAudit({
+        account_id: account.id, user_id: user.id, user_email: user.display_name || user.email,
+        action: "transactie_bewerkt", entity_type: "transaction", entity_id: id,
+        details: { type: updates.type, supplier: updates.supplier, emballage: updates.emballage, qty: updates.qty }
+      });
       const updatedTransactions = account.transactions.map(t => t.id === updatedTrans.id ? updatedTrans : t);
       setAccount({ ...account, transactions: updatedTransactions });
       setEditingTransaction(null);
