@@ -21,6 +21,26 @@
       "destination": "/blog/index.html"
     },
     {
+      "source": "/blog/en",
+      "has": [
+        {
+          "type": "host",
+          "value": "reggy.io"
+        }
+      ],
+      "destination": "/blog/en/index.html"
+    },
+    {
+      "source": "/blog/en/:slug",
+      "has": [
+        {
+          "type": "host",
+          "value": "reggy.io"
+        }
+      ],
+      "destination": "/blog/en/:slug.html"
+    },
+    {
       "source": "/blog/:slug",
       "has": [
         {
