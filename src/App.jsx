@@ -313,6 +313,7 @@ function RegisterFlow({ onDone }) {
   const [accountUser, setAccountUser] = useState({ email: "", password: "", password2: "" });
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState(null);
 
   const totalOutlets = planType === "single" ? 1 : outlets;
   const price = calcPrice(totalOutlets);
@@ -347,15 +348,21 @@ function RegisterFlow({ onDone }) {
     }
 
     setLoading(true);
+    setFormError(null);
     try {
       // 1. Create Supabase Auth user
+      console.log("[Register] Starting signup for", accountUser.email);
       const { data: { user }, error: signupError } = await supabase.auth.signUp({
         email: accountUser.email,
         password: accountUser.password,
         options: { data: { display_name: company.name } }
       });
-      if (signupError) throw signupError;
-      if (!user) throw new Error("User creation failed");
+      if (signupError) {
+        console.error("[Register] Signup error:", signupError);
+        throw signupError;
+      }
+      if (!user) throw new Error("Gebruiker aanmaken mislukt — probeer het later opnieuw");
+      console.log("[Register] User created:", user.id);
 
       // 2. Create account
       const newAccount = await supabaseData.createAccount({
@@ -366,6 +373,7 @@ function RegisterFlow({ onDone }) {
         plan_start_date: new Date().toISOString().split("T")[0],
         plan_next_billing: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
       });
+      console.log("[Register] Account created:", newAccount.id);
 
       // 3. Create branches
       const branchPromises = locations.map(loc =>
@@ -376,6 +384,7 @@ function RegisterFlow({ onDone }) {
         })
       );
       const createdBranches = await Promise.all(branchPromises);
+      console.log("[Register] Branches created:", createdBranches.length);
 
       // 4. Update profile: set account_id and branch_id (for single outlet)
       const profileUpdate = { account_id: newAccount.id, role: "master" };
@@ -386,10 +395,18 @@ function RegisterFlow({ onDone }) {
 
       // 5. Seed defaults
       await supabaseData.seedAccountDefaults(newAccount.id);
+      console.log("[Register] Complete!");
 
       setStep(5); // success screen
     } catch (err) {
-      setToast({ type: "error", message: err.message || "Aanmaken mislukt" });
+      console.error("[Register] Error:", err);
+      const msg = err.message?.includes("rate")
+        ? "Te veel pogingen — wacht even en probeer opnieuw"
+        : err.message?.includes("already registered")
+        ? "Dit e-mailadres is al geregistreerd"
+        : err.message || "Aanmaken mislukt";
+      setFormError(msg);
+      setToast({ type: "error", message: msg });
     } finally {
       setLoading(false);
     }
@@ -543,6 +560,13 @@ function RegisterFlow({ onDone }) {
               <div className="flex justify-between text-gray-600"><span>Plan</span><span className="font-semibold text-gray-900">{totalOutlets} outlet{totalOutlets > 1 ? "s" : ""}</span></div>
               <div className="border-t border-gray-200 pt-2 flex justify-between"><span className="font-bold text-gray-900">Totaal per maand</span><span className="font-bold text-blue-600">€ {price.total.toFixed(2)}</span></div>
             </div>
+
+            {formError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-start gap-2">
+                <AlertCircle size={18} className="text-red-500 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-red-700">{formError}</p>
+              </div>
+            )}
 
             <div className="flex gap-3">
               <button onClick={() => setStep(3)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all">Terug</button>
