@@ -12,12 +12,13 @@ export async function fetchAllAccounts() {
 }
 
 export async function fetchAccountDetail(accountId) {
-  const [account, profiles, transactions, emballageTypes, suppliers] = await Promise.all([
+  const [account, profiles, transactions, emballageTypes, suppliers, branches] = await Promise.all([
     supabase.from("accounts").select("*").eq("id", accountId).single(),
     supabase.from("profiles").select("*").eq("account_id", accountId),
     supabase.from("transactions").select("*").eq("account_id", accountId).order("date", { ascending: false }),
     supabase.from("emballage_types").select("*").eq("account_id", accountId),
     supabase.from("suppliers").select("*").eq("account_id", accountId),
+    supabase.from("branches").select("*").eq("account_id", accountId).order("name"),
   ]);
   return {
     account: account.data,
@@ -25,6 +26,7 @@ export async function fetchAccountDetail(accountId) {
     transactions: transactions.data || [],
     emballageTypes: emballageTypes.data || [],
     suppliers: suppliers.data || [],
+    branches: branches.data || [],
   };
 }
 
@@ -192,6 +194,47 @@ export async function createTransaction(tx) {
 export async function deleteTransaction(id) {
   const { error } = await supabase
     .from("transactions")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ─── BRANCHES ───────────────────────────────────────────────────────────────
+
+export async function fetchBranches(accountId) {
+  const { data, error } = await supabase
+    .from("branches")
+    .select("*")
+    .eq("account_id", accountId)
+    .order("name");
+  if (error) throw error;
+  return data;
+}
+
+export async function createBranch(branch) {
+  const { data, error } = await supabase
+    .from("branches")
+    .insert(branch)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateBranch(id, updates) {
+  const { data, error } = await supabase
+    .from("branches")
+    .update(updates)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteBranch(id) {
+  const { error } = await supabase
+    .from("branches")
     .delete()
     .eq("id", id);
   if (error) throw error;

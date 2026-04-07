@@ -1107,10 +1107,10 @@ function AttViewer({ att, onClose }) {
 
 // ─── MASTER DASHBOARD ─────────────────────────────────────────────────────────
 function MasterDashboard({ account }) {
-  const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch))];
   const totalTrans = account.transactions.length;
   const inCount = account.transactions.filter(t => t.type === "IN").length;
   const outCount = account.transactions.filter(t => t.type === "OUT").length;
+  const branches = account.branches || [];
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -1129,16 +1129,157 @@ function MasterDashboard({ account }) {
           <p className="text-3xl font-bold text-red-900">{outCount}</p>
         </div>
       </div>
-      {branches.length === 0 ? (
-        <div className="bg-gray-50 rounded-xl p-8 text-center">
-          <Building2 size={32} className="mx-auto text-gray-400 mb-2" />
-          <p className="text-gray-600">Geen filialen ingesteld</p>
+
+      <div className="space-y-3">
+        <p className="font-semibold text-gray-700">Locaties ({branches.length})</p>
+        {branches.length === 0 ? (
+          <div className="bg-gray-50 rounded-xl p-8 text-center">
+            <Building2 size={32} className="mx-auto text-gray-400 mb-2" />
+            <p className="text-gray-600">Nog geen locaties aangemaakt. Ga naar het tabblad "Locaties" om je eerste vestiging toe te voegen.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {branches.map(b => {
+              const branchTrans = account.transactions.filter(t => t.branch_id === b.id);
+              const branchUsers = account.users.filter(u => u.branch_id === b.id);
+              return (
+                <div key={b.id} className="bg-white rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-bold text-gray-900 flex items-center gap-2"><Building2 size={16} className="text-blue-500" /> {b.name}</p>
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{branchUsers.length} gebruiker{branchUsers.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  {b.address && <p className="text-xs text-gray-500 mb-2">{b.address}</p>}
+                  <div className="flex gap-4 text-sm">
+                    <span className="text-green-600 font-semibold">{branchTrans.filter(t => t.type === "IN").length} in</span>
+                    <span className="text-red-600 font-semibold">{branchTrans.filter(t => t.type === "OUT").length} uit</span>
+                    <span className="text-gray-500">{branchTrans.length} totaal</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── MASTER LOCATIES (BRANCH MANAGEMENT) ─────────────────────────────────────
+function MasterLocaties({ account, setAccount }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editBranch, setEditBranch] = useState(null);
+  const [form, setForm] = useState({ name: "", address: "" });
+  const [toast, setToast] = useState(null);
+  const [deleting, setDeleting] = useState(null);
+
+  const handleAdd = async () => {
+    if (!form.name.trim()) return;
+    try {
+      const branch = await supabaseData.createBranch({ account_id: account.id, name: form.name.trim(), address: form.address.trim() || null });
+      setAccount({ ...account, branches: [...(account.branches || []), branch] });
+      setForm({ name: "", address: "" });
+      setShowForm(false);
+      setToast({ type: "success", message: "Locatie toegevoegd!" });
+    } catch (err) {
+      setToast({ type: "error", message: "Fout: " + err.message });
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!form.name.trim() || !editBranch) return;
+    try {
+      const updated = await supabaseData.updateBranch(editBranch.id, { name: form.name.trim(), address: form.address.trim() || null });
+      setAccount({ ...account, branches: account.branches.map(b => b.id === editBranch.id ? updated : b) });
+      setForm({ name: "", address: "" });
+      setEditBranch(null);
+      setToast({ type: "success", message: "Locatie bijgewerkt!" });
+    } catch (err) {
+      setToast({ type: "error", message: "Fout: " + err.message });
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await supabaseData.deleteBranch(id);
+      setAccount({ ...account, branches: account.branches.filter(b => b.id !== id) });
+      setDeleting(null);
+      setToast({ type: "success", message: "Locatie verwijderd!" });
+    } catch (err) {
+      setToast({ type: "error", message: "Fout: " + err.message });
+    }
+  };
+
+  const startEdit = (branch) => {
+    setEditBranch(branch);
+    setForm({ name: branch.name, address: branch.address || "" });
+    setShowForm(true);
+  };
+
+  const cancelForm = () => {
+    setShowForm(false);
+    setEditBranch(null);
+    setForm({ name: "", address: "" });
+  };
+
+  const branches = account.branches || [];
+
+  return (
+    <div className="animate-fade-in space-y-6">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><Building2 size={28} /> Locaties</h2>
+
+      {branches.length === 0 && !showForm && (
+        <div className="bg-blue-50 rounded-xl p-8 text-center">
+          <Building2 size={40} className="mx-auto text-blue-400 mb-3" />
+          <p className="text-gray-700 font-semibold mb-1">Nog geen locaties</p>
+          <p className="text-sm text-gray-500 mb-4">Voeg je eerste vestiging toe om filiaalgebruikers te kunnen koppelen.</p>
         </div>
-      ) : (
-        <div className="space-y-3">
-          <p className="font-semibold text-gray-700">Filialen ({branches.length})</p>
-          {branches.map((b, i) => <div key={i} className="bg-white rounded-lg p-3 flex items-center justify-between shadow-sm"><p className="font-semibold text-gray-900">{b}</p></div>)}
+      )}
+
+      <div className="space-y-3">
+        {branches.map(b => {
+          const userCount = account.users.filter(u => u.branch_id === b.id).length;
+          const txCount = account.transactions.filter(t => t.branch_id === b.id).length;
+          return (
+            <div key={b.id} className="bg-white rounded-lg p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
+              <div className="flex-1">
+                <p className="font-bold text-gray-900 flex items-center gap-2"><Building2 size={16} className="text-blue-500" /> {b.name}</p>
+                {b.address && <p className="text-xs text-gray-500 mt-0.5">{b.address}</p>}
+                <div className="flex gap-3 mt-1 text-xs text-gray-500">
+                  <span>{userCount} gebruiker{userCount !== 1 ? 's' : ''}</span>
+                  <span>{txCount} transactie{txCount !== 1 ? 's' : ''}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => startEdit(b)} className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-all"><Pencil size={16} /></button>
+                {deleting === b.id ? (
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => handleDelete(b.id)} className="px-2 py-1 bg-red-600 text-white rounded text-xs font-bold">Ja</button>
+                    <button onClick={() => setDeleting(null)} className="px-2 py-1 bg-gray-300 text-gray-700 rounded text-xs font-bold">Nee</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setDeleting(b.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all"><Trash2 size={16} /></button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {showForm && (
+        <div className="bg-blue-50 rounded-xl p-4 space-y-3">
+          <p className="font-semibold text-gray-900">{editBranch ? "Locatie bewerken" : "Nieuwe locatie"}</p>
+          <input type="text" placeholder="Naam (bijv. Hoofdvestiging)" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          <input type="text" placeholder="Adres (optioneel)" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          <div className="flex gap-2">
+            <button onClick={cancelForm} className="flex-1 bg-gray-300 text-gray-800 py-2 rounded-lg font-bold hover:bg-gray-400 transition-all">Annuleren</button>
+            <button onClick={editBranch ? handleUpdate : handleAdd} className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 transition-all flex items-center justify-center gap-2">{editBranch ? <><Check size={18} /> Opslaan</> : <><Plus size={18} /> Toevoegen</>}</button>
+          </div>
         </div>
+      )}
+
+      {!showForm && (
+        <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><PlusCircle size={20} /> Locatie toevoegen</button>
       )}
     </div>
   );
@@ -1165,7 +1306,7 @@ function MasterBeheer({ account, setAccount }) {
     setToast({ type: "success", message: "Gebruiker verwijderd!" });
   };
 
-  const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch))];
+  const branches = account.branches || [];
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -1175,10 +1316,10 @@ function MasterBeheer({ account, setAccount }) {
         {account.users.map(u => (
           <div key={u.id} className="bg-white rounded-lg p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold">{u.name[0]}</div>
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold">{(u.display_name || u.email || "?")[0].toUpperCase()}</div>
               <div>
-                <p className="font-semibold text-gray-900">{u.name}</p>
-                <p className="text-xs text-gray-600">{u.role === "master" ? "Master Admin" : u.branch}</p>
+                <p className="font-semibold text-gray-900">{u.display_name || u.email}</p>
+                <p className="text-xs text-gray-600">{u.role === "master" ? "Master Admin" : (branches.find(b => b.id === u.branch_id)?.name || u.branch || "Geen locatie")}</p>
               </div>
             </div>
             {u.role !== "master" && <button onClick={() => handleDeleteUser(u.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all duration-200"><Trash2 size={18} /></button>}
@@ -1190,8 +1331,8 @@ function MasterBeheer({ account, setAccount }) {
           <input type="text" placeholder="Naam" value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
           <input type="password" placeholder="Wachtwoord" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
           <select value={newUser.branch || ""} onChange={(e) => setNewUser({ ...newUser, branch: e.target.value || null })} className="w-full px-4 py-2 border border-gray-300 rounded-lg">
-            <option value="">Kies filiaal...</option>
-            {branches.map((b, i) => <option key={i} value={b}>{b}</option>)}
+            <option value="">Kies locatie...</option>
+            {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
           <div className="flex gap-2">
             <button onClick={() => setShowForm(false)} className="flex-1 bg-gray-300 text-gray-800 py-2 rounded-lg font-bold hover:bg-gray-400 transition-all duration-200">Annuleren</button>
@@ -1341,12 +1482,14 @@ function MasterApp({ account, user, onLogout, setAccount }) {
           <button onClick={() => setMasterScreen("dashboard")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "dashboard" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Dashboard</button>
           <button onClick={() => setMasterScreen("logboek")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "logboek" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Logboek</button>
           <button onClick={() => setMasterScreen("beheer")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "beheer" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Beheer</button>
+          <button onClick={() => setMasterScreen("locaties")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "locaties" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Locaties</button>
           <button onClick={() => setMasterScreen("abonnement")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "abonnement" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Abonnement</button>
         </div>
 
         {masterScreen === "dashboard" && <MasterDashboard account={account} />}
         {masterScreen === "logboek" && <MasterLogboek account={account} setAccount={setAccount} />}
         {masterScreen === "beheer" && <MasterBeheer account={account} setAccount={setAccount} />}
+        {masterScreen === "locaties" && <MasterLocaties account={account} setAccount={setAccount} />}
         {masterScreen === "abonnement" && <AbonnementTab account={account} />}
       </div>
     </div>
@@ -1402,7 +1545,9 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  const branchTransactions = account.transactions.filter(t => t.branch === user.branch);
+  const branchTransactions = user.branch_id
+    ? account.transactions.filter(t => t.branch_id === user.branch_id)
+    : account.transactions;
 
   const handleImportTransaction = (transOrArray) => {
     const items = Array.isArray(transOrArray) ? transOrArray : [transOrArray];
@@ -1936,6 +2081,7 @@ function App() {
         transactions: detail.transactions || [],
         emballageTypes: detail.emballageTypes || [],
         suppliers: detail.suppliers || [],
+        branches: detail.branches || [],
       };
       setCurrentAccount(account);
     } catch (err) {
@@ -1994,7 +2140,7 @@ function App() {
       return <MasterApp account={currentAccount} user={{ id: session.user.id, email: session.user.email, role: profile.role }} onLogout={handleLogout} setAccount={setCurrentAccount} />;
     }
 
-    return <BranchApp user={{ id: session.user.id, email: session.user.email, role: profile.role }} account={currentAccount} setAccount={setCurrentAccount} onLogout={handleLogout} language={language} setLanguage={setLanguage} />;
+    return <BranchApp user={{ id: session.user.id, email: session.user.email, role: profile.role, branch_id: profile.branch_id, branch: profile.branch }} account={currentAccount} setAccount={setCurrentAccount} onLogout={handleLogout} language={language} setLanguage={setLanguage} />;
   }
 
   return <div className="min-h-screen flex items-center justify-center"><p>Laden...</p></div>;
