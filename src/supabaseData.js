@@ -41,13 +41,15 @@ export async function fetchAccount(accountId) {
 }
 
 export async function createAccount(account) {
-  const { data, error } = await supabase
+  // Generate ID client-side to avoid needing .select() after insert
+  // (SELECT RLS policies block reading back the row before profile is linked)
+  const id = account.id || crypto.randomUUID();
+  const row = { ...account, id };
+  const { error } = await supabase
     .from("accounts")
-    .insert(account)
-    .select()
-    .single();
+    .insert(row);
   if (error) throw error;
-  return data;
+  return { ...row, created_at: new Date().toISOString() };
 }
 
 export async function updateAccount(id, updates) {
@@ -212,13 +214,14 @@ export async function fetchBranches(accountId) {
 }
 
 export async function createBranch(branch) {
-  const { data, error } = await supabase
+  // Generate ID client-side to avoid SELECT RLS issues during registration
+  const id = branch.id || crypto.randomUUID();
+  const row = { ...branch, id };
+  const { error } = await supabase
     .from("branches")
-    .insert(branch)
-    .select()
-    .single();
+    .insert(row);
   if (error) throw error;
-  return data;
+  return { ...row, created_at: new Date().toISOString() };
 }
 
 export async function updateBranch(id, updates) {
