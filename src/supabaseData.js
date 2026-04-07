@@ -243,6 +243,37 @@ export async function deleteBranch(id) {
   if (error) throw error;
 }
 
+// ─── BRANCH LOGO ────────────────────────────────────────────────────────────
+
+export async function uploadBranchLogo(branchId, file) {
+  const ext = file.name.split(".").pop();
+  const path = `${branchId}/logo.${ext}`;
+
+  // Remove old logo first (ignore errors if none exists)
+  const { data: list } = await supabase.storage.from("branch-logos").list(branchId);
+  if (list?.length) {
+    await supabase.storage.from("branch-logos").remove(list.map(f => `${branchId}/${f.name}`));
+  }
+
+  const { error } = await supabase.storage.from("branch-logos").upload(path, file, { upsert: true });
+  if (error) throw error;
+
+  const { data: urlData } = supabase.storage.from("branch-logos").getPublicUrl(path);
+  const logo_url = urlData.publicUrl + "?t=" + Date.now(); // cache-bust
+
+  // Save URL to branches table
+  await updateBranch(branchId, { logo_url });
+  return logo_url;
+}
+
+export async function deleteBranchLogo(branchId) {
+  const { data: list } = await supabase.storage.from("branch-logos").list(branchId);
+  if (list?.length) {
+    await supabase.storage.from("branch-logos").remove(list.map(f => `${branchId}/${f.name}`));
+  }
+  await updateBranch(branchId, { logo_url: null });
+}
+
 // ─── AUDIT LOG ──────────────────────────────────────────────────────────────
 
 export async function logAudit({ account_id, user_id, user_email, action, entity_type, entity_id, details }) {

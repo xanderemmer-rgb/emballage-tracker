@@ -3,8 +3,8 @@ import {
   Settings, BarChart3, ClipboardList, CreditCard, Package,
   Truck, Download, ScanLine, ArrowDownCircle, ArrowUpCircle, Plus, PlusCircle, Pencil,
   Trash2, Key, TrendingUp, CheckCircle, Check, X,
-  Sparkles, Inbox, AlertCircle, Search,
-  Calendar, LogOut, User, Users, Building2, Camera, Clock, FileText
+  Sparkles, Inbox, AlertCircle, Search, Image,
+  Calendar, LogOut, User, Users, Building2, Camera, Clock, FileText, Upload
 } from "lucide-react";
 import { useAuth } from "./useAuth";
 import * as supabaseData from "./supabaseData";
@@ -1515,6 +1515,44 @@ function MasterLocaties({ account, setAccount, user }) {
   const [form, setForm] = useState({ name: "", address: "" });
   const [toast, setToast] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [uploading, setUploading] = useState(null); // branchId being uploaded
+  const logoInputRef = useRef(null);
+
+  const handleLogoUpload = async (branchId, file) => {
+    if (!file || !file.type.startsWith("image/")) {
+      setToast({ type: "error", message: "Selecteer een afbeelding (PNG, JPG, etc.)" });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setToast({ type: "error", message: "Afbeelding mag max. 2MB zijn" });
+      return;
+    }
+    setUploading(branchId);
+    try {
+      const logo_url = await supabaseData.uploadBranchLogo(branchId, file);
+      setAccount({ ...account, branches: account.branches.map(b => b.id === branchId ? { ...b, logo_url } : b) });
+      supabaseData.logAudit({
+        account_id: account.id, user_id: user?.id, user_email: user?.display_name || user?.email,
+        action: "locatie_bewerkt", entity_type: "branch", entity_id: branchId,
+        details: { change: "logo_uploaded" }
+      });
+      setToast({ type: "success", message: "Logo geüpload!" });
+    } catch (err) {
+      setToast({ type: "error", message: "Upload mislukt: " + err.message });
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const handleLogoDelete = async (branchId) => {
+    try {
+      await supabaseData.deleteBranchLogo(branchId);
+      setAccount({ ...account, branches: account.branches.map(b => b.id === branchId ? { ...b, logo_url: null } : b) });
+      setToast({ type: "success", message: "Logo verwijderd" });
+    } catch (err) {
+      setToast({ type: "error", message: "Fout: " + err.message });
+    }
+  };
 
   const handleAdd = async () => {
     if (!form.name.trim()) return;
@@ -1601,8 +1639,31 @@ function MasterLocaties({ account, setAccount, user }) {
           const userCount = account.users.filter(u => u.branch_id === b.id).length;
           const txCount = account.transactions.filter(t => t.branch_id === b.id).length;
           return (
-            <div key={b.id} className="bg-white rounded-lg p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
-              <div className="flex-1">
+            <div key={b.id} className="bg-white rounded-lg p-4 flex items-center gap-4 shadow-sm hover:shadow-md transition-all duration-200">
+              {/* Logo */}
+              <div className="relative group flex-shrink-0">
+                {b.logo_url ? (
+                  <div className="w-14 h-14 rounded-lg overflow-hidden border border-gray-200 bg-white flex items-center justify-center">
+                    <img src={b.logo_url} alt={b.name} className="w-full h-full object-contain" />
+                  </div>
+                ) : (
+                  <div className="w-14 h-14 rounded-lg bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center">
+                    <Image size={20} className="text-gray-400" />
+                  </div>
+                )}
+                <button
+                  onClick={() => { logoInputRef.current?.setAttribute("data-branch", b.id); logoInputRef.current?.click(); }}
+                  className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                  title="Logo uploaden"
+                >
+                  {uploading === b.id ? <span className="text-white text-xs">...</span> : <Upload size={16} className="text-white" />}
+                </button>
+                {b.logo_url && (
+                  <button onClick={() => handleLogoDelete(b.id)} className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" title="Logo verwijderen"><X size={12} /></button>
+                )}
+              </div>
+              {/* Info */}
+              <div className="flex-1 min-w-0">
                 <p className="font-bold text-gray-900 flex items-center gap-2"><Building2 size={16} className="text-blue-500" /> {b.name}</p>
                 {b.address && <p className="text-xs text-gray-500 mt-0.5">{b.address}</p>}
                 <div className="flex gap-3 mt-1 text-xs text-gray-500">
@@ -1610,6 +1671,7 @@ function MasterLocaties({ account, setAccount, user }) {
                   <span>{txCount} transactie{txCount !== 1 ? 's' : ''}</span>
                 </div>
               </div>
+              {/* Actions */}
               <div className="flex items-center gap-1">
                 <button onClick={() => startEdit(b)} className="p-2 hover:bg-blue-50 text-blue-600 rounded-lg transition-all"><Pencil size={16} /></button>
                 {deleting === b.id ? (
@@ -1641,6 +1703,20 @@ function MasterLocaties({ account, setAccount, user }) {
       {!showForm && (
         <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><PlusCircle size={20} /> Locatie toevoegen</button>
       )}
+
+      {/* Hidden file input for logo upload */}
+      <input
+        ref={logoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          const branchId = e.target.getAttribute("data-branch");
+          if (file && branchId) handleLogoUpload(branchId, file);
+          e.target.value = "";
+        }}
+      />
     </div>
   );
 }
@@ -2467,7 +2543,9 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
       <div className="bg-white border-b border-gray-100 sticky top-0 z-30">
         <div className="max-w-lg lg:max-w-2xl xl:max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <BarcodeLogo size="sm" />
+            {(() => { const myBranch = (account.branches || []).find(b => b.id === user.branch_id); return myBranch?.logo_url ? (
+              <img src={myBranch.logo_url} alt={myBranch.name} className="w-9 h-9 rounded-lg object-contain border border-gray-200" />
+            ) : <BarcodeLogo size="sm" />; })()}
             <div>
               <h1 className="text-lg font-bold text-gray-900 leading-tight">{(account.branches || []).find(b => b.id === user.branch_id)?.name || account.company_name}</h1>
               <p className="text-xs text-gray-500">{account.company_name}</p>
