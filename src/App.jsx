@@ -315,8 +315,10 @@ function RegisterFlow({ onDone }) {
       const newAccount = await supabaseData.createAccount({
         company_name: company.name,
         email: company.email,
-        phone: company.phone || null,
-        plan: { outlets, startDate: new Date().toISOString().split("T")[0], status: "active", nextBilling: "2026-05-02" }
+        plan_outlets: outlets,
+        plan_status: "active",
+        plan_start_date: new Date().toISOString().split("T")[0],
+        plan_next_billing: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
       });
 
       // Step 3: The trigger will auto-create profile with role='master' and account_id
@@ -433,15 +435,14 @@ function SuperAdminPanel({ onLogout }) {
   };
 
   const handleToggleStatus = async (acc) => {
-    const newStatus = acc.plan?.status === "active" ? "inactive" : "active";
-    const newPlan = { ...acc.plan, status: newStatus };
-    await handleSaveEdit(acc.id, { plan: newPlan });
+    const newStatus = acc.plan_status === "active" ? "inactive" : "active";
+    await handleSaveEdit(acc.id, { plan_status: newStatus });
   };
 
   // Stats
   const totalAccounts = accounts.length;
-  const activeAccounts = accounts.filter(a => a.plan?.status === "active").length;
-  const totalOutlets = accounts.reduce((sum, a) => sum + (a.plan?.outlets || 0), 0);
+  const activeAccounts = accounts.filter(a => a.plan_status === "active").length;
+  const totalOutlets = accounts.reduce((sum, a) => sum + (a.plan_outlets || 0), 0);
   const totalUsers = accounts.reduce((sum, a) => sum + (a.profiles?.[0]?.count || 0), 0);
 
   // Search filter
@@ -545,13 +546,13 @@ function SuperAdminPanel({ onLogout }) {
                       <div className="flex items-center gap-4 flex-shrink-0">
                         <div className="text-right hidden lg:block">
                           <p className="text-xs text-gray-500">{userCount} gebruiker{userCount !== 1 ? "s" : ""} · {txCount} transactie{txCount !== 1 ? "s" : ""}</p>
-                          <p className="text-xs text-gray-400">Sinds {acc.plan?.startDate || "—"}</p>
+                          <p className="text-xs text-gray-400">Sinds {acc.plan_start_date || "—"}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${acc.plan?.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                            {acc.plan?.status === "active" ? "Actief" : "Inactief"}
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${acc.plan_status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                            {acc.plan_status === "active" ? "Actief" : "Inactief"}
                           </span>
-                          <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold">{acc.plan?.outlets || 0} outlet{(acc.plan?.outlets || 0) !== 1 ? "s" : ""}</span>
+                          <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold">{acc.plan_outlets || 0} outlet{(acc.plan_outlets || 0) !== 1 ? "s" : ""}</span>
                         </div>
                       </div>
                     </div>
@@ -567,8 +568,8 @@ function SuperAdminPanel({ onLogout }) {
                           {/* Action buttons */}
                           <div className="flex flex-wrap gap-2">
                             <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); }} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-semibold hover:bg-blue-100 transition-colors flex items-center gap-1.5"><Pencil size={14} /> Bewerken</button>
-                            <button onClick={(e) => { e.stopPropagation(); handleToggleStatus(acc); }} className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${acc.plan?.status === "active" ? "bg-orange-50 text-orange-700 hover:bg-orange-100" : "bg-green-50 text-green-700 hover:bg-green-100"}`}>
-                              {acc.plan?.status === "active" ? <><AlertCircle size={14} /> Deactiveren</> : <><CheckCircle size={14} /> Activeren</>}
+                            <button onClick={(e) => { e.stopPropagation(); handleToggleStatus(acc); }} className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${acc.plan_status === "active" ? "bg-orange-50 text-orange-700 hover:bg-orange-100" : "bg-green-50 text-green-700 hover:bg-green-100"}`}>
+                              {acc.plan_status === "active" ? <><AlertCircle size={14} /> Deactiveren</> : <><CheckCircle size={14} /> Activeren</>}
                             </button>
                             <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc.id); }} className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100 transition-colors flex items-center gap-1.5"><Trash2 size={14} /> Verwijderen</button>
                           </div>
@@ -654,10 +655,10 @@ function SuperAdminPanel({ onLogout }) {
                           <div className="bg-gray-50 rounded-lg p-3">
                             <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><CreditCard size={14} /> Abonnement</h4>
                             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-                              <div><span className="text-gray-500">Plan</span><p className="font-semibold text-gray-800">{acc.plan?.outlets || 0} outlet{(acc.plan?.outlets || 0) !== 1 ? "s" : ""}</p></div>
-                              <div><span className="text-gray-500">Status</span><p className={`font-semibold ${acc.plan?.status === "active" ? "text-green-600" : "text-red-600"}`}>{acc.plan?.status === "active" ? "Actief" : "Inactief"}</p></div>
-                              <div><span className="text-gray-500">Startdatum</span><p className="font-semibold text-gray-800">{acc.plan?.startDate || "—"}</p></div>
-                              <div><span className="text-gray-500">Volgende facturatie</span><p className="font-semibold text-gray-800">{acc.plan?.nextBilling || "—"}</p></div>
+                              <div><span className="text-gray-500">Plan</span><p className="font-semibold text-gray-800">{acc.plan_outlets || 0} outlet{(acc.plan_outlets || 0) !== 1 ? "s" : ""}</p></div>
+                              <div><span className="text-gray-500">Status</span><p className={`font-semibold ${acc.plan_status === "active" ? "text-green-600" : "text-red-600"}`}>{acc.plan_status === "active" ? "Actief" : "Inactief"}</p></div>
+                              <div><span className="text-gray-500">Startdatum</span><p className="font-semibold text-gray-800">{acc.plan_start_date || "—"}</p></div>
+                              <div><span className="text-gray-500">Volgende facturatie</span><p className="font-semibold text-gray-800">{acc.plan_next_billing || "—"}</p></div>
                             </div>
                           </div>
                         </div>
@@ -680,17 +681,18 @@ function EditAccountModal({ account, onSave, onClose }) {
     company_name: account.company_name || "",
     email: account.email || "",
     phone: account.phone || "",
-    outlets: account.plan?.outlets || 1,
-    status: account.plan?.status || "active",
-    nextBilling: account.plan?.nextBilling || "",
+    outlets: account.plan_outlets || 1,
+    status: account.plan_status || "active",
+    nextBilling: account.plan_next_billing || "",
   });
 
   const handleSubmit = () => {
     onSave({
       company_name: form.company_name,
       email: form.email,
-      phone: form.phone,
-      plan: { ...account.plan, outlets: form.outlets, status: form.status, nextBilling: form.nextBilling },
+      plan_outlets: form.outlets,
+      plan_status: form.status,
+      plan_next_billing: form.nextBilling,
     });
   };
 
@@ -1297,19 +1299,19 @@ function AbonnementTab({ account }) {
       <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-gray-700">Status</p>
-          <p className={`font-bold ${account.plan.status === "active" ? "text-green-600" : "text-red-600"}`}>{account.plan.status.toUpperCase()}</p>
+          <p className={`font-bold ${account.plan_status === "active" ? "text-green-600" : "text-red-600"}`}>{account.plan_status.toUpperCase()}</p>
         </div>
         <div className="flex items-center justify-between">
           <p className="text-gray-700">Outlets</p>
-          <p className="font-bold text-gray-900">{account.plan.outlets}</p>
+          <p className="font-bold text-gray-900">{account.plan_outlets}</p>
         </div>
         <div className="flex items-center justify-between">
           <p className="text-gray-700">Maandelijks bedrag</p>
-          <p className="text-xl font-bold text-blue-900">{fmt(calcPrice(account.plan.outlets).total)}</p>
+          <p className="text-xl font-bold text-blue-900">{fmt(calcPrice(account.plan_outlets).total)}</p>
         </div>
         <div className="border-t border-blue-200 pt-4 flex items-center justify-between">
           <p className="text-gray-700">Volgende facturering</p>
-          <p className="font-semibold text-gray-900">{account.plan.nextBilling}</p>
+          <p className="font-semibold text-gray-900">{account.plan_next_billing}</p>
         </div>
       </div>
       <p className="text-xs text-gray-500">Het abonnement kan alleen gewijzigd worden via de administrateur van uw bedrijf.</p>
@@ -1920,7 +1922,11 @@ function App() {
   }, [session, profile]);
 
   const loadAccount = async () => {
-    if (!profile?.account_id) return;
+    if (!profile?.account_id) {
+      setAccountLoading(false);
+      setCurrentAccount(null);
+      return;
+    }
     setAccountLoading(true);
     try {
       const account = await supabaseData.fetchAccount(profile.account_id);
@@ -1961,8 +1967,20 @@ function App() {
   }
 
   if (screen === "app") {
-    if (accountLoading || !currentAccount || !profile) {
+    if (accountLoading) {
       return <div className="min-h-screen flex items-center justify-center"><p>Laden...</p></div>;
+    }
+    if (!currentAccount || !profile?.account_id) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center p-8 bg-white rounded-xl shadow-md max-w-md">
+            <AlertCircle size={48} className="mx-auto text-orange-500 mb-4" />
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Geen account gekoppeld</h2>
+            <p className="text-gray-600 mb-4">Er is nog geen bedrijfsaccount aan je profiel gekoppeld. Neem contact op met de beheerder.</p>
+            <button onClick={handleLogout} className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all">Uitloggen</button>
+          </div>
+        </div>
+      );
     }
 
     if (profile.role === "master") {
