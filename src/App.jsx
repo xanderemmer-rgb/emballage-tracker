@@ -1968,48 +1968,21 @@ function AbonnementTab({ account, setAccount }) {
 
 // ─── MASTER APP ──────────────────────────────────────────────────────────────
 // ─── TRIAL / DEMO BANNER ──────────────────────────────────────────────────────
-function TrialBanner({ account, onUpgrade }) {
-  if (!account.is_demo && account.plan_status === "active") return null;
+function StatusBanner({ account, onUpgrade }) {
+  if (account.plan_status === "active") return null;
 
-  // Calculate days left for demo accounts
-  const startDate = account.plan_start_date ? new Date(account.plan_start_date) : new Date();
-  const trialEnd = new Date(startDate);
-  trialEnd.setDate(trialEnd.getDate() + 14);
-  const daysLeft = Math.max(0, Math.ceil((trialEnd - new Date()) / (1000 * 60 * 60 * 24)));
-
-  if (account.is_demo) {
-    return (
-      <div className={`rounded-xl p-4 mb-4 flex items-center justify-between ${daysLeft <= 3 ? "bg-gradient-to-r from-red-500 to-orange-500" : "bg-gradient-to-r from-blue-500 to-purple-500"} text-white`}>
-        <div className="flex items-center gap-3">
-          <Sparkles size={20} />
-          <div>
-            <p className="font-bold text-sm">{daysLeft > 0 ? `Demo: nog ${daysLeft} dag${daysLeft !== 1 ? "en" : ""}` : "Je demo is verlopen"}</p>
-            <p className="text-xs opacity-90">{daysLeft > 0 ? "Upgrade naar een betaald plan voor onbeperkt gebruik" : "Activeer je account om verder te gaan"}</p>
-          </div>
+  return (
+    <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-xl p-4 mb-4 flex items-center justify-between text-white">
+      <div className="flex items-center gap-3">
+        <AlertCircle size={20} />
+        <div>
+          <p className="font-bold text-sm">Account inactief</p>
+          <p className="text-xs opacity-90">Neem contact op met support om je abonnement te activeren</p>
         </div>
-        <button onClick={onUpgrade} className="px-4 py-2 bg-white text-blue-600 rounded-lg font-bold text-sm hover:bg-blue-50 transition-all whitespace-nowrap">
-          {daysLeft > 0 ? "Upgrade nu" : "Activeer"}
-        </button>
       </div>
-    );
-  }
-
-  if (account.plan_status !== "active") {
-    return (
-      <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-xl p-4 mb-4 flex items-center justify-between text-white">
-        <div className="flex items-center gap-3">
-          <AlertCircle size={20} />
-          <div>
-            <p className="font-bold text-sm">Account inactief</p>
-            <p className="text-xs opacity-90">Activeer je abonnement om alle functies te gebruiken</p>
-          </div>
-        </div>
-        <button onClick={onUpgrade} className="px-4 py-2 bg-white text-orange-600 rounded-lg font-bold text-sm hover:bg-orange-50 transition-all whitespace-nowrap">Activeer</button>
-      </div>
-    );
-  }
-
-  return null;
+      <button onClick={onUpgrade} className="px-4 py-2 bg-white text-orange-600 rounded-lg font-bold text-sm hover:bg-orange-50 transition-all whitespace-nowrap">Bekijk abonnement</button>
+    </div>
+  );
 }
 
 // ─── INACTIVITY NUDGE ──────────────────────────────────────────────────────
@@ -2076,7 +2049,7 @@ function MasterApp({ account, user, onLogout, setAccount }) {
           <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
         </div>
 
-        <TrialBanner account={account} onUpgrade={() => setMasterScreen("abonnement")} />
+        <StatusBanner account={account} onUpgrade={() => setMasterScreen("abonnement")} />
 
         {/* Scrollable tabs for mobile */}
         <div className="flex gap-1 mb-6 border-b border-gray-200 overflow-x-auto scrollbar-hide -mx-2 px-2">
@@ -2309,7 +2282,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
       <div className="max-w-lg lg:max-w-2xl xl:max-w-4xl mx-auto px-4 pt-4">
 
         {/* Trial / inactivity banners */}
-        <TrialBanner account={account} onUpgrade={() => {}} />
+        <StatusBanner account={account} onUpgrade={() => {}} />
         {screen === "overzicht" && <InactivityNudge transactions={branchTransactions} onAddTransaction={() => setScanModal(true)} />}
 
         {screen === "overzicht" && (
@@ -2657,9 +2630,8 @@ function LoginPage({ onLogin, onRegister }) {
             <p className="text-sm text-gray-500 mt-1">Start direct met emballage bijhouden vanaf <span className="font-bold text-blue-600">€10/maand</span> per locatie</p>
           </div>
           <button onClick={onRegister} className="w-full py-3 rounded-lg font-bold transition-all duration-200 bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 flex items-center justify-center gap-2">
-            <Sparkles size={18} /> Gratis uitproberen
+            <Sparkles size={18} /> Account aanmaken
           </button>
-          <p className="text-xs text-gray-400 text-center mt-2">14 dagen gratis proberen, geen creditcard nodig</p>
         </div>
       </div>
     </div>
