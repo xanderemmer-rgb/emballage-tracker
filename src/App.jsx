@@ -69,7 +69,7 @@ function Toast({ message, type = "success", onClose }) {
   const icon = type === "success" ? <CheckCircle size={20} /> : type === "error" ? <AlertCircle size={20} /> : <Inbox size={20} />;
 
   return (
-    <div className={`fixed bottom-4 right-4 ${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-slide-up`}>
+    <div className={`fixed bottom-4 right-4 ${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-slide-up z-[100]`}>
       {icon}
       <span>{message}</span>
     </div>
@@ -333,9 +333,10 @@ function RegisterFlow({ onDone }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={(e) => { if (e.target === e.currentTarget) onDone(); }}>
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md lg:max-w-2xl xl:max-w-4xl w-full p-8 animate-slide-up">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md lg:max-w-2xl xl:max-w-4xl w-full p-8 animate-slide-up relative">
+        <button onClick={onDone} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors" aria-label="Sluiten"><X size={24} /></button>
         <h2 className="text-3xl font-bold text-gray-900 mb-2">Nieuw account</h2>
         {step === 1 && (
           <div className="space-y-6">
@@ -372,10 +373,14 @@ function SuperAdminPanel({ onLogout }) {
   const [accounts, setAccounts] = useState([]);
   const [newForm, setNewForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [selectedAccount, setSelectedAccount] = useState(null);
+  const [detailData, setDetailData] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [editingAccount, setEditingAccount] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  useEffect(() => {
-    fetchAccounts();
-  }, []);
+  useEffect(() => { fetchAccounts(); }, []);
 
   const fetchAccounts = async () => {
     try {
@@ -389,59 +394,325 @@ function SuperAdminPanel({ onLogout }) {
   };
 
   const handleDeleteAccount = async (id) => {
-    if (confirm("Weet je zeker dat je dit account wilt verwijderen?")) {
+    if (confirm("Weet je zeker dat je dit account wilt verwijderen? Alle data (transacties, emballage, leveranciers) wordt ook verwijderd.")) {
       try {
         await supabaseData.deleteAccount(id);
         setAccounts(accounts.filter(a => a.id !== id));
+        if (selectedAccount === id) { setSelectedAccount(null); setDetailData(null); }
+        setToast({ type: "success", message: "Account verwijderd" });
       } catch (err) {
-        console.error("Error deleting account:", err);
+        setToast({ type: "error", message: err.message || "Verwijderen mislukt" });
       }
     }
   };
 
+  const handleViewDetail = async (accountId) => {
+    if (selectedAccount === accountId) { setSelectedAccount(null); setDetailData(null); return; }
+    setSelectedAccount(accountId);
+    setDetailLoading(true);
+    try {
+      const detail = await supabaseData.fetchAccountDetail(accountId);
+      setDetailData(detail);
+    } catch (err) {
+      console.error("Error fetching detail:", err);
+      setToast({ type: "error", message: "Detail laden mislukt" });
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleSaveEdit = async (id, updates) => {
+    try {
+      const updated = await supabaseData.updateAccount(id, updates);
+      setAccounts(accounts.map(a => a.id === id ? { ...a, ...updated } : a));
+      setEditingAccount(null);
+      setToast({ type: "success", message: "Account bijgewerkt" });
+    } catch (err) {
+      setToast({ type: "error", message: err.message || "Bijwerken mislukt" });
+    }
+  };
+
+  const handleToggleStatus = async (acc) => {
+    const newStatus = acc.plan?.status === "active" ? "inactive" : "active";
+    const newPlan = { ...acc.plan, status: newStatus };
+    await handleSaveEdit(acc.id, { plan: newPlan });
+  };
+
+  // Stats
+  const totalAccounts = accounts.length;
+  const activeAccounts = accounts.filter(a => a.plan?.status === "active").length;
+  const totalOutlets = accounts.reduce((sum, a) => sum + (a.plan?.outlets || 0), 0);
+  const totalUsers = accounts.reduce((sum, a) => sum + (a.profiles?.[0]?.count || 0), 0);
+
+  // Search filter
+  const filteredAccounts = accounts.filter(a =>
+    !searchQuery || a.company_name?.toLowerCase().includes(searchQuery.toLowerCase()) || a.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 p-4 lg:p-6">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       {newForm && <RegisterFlow onDone={() => { setNewForm(false); fetchAccounts(); }} />}
-      <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
+      {editingAccount && (
+        <EditAccountModal
+          account={editingAccount}
+          onSave={(updates) => handleSaveEdit(editingAccount.id, updates)}
+          onClose={() => setEditingAccount(null)}
+        />
+      )}
+
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
             <BarcodeLogo size="sm" />
-            <h1 className="text-3xl font-bold text-gray-900">Super Admin</h1>
+            <div>
+              <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Reggy Super Admin</h1>
+              <p className="text-sm text-gray-500">Beheer alle klantaccounts</p>
+            </div>
           </div>
-          <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
+          <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200 text-sm font-semibold"><LogOut size={18} /> Afmelden</button>
         </div>
 
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center"><Building2 size={20} className="text-blue-600" /></div>
+              <div><p className="text-2xl font-bold text-gray-900">{totalAccounts}</p><p className="text-xs text-gray-500">Accounts</p></div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center"><CheckCircle size={20} className="text-green-600" /></div>
+              <div><p className="text-2xl font-bold text-gray-900">{activeAccounts}</p><p className="text-xs text-gray-500">Actief</p></div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center"><Package size={20} className="text-purple-600" /></div>
+              <div><p className="text-2xl font-bold text-gray-900">{totalOutlets}</p><p className="text-xs text-gray-500">Outlets</p></div>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center"><Users size={20} className="text-orange-600" /></div>
+              <div><p className="text-2xl font-bold text-gray-900">{totalUsers}</p><p className="text-xs text-gray-500">Gebruikers</p></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Search + New Account */}
+        <div className="flex gap-3 mb-6">
+          <div className="flex-1 relative">
+            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Zoek op bedrijfsnaam of email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+            />
+          </div>
+          <button onClick={() => setNewForm(true)} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-semibold hover:bg-blue-700 transition-all duration-200 flex items-center gap-2 text-sm whitespace-nowrap"><Plus size={18} /> Nieuw account</button>
+        </div>
+
+        {/* Account List */}
         {loading ? (
-          <div className="text-center py-8"><p className="text-gray-600">Laden...</p></div>
+          <div className="text-center py-12"><div className="inline-block w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" /><p className="text-gray-500 mt-3">Accounts laden...</p></div>
+        ) : filteredAccounts.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-xl shadow-sm"><p className="text-gray-500">{searchQuery ? "Geen resultaten" : "Nog geen accounts"}</p></div>
         ) : (
-          <>
-            <div className="grid gap-4 mb-8">
-              {accounts.length === 0 ? (
-                <p className="text-gray-600 text-center py-8">Geen accounts gevonden</p>
-              ) : (
-                accounts.map(acc => (
-                  <div key={acc.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 p-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-bold text-gray-900">{acc.company_name}</h3>
-                        <p className="text-sm text-gray-600">{acc.email}</p>
+          <div className="space-y-3">
+            {filteredAccounts.map(acc => {
+              const isOpen = selectedAccount === acc.id;
+              const userCount = acc.profiles?.[0]?.count || 0;
+              const txCount = acc.transactions?.[0]?.count || 0;
+              return (
+                <div key={acc.id} className={`bg-white rounded-xl shadow-sm border transition-all duration-200 ${isOpen ? "border-blue-300 shadow-md" : "border-gray-100 hover:shadow-md"}`}>
+                  {/* Account Row */}
+                  <div className="p-4 cursor-pointer" onClick={() => handleViewDetail(acc.id)}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+                          {acc.company_name?.charAt(0)?.toUpperCase() || "?"}
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-bold text-gray-900 truncate">{acc.company_name}</h3>
+                          <p className="text-sm text-gray-500 truncate">{acc.email} {acc.phone ? `· ${acc.phone}` : ""}</p>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className={`text-sm font-semibold ${acc.plan?.status === "active" ? "text-green-600" : "text-red-600"}`}>{(acc.plan?.status || "unknown").toUpperCase()}</p>
-                        <p className="text-xs text-gray-600">{acc.plan?.outlets || 0} outlet{(acc.plan?.outlets || 0) > 1 ? "s" : ""}</p>
+                      <div className="flex items-center gap-4 flex-shrink-0">
+                        <div className="text-right hidden lg:block">
+                          <p className="text-xs text-gray-500">{userCount} gebruiker{userCount !== 1 ? "s" : ""} · {txCount} transactie{txCount !== 1 ? "s" : ""}</p>
+                          <p className="text-xs text-gray-400">Sinds {acc.plan?.startDate || "—"}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${acc.plan?.status === "active" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                            {acc.plan?.status === "active" ? "Actief" : "Inactief"}
+                          </span>
+                          <span className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-semibold">{acc.plan?.outlets || 0} outlet{(acc.plan?.outlets || 0) !== 1 ? "s" : ""}</span>
+                        </div>
                       </div>
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <button onClick={() => handleDeleteAccount(acc.id)} className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-semibold"><Trash2 size={16} /> Verwijderen</button>
                     </div>
                   </div>
-                ))
-              )}
-            </div>
 
-            <button onClick={() => setNewForm(true)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Plus size={20} /> Nieuw account</button>
-          </>
+                  {/* Expanded Detail */}
+                  {isOpen && (
+                    <div className="border-t border-gray-100 p-4">
+                      {detailLoading ? (
+                        <div className="text-center py-4"><div className="inline-block w-6 h-6 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin" /></div>
+                      ) : detailData ? (
+                        <div className="space-y-4">
+                          {/* Action buttons */}
+                          <div className="flex flex-wrap gap-2">
+                            <button onClick={(e) => { e.stopPropagation(); setEditingAccount(acc); }} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-semibold hover:bg-blue-100 transition-colors flex items-center gap-1.5"><Pencil size={14} /> Bewerken</button>
+                            <button onClick={(e) => { e.stopPropagation(); handleToggleStatus(acc); }} className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-1.5 ${acc.plan?.status === "active" ? "bg-orange-50 text-orange-700 hover:bg-orange-100" : "bg-green-50 text-green-700 hover:bg-green-100"}`}>
+                              {acc.plan?.status === "active" ? <><AlertCircle size={14} /> Deactiveren</> : <><CheckCircle size={14} /> Activeren</>}
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteAccount(acc.id); }} className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-sm font-semibold hover:bg-red-100 transition-colors flex items-center gap-1.5"><Trash2 size={14} /> Verwijderen</button>
+                          </div>
+
+                          {/* Detail Grid */}
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                            {/* Users */}
+                            <div className="bg-gray-50 rounded-lg p-3">
+                              <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><Users size={14} /> Gebruikers ({detailData.profiles.length})</h4>
+                              {detailData.profiles.length === 0 ? (
+                                <p className="text-xs text-gray-400">Geen gebruikers</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {detailData.profiles.map(p => (
+                                    <div key={p.id} className="flex items-center justify-between text-xs">
+                                      <span className="text-gray-700 font-medium">{p.display_name || p.email || "—"}</span>
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${p.role === "admin" ? "bg-purple-100 text-purple-700" : "bg-gray-200 text-gray-600"}`}>{p.role}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Emballage Types */}
+                            <div className="bg-gray-50 rounded-lg p-3">
+                              <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><Package size={14} /> Emballage ({detailData.emballageTypes.length})</h4>
+                              {detailData.emballageTypes.length === 0 ? (
+                                <p className="text-xs text-gray-400">Geen types</p>
+                              ) : (
+                                <div className="space-y-1">
+                                  {detailData.emballageTypes.slice(0, 8).map(e => (
+                                    <div key={e.id} className="flex items-center justify-between text-xs">
+                                      <span className="text-gray-700">{e.name}</span>
+                                      <span className="text-gray-500 font-mono">€{e.value?.toFixed(2)}</span>
+                                    </div>
+                                  ))}
+                                  {detailData.emballageTypes.length > 8 && <p className="text-xs text-gray-400">+{detailData.emballageTypes.length - 8} meer</p>}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Suppliers */}
+                            <div className="bg-gray-50 rounded-lg p-3">
+                              <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><Truck size={14} /> Leveranciers ({detailData.suppliers.length})</h4>
+                              {detailData.suppliers.length === 0 ? (
+                                <p className="text-xs text-gray-400">Geen leveranciers</p>
+                              ) : (
+                                <div className="space-y-1">
+                                  {detailData.suppliers.slice(0, 8).map(s => (
+                                    <div key={s.id} className="text-xs text-gray-700">{s.name}</div>
+                                  ))}
+                                  {detailData.suppliers.length > 8 && <p className="text-xs text-gray-400">+{detailData.suppliers.length - 8} meer</p>}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Recent Transactions */}
+                          {detailData.transactions.length > 0 && (
+                            <div className="bg-gray-50 rounded-lg p-3">
+                              <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><ClipboardList size={14} /> Laatste transacties</h4>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-xs">
+                                  <thead><tr className="text-gray-500 text-left"><th className="pb-1 pr-3">Datum</th><th className="pb-1 pr-3">Type</th><th className="pb-1 pr-3">Leverancier</th><th className="pb-1 pr-3">Emballage</th><th className="pb-1 pr-3 text-center">Aantal</th></tr></thead>
+                                  <tbody>
+                                    {detailData.transactions.slice(0, 10).map(t => (
+                                      <tr key={t.id} className="border-t border-gray-200">
+                                        <td className="py-1 pr-3 text-gray-600">{t.date}</td>
+                                        <td className={`py-1 pr-3 font-semibold ${t.type === "IN" ? "text-green-600" : "text-red-600"}`}>{t.type === "IN" ? "↓ IN" : "↑ UIT"}</td>
+                                        <td className="py-1 pr-3 text-gray-700">{t.supplier}</td>
+                                        <td className="py-1 pr-3 text-gray-700">{t.emballage}</td>
+                                        <td className="py-1 pr-3 text-center font-mono">{t.qty}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                                {detailData.transactions.length > 10 && <p className="text-xs text-gray-400 mt-2">+{detailData.transactions.length - 10} meer transacties</p>}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Plan info */}
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5"><CreditCard size={14} /> Abonnement</h4>
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                              <div><span className="text-gray-500">Plan</span><p className="font-semibold text-gray-800">{acc.plan?.outlets || 0} outlet{(acc.plan?.outlets || 0) !== 1 ? "s" : ""}</p></div>
+                              <div><span className="text-gray-500">Status</span><p className={`font-semibold ${acc.plan?.status === "active" ? "text-green-600" : "text-red-600"}`}>{acc.plan?.status === "active" ? "Actief" : "Inactief"}</p></div>
+                              <div><span className="text-gray-500">Startdatum</span><p className="font-semibold text-gray-800">{acc.plan?.startDate || "—"}</p></div>
+                              <div><span className="text-gray-500">Volgende facturatie</span><p className="font-semibold text-gray-800">{acc.plan?.nextBilling || "—"}</p></div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── EDIT ACCOUNT MODAL ──────────────────────────────────────────────────────
+function EditAccountModal({ account, onSave, onClose }) {
+  const [form, setForm] = useState({
+    company_name: account.company_name || "",
+    email: account.email || "",
+    phone: account.phone || "",
+    outlets: account.plan?.outlets || 1,
+    status: account.plan?.status || "active",
+    nextBilling: account.plan?.nextBilling || "",
+  });
+
+  const handleSubmit = () => {
+    onSave({
+      company_name: form.company_name,
+      email: form.email,
+      phone: form.phone,
+      plan: { ...account.plan, outlets: form.outlets, status: form.status, nextBilling: form.nextBilling },
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-slide-up relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 transition-colors"><X size={24} /></button>
+        <h2 className="text-xl font-bold text-gray-900 mb-4">Account bewerken</h2>
+        <div className="space-y-3">
+          <div><label className="block text-sm font-semibold text-gray-700 mb-1">Bedrijfsnaam</label><input type="text" value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
+          <div><label className="block text-sm font-semibold text-gray-700 mb-1">Email</label><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
+          <div><label className="block text-sm font-semibold text-gray-700 mb-1">Telefoon</label><input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="block text-sm font-semibold text-gray-700 mb-1">Outlets</label><input type="number" min="1" value={form.outlets} onChange={(e) => setForm({ ...form, outlets: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
+            <div><label className="block text-sm font-semibold text-gray-700 mb-1">Status</label><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"><option value="active">Actief</option><option value="inactive">Inactief</option></select></div>
+          </div>
+          <div><label className="block text-sm font-semibold text-gray-700 mb-1">Volgende facturatie</label><input type="date" value={form.nextBilling} onChange={(e) => setForm({ ...form, nextBilling: e.target.value })} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" /></div>
+        </div>
+        <div className="flex gap-3 mt-5">
+          <button onClick={onClose} className="flex-1 bg-gray-200 text-gray-800 py-2.5 rounded-lg font-semibold hover:bg-gray-300 transition-all duration-200 text-sm">Annuleren</button>
+          <button onClick={handleSubmit} className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-semibold hover:bg-blue-700 transition-all duration-200 text-sm">Opslaan</button>
+        </div>
       </div>
     </div>
   );

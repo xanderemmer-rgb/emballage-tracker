@@ -5,10 +5,27 @@ import { supabase } from "./supabaseClient";
 export async function fetchAllAccounts() {
   const { data, error } = await supabase
     .from("accounts")
-    .select("*")
+    .select("*, profiles(count), transactions(count)")
     .order("created_at", { ascending: false });
   if (error) throw error;
   return data;
+}
+
+export async function fetchAccountDetail(accountId) {
+  const [account, profiles, transactions, emballageTypes, suppliers] = await Promise.all([
+    supabase.from("accounts").select("*").eq("id", accountId).single(),
+    supabase.from("profiles").select("*").eq("account_id", accountId),
+    supabase.from("transactions").select("*").eq("account_id", accountId).order("date", { ascending: false }).limit(50),
+    supabase.from("emballage_types").select("*").eq("account_id", accountId),
+    supabase.from("suppliers").select("*").eq("account_id", accountId),
+  ]);
+  return {
+    account: account.data,
+    profiles: profiles.data || [],
+    transactions: transactions.data || [],
+    emballageTypes: emballageTypes.data || [],
+    suppliers: suppliers.data || [],
+  };
 }
 
 export async function fetchAccount(accountId) {
