@@ -1270,7 +1270,7 @@ function BonScanModal({ emballageTypes, suppliers, branch, branchId, onClose, on
               <label className="block text-xs font-semibold text-gray-500 mb-1.5">Leverancier</label>
               <select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none">
                 <option value="">Selecteer...</option>
-                {suppliers.map((s, i) => <option key={i} value={s}>{s}</option>)}
+                {suppliers.map((s, i) => <option key={i} value={s.name || s}>{s.name || s}</option>)}
               </select>
             </div>
           </div>
@@ -2084,8 +2084,8 @@ const SUPPLIER_COLORS = [
 ];
 
 function getSupplierColor(supplier, allSuppliers) {
-  const idx = allSuppliers.indexOf(supplier);
-  return SUPPLIER_COLORS[idx % SUPPLIER_COLORS.length];
+  const idx = allSuppliers.findIndex(s => (s.name || s) === supplier);
+  return SUPPLIER_COLORS[(idx >= 0 ? idx : 0) % SUPPLIER_COLORS.length];
 }
 
 // ─── MINI BAR CHART ──────────────────────────────────────────────────────────
