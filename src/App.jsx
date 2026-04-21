@@ -924,7 +924,10 @@ function AttViewer({ att, onClose }) {
 
 // ─── MASTER DASHBOARD (RICH) ──────────────────────────────────────────────────
 function MasterDashboard({ account }) {
-  const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch))];
+  const branches = [...new Set([
+    ...(account.branches || []).map(b => b.name),
+    ...account.users.filter(u => u.role === "branch" && u.branch).map(u => u.branch),
+  ])];
   const totalTrans = account.transactions.length;
   const inCount = account.transactions.filter(t => t.type === "IN").length;
   const outCount = account.transactions.filter(t => t.type === "OUT").length;
@@ -1097,35 +1100,67 @@ function MasterDashboard({ account }) {
   );
 }
 
-// ─── MASTER BEHEER (USER MANAGEMENT) ───────────────────────────────────────────
+// ─── MASTER BEHEER (USER MANAGEMENT — per branch) ────────────────────────────
 function MasterBeheer({ account, setAccount }) {
   const [showForm, setShowForm] = useState(false);
-  const [newUser, setNewUser] = useState({ name: "", email: "", password: "", branch: "" });
-  const [newBranch, setNewBranch] = useState("");
+  const [newUser, setNewUser] = useState({ firstName: "", lastName: "", email: "", password: "", phone: "", branchId: "" });
   const [toast, setToast] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [filterBranch, setFilterBranch] = useState("all");
 
-  const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch).filter(Boolean))];
+  const branches = account.branches || [];
+  const maxPerBranch = account.maxUsersPerBranch || 2;
+  const branchUsers = account.users.filter(u => u.role === "branch");
+  const totalUsers = account.users.length;
 
-  const branchUserCount = account.users.filter(u => u.role === "branch").length;
-  const maxOutlets = account.plan.outlets || 1;
-  const canAddMore = branchUserCount < maxOutlets;
+  const usersInBranch = (branchId) => branchUsers.filter(u => u.branchId === branchId).length;
 
   const handleAddUser = async () => {
-    if (!canAddMore) { setToast({ type: "error", message: `Je abonnement staat maximaal ${maxOutlets} outlet${maxOutlets !== 1 ? "s" : ""} toe. Upgrade je abonnement om meer filialen toe te voegen.` }); return; }
-    if (!newUser.name || !newUser.email || !newUser.password || !newUser.branch) { setToast({ type: "error", message: "Alle velden zijn verplicht" }); return; }
+    if (!newUser.firstName.trim() || !newUser.lastName.trim() || !newUser.email || !newUser.password || !newUser.branchId) {
+      setToast({ type: "error", message: "Voornaam, achternaam, email, wachtwoord en filiaal zijn verplicht" }); return;
+    }
     if (newUser.password.length < 6) { setToast({ type: "error", message: "Wachtwoord moet minimaal 6 tekens zijn" }); return; }
+
+    const branch = branches.find(b => b.id === newUser.branchId);
+    if (!branch) { setToast({ type: "error", message: "Kies een geldig filiaal" }); return; }
+
+    const currentCount = usersInBranch(newUser.branchId);
+    if (currentCount >= maxPerBranch) {
+      setToast({ type: "error", message: `Dit filiaal heeft al ${maxPerBranch} gebruiker${maxPerBranch !== 1 ? "s" : ""}. Maximaal ${maxPerBranch} per filiaal.` }); return;
+    }
+
     setIsLoading(true);
+    const displayName = `${newUser.firstName.trim()} ${newUser.lastName.trim()}`;
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({ email: newUser.email, password: newUser.password, options: { data: { display_name: newUser.name, branch: newUser.branch } } });
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newUser.email,
+        password: newUser.password,
+        options: { data: { display_name: displayName, branch: branch.name } }
+      });
       if (authError) throw authError;
       const userId = authData.user?.id;
       if (!userId) throw new Error("Gebruiker kon niet aangemaakt worden");
-      const { error: profileError } = await supabase.from("profiles").upsert({ id: userId, account_id: account.id, display_name: newUser.name, role: "branch", branch: newUser.branch });
+
+      const { error: profileError } = await supabase.from("profiles").upsert({
+        id: userId, account_id: account.id, display_name: displayName,
+        first_name: newUser.firstName.trim(), last_name: newUser.lastName.trim(),
+        phone: newUser.phone.trim() || null, role: "branch",
+        branch: branch.name, branch_id: newUser.branchId,
+      });
       if (profileError) throw profileError;
-      setAccount({ ...account, users: [...account.users, { id: userId, name: newUser.name, role: "branch", branch: newUser.branch }] });
-      setNewUser({ name: "", email: "", password: "", branch: "" }); setShowForm(false);
-      setToast({ type: "success", message: `${newUser.name} toegevoegd!` });
+
+      setAccount({
+        ...account,
+        users: [...account.users, {
+          id: userId, name: displayName, firstName: newUser.firstName.trim(),
+          lastName: newUser.lastName.trim(), phone: newUser.phone.trim(),
+          role: "branch", branch: branch.name, branchId: newUser.branchId,
+          branchLogoUrl: null,
+        }]
+      });
+      setNewUser({ firstName: "", lastName: "", email: "", password: "", phone: "", branchId: "" });
+      setShowForm(false);
+      setToast({ type: "success", message: `${displayName} toegevoegd aan ${branch.name}!` });
     } catch (err) {
       const msg = err.message?.includes("already registered") ? "Dit emailadres is al in gebruik" : err.message || "Er ging iets mis";
       setToast({ type: "error", message: msg });
@@ -1144,132 +1179,356 @@ function MasterBeheer({ account, setAccount }) {
     } catch (err) { setToast({ type: "error", message: "Fout: " + err.message }); }
   };
 
-  const handleAddBranch = () => { if (!newBranch.trim()) return; setNewUser({ ...newUser, branch: newBranch.trim() }); setNewBranch(""); };
+  const filteredUsers = filterBranch === "all" ? account.users :
+    filterBranch === "unassigned" ? account.users.filter(u => u.role === "branch" && !u.branchId) :
+    filterBranch === "master" ? account.users.filter(u => u.role === "master") :
+    account.users.filter(u => u.branchId === filterBranch);
 
   return (
     <div className="animate-fade-in space-y-6">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Summary bar */}
       <div className="bg-blue-50 rounded-xl p-4 flex items-center justify-between">
-        <div><p className="text-sm font-semibold text-blue-700">{account.users.length} gebruiker{account.users.length !== 1 ? "s" : ""}</p><p className="text-xs text-blue-600">{branches.length} locatie{branches.length !== 1 ? "s" : ""} actief</p></div>
-        <div className="text-right">
-          <p className="text-xs text-blue-600">Outlets: {branchUserCount}/{maxOutlets} gebruikt</p>
-          <div className="w-24 h-1.5 bg-blue-200 rounded-full mt-1"><div className="h-full bg-blue-600 rounded-full transition-all" style={{ width: `${Math.min(100, (branchUserCount / maxOutlets) * 100)}%` }} /></div>
+        <div>
+          <p className="text-sm font-semibold text-blue-700">{totalUsers} gebruiker{totalUsers !== 1 ? "s" : ""}</p>
+          <p className="text-xs text-blue-600">{branches.length} filia{branches.length !== 1 ? "len" : "al"} • max {maxPerBranch} per filiaal</p>
         </div>
       </div>
-      <div className="space-y-2">
-        {account.users.map(u => (
-          <div key={u.id} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0 ${u.role === "master" ? "bg-gradient-to-br from-purple-400 to-purple-600" : "bg-gradient-to-br from-blue-400 to-blue-600"}`}>{u.name[0]}</div>
-              <div className="min-w-0"><p className="text-sm font-semibold text-gray-900 truncate">{u.name}</p><p className="text-[10px] text-gray-500">{u.role === "master" ? "Master Admin" : u.branch || "Geen locatie"}</p></div>
+
+      {/* Branch filter */}
+      {branches.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setFilterBranch("all")} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterBranch === "all" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Alle</button>
+          {branches.map(b => (
+            <button key={b.id} onClick={() => setFilterBranch(b.id)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterBranch === b.id ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+              {b.name} ({usersInBranch(b.id)}/{maxPerBranch})
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* User list grouped by branch */}
+      {branches.length > 0 && filterBranch === "all" ? (
+        <div className="space-y-6">
+          {/* Master admins first */}
+          {account.users.filter(u => u.role === "master").length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Master Admin</p>
+              <div className="space-y-2">
+                {account.users.filter(u => u.role === "master").map(u => (
+                  <div key={u.id} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0 bg-gradient-to-br from-purple-400 to-purple-600">{(u.name || "?")[0]}</div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{u.name}</p>
+                        <p className="text-[10px] text-gray-500">Master Admin</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            {u.role !== "master" && <button onClick={() => handleDeleteUser(u.id)} className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all duration-200 flex-shrink-0"><Trash2 size={16} /></button>}
-          </div>
-        ))}
-      </div>
+          )}
+          {/* Per branch */}
+          {branches.map(b => {
+            const bUsers = branchUsers.filter(u => u.branchId === b.id);
+            return (
+              <div key={b.id}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1"><MapPin size={12} /> {b.name}</p>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${bUsers.length >= maxPerBranch ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
+                    {bUsers.length}/{maxPerBranch}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {bUsers.length === 0 ? (
+                    <div className="bg-gray-50 rounded-xl p-4 text-center"><p className="text-xs text-gray-400">Geen gebruikers in dit filiaal</p></div>
+                  ) : bUsers.map(u => (
+                    <div key={u.id} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0 bg-gradient-to-br from-blue-400 to-blue-600">{(u.name || "?")[0]}</div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{u.name}</p>
+                          <p className="text-[10px] text-gray-500">{u.phone ? `${u.phone} • ` : ""}{b.name}</p>
+                        </div>
+                      </div>
+                      <button onClick={() => handleDeleteUser(u.id)} className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all duration-200 flex-shrink-0"><Trash2 size={16} /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {/* Unassigned branch users (legacy) */}
+          {branchUsers.filter(u => !u.branchId).length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Niet toegewezen</p>
+              <div className="space-y-2">
+                {branchUsers.filter(u => !u.branchId).map(u => (
+                  <div key={u.id} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-amber-200 hover:shadow-md transition-all duration-200">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0 bg-gradient-to-br from-amber-400 to-amber-600">{(u.name || "?")[0]}</div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{u.name}</p>
+                        <p className="text-[10px] text-amber-600">{u.branch || "Geen filiaal"} (legacy)</p>
+                      </div>
+                    </div>
+                    <button onClick={() => handleDeleteUser(u.id)} className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all duration-200 flex-shrink-0"><Trash2 size={16} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Simple flat list when filtering */
+        <div className="space-y-2">
+          {filteredUsers.map(u => (
+            <div key={u.id} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0 ${u.role === "master" ? "bg-gradient-to-br from-purple-400 to-purple-600" : "bg-gradient-to-br from-blue-400 to-blue-600"}`}>{(u.name || "?")[0]}</div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{u.name}</p>
+                  <p className="text-[10px] text-gray-500">{u.role === "master" ? "Master Admin" : u.branch || "Geen filiaal"}{u.phone ? ` • ${u.phone}` : ""}</p>
+                </div>
+              </div>
+              {u.role !== "master" && <button onClick={() => handleDeleteUser(u.id)} className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all duration-200 flex-shrink-0"><Trash2 size={16} /></button>}
+            </div>
+          ))}
+          {filteredUsers.length === 0 && <div className="bg-gray-50 rounded-xl p-8 text-center"><Users size={24} className="mx-auto text-gray-300 mb-2" /><p className="text-xs text-gray-400">Geen gebruikers gevonden</p></div>}
+        </div>
+      )}
+
+      {/* Add user form */}
       {showForm && (
         <div className="bg-gray-50 rounded-xl p-4 space-y-3 border border-gray-200">
-          <p className="text-sm font-semibold text-gray-700">Nieuwe locatie-gebruiker</p>
-          <input type="text" placeholder="Naam" value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-          <input type="email" placeholder="Email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-          <input type="password" placeholder="Wachtwoord (min. 6 tekens)" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-          <div>
-            <select value={newUser.branch} onChange={(e) => setNewUser({ ...newUser, branch: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-              <option value="">Kies locatie...</option>
-              {branches.map((b, i) => <option key={i} value={b}>{b}</option>)}
-              <option value="__new__">+ Nieuwe locatie</option>
-            </select>
-            {newUser.branch === "__new__" && <div className="flex gap-2 mt-2"><input type="text" placeholder="Locatienaam" value={newBranch} onChange={(e) => setNewBranch(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm" /><button onClick={handleAddBranch} disabled={!newBranch.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-40">OK</button></div>}
+          <p className="text-sm font-semibold text-gray-700">Nieuwe gebruiker</p>
+          <div className="grid grid-cols-2 gap-3">
+            <input type="text" placeholder="Voornaam *" value={newUser.firstName} onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })} className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+            <input type="text" placeholder="Achternaam *" value={newUser.lastName} onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })} className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
           </div>
+          <input type="email" placeholder="E-mailadres *" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          <input type="password" placeholder="Wachtwoord * (min. 6 tekens)" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          <input type="tel" placeholder="Mobiel nummer (optioneel)" value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          <select value={newUser.branchId} onChange={(e) => setNewUser({ ...newUser, branchId: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+            <option value="">Kies filiaal... *</option>
+            {branches.map(b => {
+              const count = usersInBranch(b.id);
+              const full = count >= maxPerBranch;
+              return <option key={b.id} value={b.id} disabled={full}>{b.name} ({count}/{maxPerBranch}){full ? " — vol" : ""}</option>;
+            })}
+          </select>
+          {branches.length === 0 && <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2">Maak eerst filialen aan onder "Filialen" voordat je gebruikers toevoegt.</p>}
           <div className="flex gap-2">
-            <button onClick={() => { setShowForm(false); setNewUser({ name: "", email: "", password: "", branch: "" }); }} className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-xl font-semibold text-sm">Annuleren</button>
-            <button onClick={handleAddUser} disabled={isLoading} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60">{isLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Toevoegen</button>
+            <button onClick={() => { setShowForm(false); setNewUser({ firstName: "", lastName: "", email: "", password: "", phone: "", branchId: "" }); }} className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-xl font-semibold text-sm">Annuleren</button>
+            <button onClick={handleAddUser} disabled={isLoading || branches.length === 0} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60">
+              {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Toevoegen
+            </button>
           </div>
         </div>
       )}
       {!showForm && (
-        canAddMore ? (
-          <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all duration-200"><PlusCircle size={16} /> Gebruiker toevoegen ({branchUserCount}/{maxOutlets})</button>
-        ) : (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
-            <p className="text-sm font-semibold text-amber-800">Limiet bereikt ({branchUserCount}/{maxOutlets} outlets)</p>
-            <p className="text-xs text-amber-600 mt-1">Upgrade je abonnement om meer filialen toe te voegen.</p>
-          </div>
-        )
+        <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all duration-200">
+          <PlusCircle size={16} /> Gebruiker toevoegen
+        </button>
       )}
     </div>
   );
 }
 
-// ─── FILIAALVERGELIJKING (BRANCH COMPARISON) ─────────────────────────────────
-function BranchComparison({ account }) {
-  const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch))];
-  const [sortBy, setSortBy] = useState("total");
+// ─── FILIALEN BEHEER (BRANCH MANAGEMENT) ─────────────────────────────────────
+function BranchManagement({ account, setAccount }) {
+  const [showForm, setShowForm] = useState(false);
+  const [newBranchName, setNewBranchName] = useState("");
+  const [editingBranch, setEditingBranch] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [toast, setToast] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const branchData = branches.map(b => {
-    const bt = account.transactions.filter(t => t.branch === b);
+  const branches = account.branches || [];
+  const maxBranches = account.plan.outlets || 1;
+  const canAddBranch = branches.length < maxBranches;
+
+  // Legacy branches (from users who have branch names but no branch_id — backwards compat)
+  const legacyBranches = [...new Set(
+    account.users.filter(u => u.role === "branch" && u.branch && !u.branchId).map(u => u.branch)
+  )].filter(name => !branches.some(b => b.name === name));
+
+  const getBranchStats = (branchName) => {
+    const bt = account.transactions.filter(t => t.branch === branchName);
     const inQty = bt.filter(t => t.type === "IN").reduce((s, t) => s + t.qty, 0);
     const outQty = bt.filter(t => t.type === "OUT").reduce((s, t) => s + t.qty, 0);
-    const value = bt.reduce((sum, t) => {
-      const emb = account.emballageTypes.find(e => e.name === t.emballage);
-      const v = (emb?.value || 0) * t.qty;
-      return t.type === "IN" ? sum + v : sum - v;
-    }, 0);
-    const lastDate = bt.length > 0 ? [...bt].sort((a, b2) => b2.date.localeCompare(a.date))[0].date : null;
-    const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const inactive = !lastDate || new Date(lastDate) < oneWeekAgo;
-    return { name: b, total: bt.length, in: inQty, out: outQty, saldo: inQty - outQty, value, lastDate, inactive };
-  });
+    const userCount = account.users.filter(u => u.role === "branch" && (u.branchId ? branches.find(b => b.id === u.branchId)?.name === branchName : u.branch === branchName)).length;
+    const lastDate = bt.length > 0 ? [...bt].sort((a, b) => b.date.localeCompare(a.date))[0].date : null;
+    return { total: bt.length, in: inQty, out: outQty, userCount, lastDate };
+  };
 
-  const sorted = [...branchData].sort((a, b) => {
-    if (sortBy === "total") return b.total - a.total;
-    if (sortBy === "value") return b.value - a.value;
-    if (sortBy === "saldo") return b.saldo - a.saldo;
-    return 0;
-  });
+  const handleCreateBranch = async () => {
+    if (!newBranchName.trim()) return;
+    if (!canAddBranch) { setToast({ type: "error", message: `Maximaal ${maxBranches} filia${maxBranches !== 1 ? "len" : "al"} voor jouw abonnement.` }); return; }
+    if (branches.some(b => b.name.toLowerCase() === newBranchName.trim().toLowerCase())) { setToast({ type: "error", message: "Er bestaat al een filiaal met deze naam" }); return; }
 
-  const maxTotal = Math.max(...sorted.map(b => b.total), 1);
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.from("branches").insert({ account_id: account.id, name: newBranchName.trim() }).select().single();
+      if (error) throw error;
+      setAccount({ ...account, branches: [...branches, { id: data.id, name: data.name, logoUrl: null }] });
+      setNewBranchName("");
+      setShowForm(false);
+      setToast({ type: "success", message: `Filiaal "${data.name}" aangemaakt!` });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+    finally { setIsLoading(false); }
+  };
+
+  const handleRenameBranch = async (branchId) => {
+    if (!editName.trim()) return;
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.from("branches").update({ name: editName.trim() }).eq("id", branchId);
+      if (error) throw error;
+      setAccount({ ...account, branches: branches.map(b => b.id === branchId ? { ...b, name: editName.trim() } : b) });
+      setEditingBranch(null);
+      setToast({ type: "success", message: "Naam bijgewerkt!" });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+    finally { setIsLoading(false); }
+  };
+
+  const handleDeleteBranch = async (branchId) => {
+    const branch = branches.find(b => b.id === branchId);
+    const usersInBranch = account.users.filter(u => u.branchId === branchId).length;
+    if (usersInBranch > 0) { setToast({ type: "error", message: `Kan niet verwijderen: er ${usersInBranch === 1 ? "is" : "zijn"} nog ${usersInBranch} gebruiker${usersInBranch !== 1 ? "s" : ""} gekoppeld.` }); return; }
+    if (!confirm(`"${branch?.name}" verwijderen?`)) return;
+    try {
+      const { error } = await supabase.from("branches").delete().eq("id", branchId);
+      if (error) throw error;
+      setAccount({ ...account, branches: branches.filter(b => b.id !== branchId) });
+      setToast({ type: "success", message: "Filiaal verwijderd!" });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+  };
+
+  const handleBranchLogo = async (branchId, base64) => {
+    try {
+      const { error } = await supabase.from("branches").update({ logo_url: base64 }).eq("id", branchId);
+      if (error) throw error;
+      setAccount({ ...account, branches: branches.map(b => b.id === branchId ? { ...b, logoUrl: base64 } : b) });
+      setToast({ type: "success", message: "Logo bijgewerkt!" });
+    } catch (err) {
+      console.warn("Could not save branch logo:", err.message);
+      setAccount({ ...account, branches: branches.map(b => b.id === branchId ? { ...b, logoUrl: base64 } : b) });
+    }
+  };
 
   return (
     <div className="animate-fade-in space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex gap-2">
-          {[["total", "Transacties"], ["value", "Waarde"], ["saldo", "Saldo"]].map(([key, label]) => (
-            <button key={key} onClick={() => setSortBy(key)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${sortBy === key ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{label}</button>
-          ))}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Usage bar */}
+      <div className="bg-blue-50 rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-blue-700">{branches.length} van {maxBranches} filia{maxBranches !== 1 ? "len" : "al"}</p>
+          <p className="text-xs text-blue-600">Abonnement: {maxBranches} outlet{maxBranches !== 1 ? "s" : ""}</p>
+        </div>
+        <div className="text-right">
+          <div className="w-32 h-2 bg-blue-200 rounded-full">
+            <div className="h-full bg-blue-600 rounded-full transition-all" style={{ width: `${Math.min(100, (branches.length / maxBranches) * 100)}%` }} />
+          </div>
+          <p className="text-[10px] text-blue-500 mt-1">{branches.length}/{maxBranches} gebruikt</p>
         </div>
       </div>
-      {sorted.length === 0 ? (
-        <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100"><Building2 size={32} className="mx-auto text-gray-300 mb-2" /><p className="text-gray-500">Geen filialen ingesteld</p></div>
+
+      {/* Branch cards */}
+      {branches.length === 0 && legacyBranches.length === 0 ? (
+        <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100">
+          <Building2 size={32} className="mx-auto text-gray-300 mb-2" />
+          <p className="text-gray-500">Nog geen filialen aangemaakt</p>
+          <p className="text-xs text-gray-400 mt-1">Maak je eerste filiaal aan om te beginnen</p>
+        </div>
       ) : (
         <div className="space-y-3">
-          {sorted.map((b, i) => (
-            <div key={b.name} className={`bg-white rounded-xl p-4 shadow-sm border ${b.inactive ? "border-amber-200" : "border-gray-100"} hover:shadow-md transition-all duration-200`}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${i === 0 ? "bg-amber-100 text-amber-700" : i === 1 ? "bg-gray-100 text-gray-600" : i === 2 ? "bg-orange-50 text-orange-600" : "bg-gray-50 text-gray-500"}`}>{i + 1}</div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">{b.name} {b.inactive && <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">Inactief</span>}</p>
-                    <p className="text-[10px] text-gray-400">Laatste activiteit: {b.lastDate || "—"}</p>
+          {branches.map(b => {
+            const stats = getBranchStats(b.name);
+            const isEditing = editingBranch === b.id;
+            return (
+              <div key={b.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200">
+                <div className="flex items-start gap-4">
+                  <LogoUpload currentUrl={b.logoUrl} onUpload={(base64) => handleBranchLogo(b.id, base64)} label="" size="sm" />
+                  <div className="flex-1 min-w-0">
+                    {isEditing ? (
+                      <div className="flex gap-2 mb-2">
+                        <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
+                        <button onClick={() => handleRenameBranch(b.id)} disabled={isLoading} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold"><Check size={14} /></button>
+                        <button onClick={() => setEditingBranch(null)} className="px-3 py-1.5 bg-gray-200 text-gray-600 rounded-lg text-xs font-semibold"><X size={14} /></button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-sm font-semibold text-gray-900">{b.name}</p>
+                        <button onClick={() => { setEditingBranch(b.id); setEditName(b.name); }} className="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"><Pencil size={12} /></button>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                      <span className="flex items-center gap-1"><Users size={12} /> {stats.userCount} gebruiker{stats.userCount !== 1 ? "s" : ""}</span>
+                      <span className="flex items-center gap-1"><Activity size={12} /> {stats.total} transacties</span>
+                      <span className="text-emerald-600">↓ {stats.in}</span>
+                      <span className="text-rose-600">↑ {stats.out}</span>
+                      {stats.lastDate && <span className="text-gray-400">Laatste: {stats.lastDate}</span>}
+                    </div>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-lg font-bold text-gray-900">{sortBy === "value" ? fmt(b.value) : sortBy === "saldo" ? (b.saldo >= 0 ? "+" : "") + b.saldo : b.total}</p>
-                  <p className="text-[10px] text-gray-400">{sortBy === "total" ? "transacties" : sortBy === "value" ? "uitstaand" : "netto saldo"}</p>
+                  <button onClick={() => handleDeleteBranch(b.id)} className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all flex-shrink-0" title="Verwijderen"><Trash2 size={16} /></button>
                 </div>
               </div>
-              {/* Progress bar */}
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all duration-500" style={{ width: `${(b.total / maxTotal) * 100}%` }} />
-              </div>
-              <div className="flex justify-between mt-2 text-[10px] text-gray-400">
-                <span className="text-emerald-600">↓ {b.in} in</span>
-                <span className="text-rose-600">↑ {b.out} uit</span>
-                <span className="text-purple-600">≈ {fmt(b.value)}</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
+
+          {/* Legacy branches */}
+          {legacyBranches.length > 0 && (
+            <>
+              <p className="text-xs font-semibold text-amber-600 pt-2">Oude filialen (van voor de update)</p>
+              {legacyBranches.map(name => {
+                const stats = getBranchStats(name);
+                return (
+                  <div key={name} className="bg-white rounded-xl p-4 shadow-sm border border-amber-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">{name} <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full">Legacy</span></p>
+                        <div className="flex gap-4 text-xs text-gray-500 mt-1">
+                          <span>{stats.userCount} gebruiker{stats.userCount !== 1 ? "s" : ""}</span>
+                          <span>{stats.total} transacties</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
+          )}
         </div>
+      )}
+
+      {/* Add branch form */}
+      {showForm && (
+        <div className="bg-gray-50 rounded-xl p-4 space-y-3 border border-gray-200">
+          <p className="text-sm font-semibold text-gray-700">Nieuw filiaal</p>
+          <input type="text" placeholder="Filiaalnaam" value={newBranchName} onChange={(e) => setNewBranchName(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
+          <div className="flex gap-2">
+            <button onClick={() => { setShowForm(false); setNewBranchName(""); }} className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-xl font-semibold text-sm">Annuleren</button>
+            <button onClick={handleCreateBranch} disabled={isLoading || !newBranchName.trim()} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60">
+              {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Aanmaken
+            </button>
+          </div>
+        </div>
+      )}
+      {!showForm && (
+        canAddBranch ? (
+          <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all duration-200">
+            <PlusCircle size={16} /> Filiaal toevoegen ({branches.length}/{maxBranches})
+          </button>
+        ) : (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+            <p className="text-sm font-semibold text-amber-800">Limiet bereikt ({branches.length}/{maxBranches} filialen)</p>
+            <p className="text-xs text-amber-600 mt-1">Upgrade je abonnement om meer filialen toe te voegen.</p>
+          </div>
+        )
       )}
     </div>
   );
@@ -1451,12 +1710,15 @@ function EmballageBeheer({ account, setAccount }) {
 
 // ─── ALERTS & NOTIFICATIES ───────────────────────────────────────────────────
 function AlertsPanel({ account }) {
-  const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch))];
+  const branchNames = (account.branches || []).map(b => b.name);
+  // Also include legacy branch names from users
+  const legacyNames = [...new Set(account.users.filter(u => u.role === "branch" && u.branch).map(u => u.branch))];
+  const allBranchNames = [...new Set([...branchNames, ...legacyNames])];
   const alerts = [];
 
   // Inactive branches
   const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-  branches.forEach(b => {
+  allBranchNames.forEach(b => {
     const bt = account.transactions.filter(t => t.branch === b);
     const lastDate = bt.length > 0 ? [...bt].sort((a, b2) => b2.date.localeCompare(a.date))[0].date : null;
     if (!lastDate || new Date(lastDate) < oneWeekAgo) {
@@ -1809,18 +2071,10 @@ function CompanySettings({ account, setAccount }) {
         </div>
       </div>
 
-      {/* Branch logos */}
+      {/* Branch logos info */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Filiaallogo's</h3>
-        <p className="text-sm text-gray-500 mb-4">Geef elk filiaal een eigen logo. Dit wordt getoond in hun app en in het admin overzicht.</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {account.users.filter(u => u.role === "branch").map(u => (
-            <BranchLogoCard key={u.id} user={u} account={account} setAccount={setAccount} />
-          ))}
-          {account.users.filter(u => u.role === "branch").length === 0 && (
-            <div className="col-span-full text-center py-6"><Building2 size={24} className="mx-auto text-gray-300 mb-2" /><p className="text-xs text-gray-400">Nog geen filialen</p></div>
-          )}
-        </div>
+        <h3 className="text-sm font-semibold text-gray-900 mb-2">Filiaallogo's</h3>
+        <p className="text-sm text-gray-500">Filiaallogo's kun je instellen bij het betreffende filiaal onder <span className="font-semibold text-blue-600">Filialen</span> in het menu.</p>
       </div>
     </div>
   );
@@ -1872,8 +2126,11 @@ function MasterApp({ account, user, onLogout, setAccount }) {
   const alertCount = (() => {
     let count = 0;
     const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch))];
-    branches.forEach(b => {
+    const branchNames = [...new Set([
+      ...(account.branches || []).map(b => b.name),
+      ...account.users.filter(u => u.role === "branch" && u.branch).map(u => u.branch),
+    ])];
+    branchNames.forEach(b => {
       const bt = account.transactions.filter(t => t.branch === b);
       const lastDate = bt.length > 0 ? [...bt].sort((a, b2) => b2.date.localeCompare(a.date))[0].date : null;
       if (!lastDate || new Date(lastDate) < oneWeekAgo) count++;
@@ -1947,7 +2204,7 @@ function MasterApp({ account, user, onLogout, setAccount }) {
         {/* Page content */}
         <div className="p-4 lg:p-8 max-w-5xl">
           {masterScreen === "dashboard" && <MasterDashboard account={account} />}
-          {masterScreen === "filialen" && <BranchComparison account={account} />}
+          {masterScreen === "filialen" && <BranchManagement account={account} setAccount={setAccount} />}
           {masterScreen === "leveranciers" && <CompanySupplierBalances account={account} />}
           {masterScreen === "logboek" && <MasterLogboek account={account} setAccount={setAccount} />}
           {masterScreen === "beheer" && <MasterBeheer account={account} setAccount={setAccount} />}

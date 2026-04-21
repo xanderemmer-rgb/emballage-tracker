@@ -84,10 +84,11 @@ export function useSupabase() {
   // ─── LOAD SINGLE ACCOUNT (for master/branch users) ────────────────────────
   const loadAccountData = async (accountId) => {
     try {
-      // Fetch account, profiles, transactions, emballage_types, suppliers in parallel
-      const [accountRes, profilesRes, transactionsRes, emballageRes, suppliersRes] = await Promise.all([
+      // Fetch account, profiles, branches, transactions, emballage_types, suppliers in parallel
+      const [accountRes, profilesRes, branchesRes, transactionsRes, emballageRes, suppliersRes] = await Promise.all([
         supabase.from("accounts").select("*").eq("id", accountId).single(),
         supabase.from("profiles").select("*").eq("account_id", accountId).order("created_at"),
+        supabase.from("branches").select("*").eq("account_id", accountId).order("name").then(r => r).catch(() => ({ data: [], error: null })),
         supabase.from("transactions").select("*").eq("account_id", accountId).order("date", { ascending: false }),
         supabase.from("emballage_types").select("*").eq("account_id", accountId).order("name"),
         supabase.from("suppliers").select("*").eq("account_id", accountId).order("name"),
@@ -99,6 +100,7 @@ export function useSupabase() {
       const shaped = shapeAccountData(
         accountRes.data,
         profilesRes.data || [],
+        branchesRes.data || [],
         transactionsRes.data || [],
         emballageRes.data || [],
         suppliersRes.data || []
@@ -156,24 +158,33 @@ export function useSupabase() {
   };
 
   // ─── SHAPE DATA ───────────────────────────────────────────────────────────
-  function shapeAccountData(acc, profiles, transactions, emballageTypes, suppliers) {
+  function shapeAccountData(acc, profiles, branches, transactions, emballageTypes, suppliers) {
     return {
       id: acc.id,
       companyName: acc.company_name,
       email: acc.email,
       logoUrl: acc.logo_url || null,
+      maxUsersPerBranch: acc.max_users_per_branch || 2,
       plan: {
         outlets: acc.plan_outlets,
         startDate: acc.plan_start_date,
         status: acc.plan_status,
         nextBilling: acc.plan_next_billing,
       },
+      branches: (branches || []).map(b => ({
+        id: b.id,
+        name: b.name,
+        logoUrl: b.logo_url || null,
+      })),
       users: profiles.map(p => ({
         id: p.id,
         name: p.display_name,
+        firstName: p.first_name || "",
+        lastName: p.last_name || "",
+        phone: p.phone || "",
         role: p.role,
         branch: p.branch,
-        branch_id: p.branch_id,
+        branchId: p.branch_id || null,
         branchLogoUrl: p.branch_logo_url || null,
       })),
       emballageTypes: emballageTypes.map(e => ({
