@@ -4,7 +4,10 @@ import {
   Truck, Download, ScanLine, ArrowDownCircle, ArrowUpCircle, Plus, PlusCircle, Pencil,
   Trash2, Key, TrendingUp, CheckCircle, Check, X,
   Sparkles, Inbox, AlertCircle, Search,
-  Calendar, LogOut, User, Users, Building2, Camera, Loader2
+  Calendar, LogOut, User, Users, Building2, Camera, Loader2,
+  LayoutDashboard, ChevronRight, Bell, Shield, FileText, MapPin,
+  Activity, Eye, AlertTriangle, ChevronDown, ChevronUp, Menu, XCircle,
+  DollarSign, Hash, Percent, Clock, TrendingDown, MoreHorizontal
 } from "lucide-react";
 import { useSupabase, setSkipProfileLoad } from "./lib/useSupabase";
 import { supabase } from "./lib/supabase";
@@ -918,41 +921,177 @@ function AttViewer({ att, onClose }) {
   return att ? <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={onClose}><img src={att} alt="attachment" className="max-h-96 rounded-lg" /></div> : null;
 }
 
-// ─── MASTER DASHBOARD ─────────────────────────────────────────────────────────
+// ─── MASTER DASHBOARD (RICH) ──────────────────────────────────────────────────
 function MasterDashboard({ account }) {
   const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch))];
   const totalTrans = account.transactions.length;
   const inCount = account.transactions.filter(t => t.type === "IN").length;
   const outCount = account.transactions.filter(t => t.type === "OUT").length;
+  const totalValue = account.transactions.reduce((sum, t) => {
+    const emb = account.emballageTypes.find(e => e.name === t.emballage);
+    const val = (emb?.value || 0) * t.qty;
+    return t.type === "IN" ? sum + val : sum - val;
+  }, 0);
+
+  // Activity last 4 weeks
+  const now = new Date();
+  const weekData = [3, 2, 1, 0].map(weeksAgo => {
+    const start = new Date(now); start.setDate(start.getDate() - (weeksAgo + 1) * 7);
+    const end = new Date(now); end.setDate(end.getDate() - weeksAgo * 7);
+    const weekTrans = account.transactions.filter(t => { const d = new Date(t.date); return d >= start && d < end; });
+    return {
+      label: weeksAgo === 0 ? "Deze week" : `${weeksAgo}w`,
+      in: weekTrans.filter(t => t.type === "IN").reduce((s, t) => s + t.qty, 0),
+      out: weekTrans.filter(t => t.type === "OUT").reduce((s, t) => s + t.qty, 0),
+    };
+  });
+
+  // Recent activity (last 5)
+  const recentTrans = [...account.transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+
+  // Branch performance
+  const branchStats = branches.map(b => {
+    const bt = account.transactions.filter(t => t.branch === b);
+    return {
+      name: b,
+      total: bt.length,
+      in: bt.filter(t => t.type === "IN").reduce((s, t) => s + t.qty, 0),
+      out: bt.filter(t => t.type === "OUT").reduce((s, t) => s + t.qty, 0),
+      lastActivity: bt.length > 0 ? [...bt].sort((a, b2) => b2.date.localeCompare(a.date))[0].date : null,
+    };
+  });
+
+  // Alerts
+  const alerts = [];
+  const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  branchStats.forEach(bs => {
+    if (!bs.lastActivity || new Date(bs.lastActivity) < oneWeekAgo) {
+      alerts.push({ type: "warning", message: `${bs.name} heeft al meer dan een week niets geregistreerd` });
+    }
+  });
+  const saldo = buildSaldoData(account.transactions, account.emballageTypes, account.suppliers);
+  Object.entries(saldo).forEach(([sup, data]) => {
+    if (data.value > 500) {
+      alerts.push({ type: "info", message: `Hoog saldo bij ${sup}: ${fmt(data.value)} uitstaand` });
+    }
+  });
 
   return (
     <div className="animate-fade-in space-y-6">
-      <h2 className="text-xl md:text-3xl font-bold text-gray-900 flex items-center gap-2"><BarChart3 size={24} className="md:w-7 md:h-7" /> Dashboard</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-3 md:p-4">
-          <p className="text-xs md:text-sm text-blue-600 font-semibold">Totaal transacties</p>
-          <p className="text-2xl md:text-3xl font-bold text-blue-900">{totalTrans}</p>
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-gray-500">Transacties</p>
+            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center"><Hash size={16} className="text-blue-500" /></div>
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{totalTrans}</p>
+          <p className="text-[10px] text-gray-400 mt-1">{branches.length} filialen actief</p>
         </div>
-        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-3 md:p-4">
-          <p className="text-xs md:text-sm text-green-600 font-semibold flex items-center gap-1"><ArrowDownCircle size={16} /> Inkomend</p>
-          <p className="text-2xl md:text-3xl font-bold text-green-900">{inCount}</p>
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-gray-500">Inkomend</p>
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center"><ArrowDownCircle size={16} className="text-emerald-500" /></div>
+          </div>
+          <p className="text-2xl font-bold text-emerald-600">{inCount}</p>
+          <p className="text-[10px] text-gray-400 mt-1">{totalTrans > 0 ? Math.round(inCount / totalTrans * 100) : 0}% van totaal</p>
         </div>
-        <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-3 md:p-4">
-          <p className="text-xs md:text-sm text-red-600 font-semibold flex items-center gap-1"><ArrowUpCircle size={16} /> Uitgaand</p>
-          <p className="text-2xl md:text-3xl font-bold text-red-900">{outCount}</p>
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-gray-500">Uitgaand</p>
+            <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center"><ArrowUpCircle size={16} className="text-rose-500" /></div>
+          </div>
+          <p className="text-2xl font-bold text-rose-600">{outCount}</p>
+          <p className="text-[10px] text-gray-400 mt-1">{totalTrans > 0 ? Math.round(outCount / totalTrans * 100) : 0}% van totaal</p>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-gray-500">Inventariswaarde</p>
+            <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center"><DollarSign size={16} className="text-purple-500" /></div>
+          </div>
+          <p className="text-2xl font-bold text-purple-700">{fmt(totalValue)}</p>
+          <p className="text-[10px] text-gray-400 mt-1">Geschatte waarde</p>
         </div>
       </div>
-      {branches.length === 0 ? (
-        <div className="bg-gray-50 rounded-xl p-8 text-center">
-          <Building2 size={32} className="mx-auto text-gray-400 mb-2" />
-          <p className="text-gray-600">Geen filialen ingesteld</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <p className="font-semibold text-gray-700">Filialen ({branches.length})</p>
-          {branches.map((b, i) => <div key={i} className="bg-white rounded-lg p-3 flex items-center justify-between shadow-sm"><p className="font-semibold text-gray-900">{b}</p></div>)}
+
+      {/* Alerts */}
+      {alerts.length > 0 && (
+        <div className="space-y-2">
+          {alerts.slice(0, 3).map((a, i) => (
+            <div key={i} className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm ${a.type === "warning" ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-blue-50 border-blue-200 text-blue-800"}`}>
+              {a.type === "warning" ? <AlertTriangle size={16} /> : <Bell size={16} />}
+              <span>{a.message}</span>
+            </div>
+          ))}
         </div>
       )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Activity chart */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-semibold text-gray-900">Activiteit laatste 4 weken</p>
+            <div className="flex items-center gap-3 text-xs text-gray-500">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> In</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400" /> Uit</span>
+            </div>
+          </div>
+          <MiniBarChart data={weekData} />
+        </div>
+
+        {/* Recent activity feed */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <p className="text-sm font-semibold text-gray-900 mb-3">Recente activiteit</p>
+          {recentTrans.length === 0 ? (
+            <div className="text-center py-6"><Inbox size={24} className="mx-auto text-gray-300 mb-2" /><p className="text-xs text-gray-400">Nog geen transacties</p></div>
+          ) : (
+            <div className="space-y-2">
+              {recentTrans.map(t => (
+                <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${t.type === "IN" ? "bg-emerald-50" : "bg-rose-50"}`}>
+                    {t.type === "IN" ? <ArrowDownCircle size={14} className="text-emerald-600" /> : <ArrowUpCircle size={14} className="text-rose-600" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{t.emballage} ({t.qty}x)</p>
+                    <p className="text-[10px] text-gray-500">{t.supplier} • {t.branch} • {t.date}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Branch overview */}
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <p className="text-sm font-semibold text-gray-900 mb-3">Filiaaloverzicht</p>
+        {branchStats.length === 0 ? (
+          <div className="text-center py-6"><Building2 size={24} className="mx-auto text-gray-300 mb-2" /><p className="text-xs text-gray-400">Geen filialen ingesteld</p></div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-gray-100">
+                <th className="text-left py-2 px-3 text-xs font-semibold text-gray-500">Filiaal</th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">Transacties</th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">In</th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">Uit</th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">Laatste activiteit</th>
+              </tr></thead>
+              <tbody>
+                {branchStats.map(bs => (
+                  <tr key={bs.name} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-2.5 px-3 font-medium text-gray-900 flex items-center gap-2"><MapPin size={14} className="text-gray-400" /> {bs.name}</td>
+                    <td className="py-2.5 px-3 text-right text-gray-700">{bs.total}</td>
+                    <td className="py-2.5 px-3 text-right text-emerald-600 font-medium">+{bs.in}</td>
+                    <td className="py-2.5 px-3 text-right text-rose-600 font-medium">−{bs.out}</td>
+                    <td className="py-2.5 px-3 text-right text-gray-400 text-xs">{bs.lastActivity || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -968,157 +1107,435 @@ function MasterBeheer({ account, setAccount }) {
   const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch).filter(Boolean))];
 
   const handleAddUser = async () => {
-    if (!newUser.name || !newUser.email || !newUser.password || !newUser.branch) {
-      setToast({ type: "error", message: "Alle velden zijn verplicht" });
-      return;
-    }
-    if (newUser.password.length < 6) {
-      setToast({ type: "error", message: "Wachtwoord moet minimaal 6 tekens zijn" });
-      return;
-    }
+    if (!newUser.name || !newUser.email || !newUser.password || !newUser.branch) { setToast({ type: "error", message: "Alle velden zijn verplicht" }); return; }
+    if (newUser.password.length < 6) { setToast({ type: "error", message: "Wachtwoord moet minimaal 6 tekens zijn" }); return; }
     setIsLoading(true);
     try {
-      // 1. Create Supabase Auth user via admin invite (signUp)
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: newUser.email,
-        password: newUser.password,
-        options: {
-          data: { display_name: newUser.name, branch: newUser.branch },
-        },
-      });
+      const { data: authData, error: authError } = await supabase.auth.signUp({ email: newUser.email, password: newUser.password, options: { data: { display_name: newUser.name, branch: newUser.branch } } });
       if (authError) throw authError;
-
       const userId = authData.user?.id;
       if (!userId) throw new Error("Gebruiker kon niet aangemaakt worden");
-
-      // 2. Create profile record linked to this account
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .upsert({
-          id: userId,
-          account_id: account.id,
-          display_name: newUser.name,
-          role: "branch",
-          branch: newUser.branch,
-        });
+      const { error: profileError } = await supabase.from("profiles").upsert({ id: userId, account_id: account.id, display_name: newUser.name, role: "branch", branch: newUser.branch });
       if (profileError) throw profileError;
-
-      // 3. Update local state
-      setAccount({
-        ...account,
-        users: [...account.users, {
-          id: userId,
-          name: newUser.name,
-          role: "branch",
-          branch: newUser.branch,
-        }],
-      });
-
-      setNewUser({ name: "", email: "", password: "", branch: "" });
-      setShowForm(false);
-      setToast({ type: "success", message: `${newUser.name} toegevoegd! Ze kunnen inloggen met ${newUser.email}` });
+      setAccount({ ...account, users: [...account.users, { id: userId, name: newUser.name, role: "branch", branch: newUser.branch }] });
+      setNewUser({ name: "", email: "", password: "", branch: "" }); setShowForm(false);
+      setToast({ type: "success", message: `${newUser.name} toegevoegd!` });
     } catch (err) {
-      console.error("Error adding user:", err);
-      const msg = err.message?.includes("already registered")
-        ? "Dit emailadres is al in gebruik"
-        : err.message || "Er ging iets mis";
+      const msg = err.message?.includes("already registered") ? "Dit emailadres is al in gebruik" : err.message || "Er ging iets mis";
       setToast({ type: "error", message: msg });
-    } finally {
-      setIsLoading(false);
-    }
+    } finally { setIsLoading(false); }
   };
 
   const handleDeleteUser = async (id) => {
     const user = account.users.find(u => u.id === id);
     if (!user || user.role === "master") return;
     if (!confirm(`Weet je zeker dat je ${user.name} wilt verwijderen?`)) return;
-
     try {
-      // Delete profile (auth user stays but can't access anything without profile)
-      const { error } = await supabase
-        .from("profiles")
-        .delete()
-        .eq("id", id);
+      const { error } = await supabase.from("profiles").delete().eq("id", id);
       if (error) throw error;
-
       setAccount({ ...account, users: account.users.filter(u => u.id !== id) });
       setToast({ type: "success", message: "Gebruiker verwijderd!" });
-    } catch (err) {
-      setToast({ type: "error", message: "Fout bij verwijderen: " + err.message });
-    }
+    } catch (err) { setToast({ type: "error", message: "Fout: " + err.message }); }
   };
 
-  const handleAddBranch = () => {
-    if (!newBranch.trim()) return;
-    setNewUser({ ...newUser, branch: newBranch.trim() });
-    setNewBranch("");
+  const handleAddBranch = () => { if (!newBranch.trim()) return; setNewUser({ ...newUser, branch: newBranch.trim() }); setNewBranch(""); };
+
+  return (
+    <div className="animate-fade-in space-y-6">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <div className="bg-blue-50 rounded-xl p-4 flex items-center justify-between">
+        <div><p className="text-sm font-semibold text-blue-700">{account.users.length} gebruiker{account.users.length !== 1 ? "s" : ""}</p><p className="text-xs text-blue-600">{branches.length} locatie{branches.length !== 1 ? "s" : ""} actief</p></div>
+        <div className="text-right"><p className="text-xs text-blue-600">Abonnement: {account.plan.outlets} outlet{account.plan.outlets !== 1 ? "s" : ""}</p></div>
+      </div>
+      <div className="space-y-2">
+        {account.users.map(u => (
+          <div key={u.id} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0 ${u.role === "master" ? "bg-gradient-to-br from-purple-400 to-purple-600" : "bg-gradient-to-br from-blue-400 to-blue-600"}`}>{u.name[0]}</div>
+              <div className="min-w-0"><p className="text-sm font-semibold text-gray-900 truncate">{u.name}</p><p className="text-[10px] text-gray-500">{u.role === "master" ? "Master Admin" : u.branch || "Geen locatie"}</p></div>
+            </div>
+            {u.role !== "master" && <button onClick={() => handleDeleteUser(u.id)} className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all duration-200 flex-shrink-0"><Trash2 size={16} /></button>}
+          </div>
+        ))}
+      </div>
+      {showForm && (
+        <div className="bg-gray-50 rounded-xl p-4 space-y-3 border border-gray-200">
+          <p className="text-sm font-semibold text-gray-700">Nieuwe locatie-gebruiker</p>
+          <input type="text" placeholder="Naam" value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          <input type="email" placeholder="Email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          <input type="password" placeholder="Wachtwoord (min. 6 tekens)" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          <div>
+            <select value={newUser.branch} onChange={(e) => setNewUser({ ...newUser, branch: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">Kies locatie...</option>
+              {branches.map((b, i) => <option key={i} value={b}>{b}</option>)}
+              <option value="__new__">+ Nieuwe locatie</option>
+            </select>
+            {newUser.branch === "__new__" && <div className="flex gap-2 mt-2"><input type="text" placeholder="Locatienaam" value={newBranch} onChange={(e) => setNewBranch(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm" /><button onClick={handleAddBranch} disabled={!newBranch.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-xl font-semibold text-sm disabled:opacity-40">OK</button></div>}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => { setShowForm(false); setNewUser({ name: "", email: "", password: "", branch: "" }); }} className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-xl font-semibold text-sm">Annuleren</button>
+            <button onClick={handleAddUser} disabled={isLoading} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60">{isLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Toevoegen</button>
+          </div>
+        </div>
+      )}
+      {!showForm && <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all duration-200"><PlusCircle size={16} /> Gebruiker toevoegen</button>}
+    </div>
+  );
+}
+
+// ─── FILIAALVERGELIJKING (BRANCH COMPARISON) ─────────────────────────────────
+function BranchComparison({ account }) {
+  const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch))];
+  const [sortBy, setSortBy] = useState("total");
+
+  const branchData = branches.map(b => {
+    const bt = account.transactions.filter(t => t.branch === b);
+    const inQty = bt.filter(t => t.type === "IN").reduce((s, t) => s + t.qty, 0);
+    const outQty = bt.filter(t => t.type === "OUT").reduce((s, t) => s + t.qty, 0);
+    const value = bt.reduce((sum, t) => {
+      const emb = account.emballageTypes.find(e => e.name === t.emballage);
+      const v = (emb?.value || 0) * t.qty;
+      return t.type === "IN" ? sum + v : sum - v;
+    }, 0);
+    const lastDate = bt.length > 0 ? [...bt].sort((a, b2) => b2.date.localeCompare(a.date))[0].date : null;
+    const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const inactive = !lastDate || new Date(lastDate) < oneWeekAgo;
+    return { name: b, total: bt.length, in: inQty, out: outQty, saldo: inQty - outQty, value, lastDate, inactive };
+  });
+
+  const sorted = [...branchData].sort((a, b) => {
+    if (sortBy === "total") return b.total - a.total;
+    if (sortBy === "value") return b.value - a.value;
+    if (sortBy === "saldo") return b.saldo - a.saldo;
+    return 0;
+  });
+
+  const maxTotal = Math.max(...sorted.map(b => b.total), 1);
+
+  return (
+    <div className="animate-fade-in space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2">
+          {[["total", "Transacties"], ["value", "Waarde"], ["saldo", "Saldo"]].map(([key, label]) => (
+            <button key={key} onClick={() => setSortBy(key)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${sortBy === key ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{label}</button>
+          ))}
+        </div>
+      </div>
+      {sorted.length === 0 ? (
+        <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100"><Building2 size={32} className="mx-auto text-gray-300 mb-2" /><p className="text-gray-500">Geen filialen ingesteld</p></div>
+      ) : (
+        <div className="space-y-3">
+          {sorted.map((b, i) => (
+            <div key={b.name} className={`bg-white rounded-xl p-4 shadow-sm border ${b.inactive ? "border-amber-200" : "border-gray-100"} hover:shadow-md transition-all duration-200`}>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${i === 0 ? "bg-amber-100 text-amber-700" : i === 1 ? "bg-gray-100 text-gray-600" : i === 2 ? "bg-orange-50 text-orange-600" : "bg-gray-50 text-gray-500"}`}>{i + 1}</div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900 flex items-center gap-2">{b.name} {b.inactive && <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">Inactief</span>}</p>
+                    <p className="text-[10px] text-gray-400">Laatste activiteit: {b.lastDate || "—"}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-gray-900">{sortBy === "value" ? fmt(b.value) : sortBy === "saldo" ? (b.saldo >= 0 ? "+" : "") + b.saldo : b.total}</p>
+                  <p className="text-[10px] text-gray-400">{sortBy === "total" ? "transacties" : sortBy === "value" ? "uitstaand" : "netto saldo"}</p>
+                </div>
+              </div>
+              {/* Progress bar */}
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all duration-500" style={{ width: `${(b.total / maxTotal) * 100}%` }} />
+              </div>
+              <div className="flex justify-between mt-2 text-[10px] text-gray-400">
+                <span className="text-emerald-600">↓ {b.in} in</span>
+                <span className="text-rose-600">↑ {b.out} uit</span>
+                <span className="text-purple-600">≈ {fmt(b.value)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── LEVERANCIERSSALDO (COMPANY LEVEL) ───────────────────────────────────────
+function CompanySupplierBalances({ account }) {
+  const saldo = buildSaldoData(account.transactions, account.emballageTypes, account.suppliers);
+  const totalValue = Object.values(saldo).reduce((s, d) => s + d.value, 0);
+  const entries = Object.entries(saldo).sort((a, b) => b[1].value - a[1].value);
+
+  return (
+    <div className="animate-fade-in space-y-6">
+      {/* Total card */}
+      <div className="bg-gradient-to-br from-purple-500 to-purple-700 rounded-xl p-5 text-white">
+        <p className="text-sm font-medium text-purple-200">Totale emballagewaarde uitstaand</p>
+        <p className="text-3xl font-bold mt-1">{fmt(totalValue)}</p>
+        <p className="text-xs text-purple-300 mt-2">{entries.length} leverancier{entries.length !== 1 ? "s" : ""} • {account.transactions.length} transacties</p>
+      </div>
+
+      {entries.length === 0 ? (
+        <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100"><Truck size={32} className="mx-auto text-gray-300 mb-2" /><p className="text-gray-500">Nog geen transacties</p></div>
+      ) : (
+        <div className="space-y-3">
+          {entries.map(([supplier, data]) => {
+            const saldoVal = data.in - data.out;
+            const color = getSupplierColor(supplier, account.suppliers);
+            const pct = totalValue > 0 ? (data.value / totalValue * 100) : 0;
+            return (
+              <div key={supplier} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className={`px-4 py-3 ${color.bg} border-b ${color.border} flex items-center justify-between`}>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${color.dot}`} />
+                    <span className={`font-bold text-sm ${color.text}`}>{supplier}</span>
+                    <span className="text-[10px] text-gray-400 ml-1">{Math.round(pct)}% van totaal</span>
+                  </div>
+                  <span className="text-sm font-bold text-purple-700">{fmt(data.value)}</span>
+                </div>
+                <div className="px-4 py-3">
+                  <div className="flex gap-6 text-sm mb-2">
+                    <span className="text-emerald-600 font-medium">↓ {data.in} in</span>
+                    <span className="text-rose-600 font-medium">↑ {data.out} uit</span>
+                    <span className={`font-bold ${saldoVal >= 0 ? "text-emerald-700" : "text-rose-700"}`}>Saldo: {saldoVal >= 0 ? "+" : ""}{saldoVal}</span>
+                  </div>
+                  {/* Per branch breakdown */}
+                  <div className="space-y-1 mt-2">
+                    {[...new Set(account.transactions.filter(t => t.supplier === supplier).map(t => t.branch))].map(branch => {
+                      const bt = account.transactions.filter(t => t.supplier === supplier && t.branch === branch);
+                      const bIn = bt.filter(t => t.type === "IN").reduce((s, t) => s + t.qty, 0);
+                      const bOut = bt.filter(t => t.type === "OUT").reduce((s, t) => s + t.qty, 0);
+                      return (
+                        <div key={branch} className="flex items-center justify-between text-xs py-1 border-b border-gray-50 last:border-0">
+                          <span className="text-gray-600 flex items-center gap-1"><MapPin size={10} className="text-gray-400" /> {branch}</span>
+                          <div className="flex gap-3">
+                            <span className="text-emerald-600">+{bIn}</span>
+                            <span className="text-rose-600">−{bOut}</span>
+                            <span className="font-semibold text-gray-700 min-w-[28px] text-right">{bIn - bOut >= 0 ? "+" : ""}{bIn - bOut}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── EMBALLAGE & LEVERANCIER BEHEER ──────────────────────────────────────────
+function EmballageBeheer({ account, setAccount }) {
+  const [tab, setTab] = useState("emballage");
+  const [newEmb, setNewEmb] = useState({ name: "", value: "" });
+  const [newSup, setNewSup] = useState("");
+  const [toast, setToast] = useState(null);
+
+  const handleAddEmballage = async () => {
+    if (!newEmb.name || !newEmb.value) return;
+    try {
+      const { data, error } = await supabase.from("emballage_types").insert({ account_id: account.id, name: newEmb.name, value: parseFloat(newEmb.value) }).select().single();
+      if (error) throw error;
+      setAccount({ ...account, emballageTypes: [...account.emballageTypes, { name: newEmb.name, value: parseFloat(newEmb.value), id: data.id }] });
+      setNewEmb({ name: "", value: "" });
+      setToast({ type: "success", message: `${newEmb.name} toegevoegd` });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+  };
+
+  const handleDeleteEmballage = async (name) => {
+    if (!confirm(`"${name}" verwijderen?`)) return;
+    try {
+      const { error } = await supabase.from("emballage_types").delete().eq("account_id", account.id).eq("name", name);
+      if (error) throw error;
+      setAccount({ ...account, emballageTypes: account.emballageTypes.filter(e => e.name !== name) });
+      setToast({ type: "success", message: "Verwijderd" });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+  };
+
+  const handleAddSupplier = async () => {
+    if (!newSup.trim()) return;
+    try {
+      const { error } = await supabase.from("suppliers").insert({ account_id: account.id, name: newSup.trim() });
+      if (error) throw error;
+      setAccount({ ...account, suppliers: [...account.suppliers, newSup.trim()] });
+      setNewSup("");
+      setToast({ type: "success", message: `${newSup} toegevoegd` });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+  };
+
+  const handleDeleteSupplier = async (name) => {
+    if (!confirm(`"${name}" verwijderen?`)) return;
+    try {
+      const { error } = await supabase.from("suppliers").delete().eq("account_id", account.id).eq("name", name);
+      if (error) throw error;
+      setAccount({ ...account, suppliers: account.suppliers.filter(s => s !== name) });
+      setToast({ type: "success", message: "Verwijderd" });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
   };
 
   return (
     <div className="animate-fade-in space-y-6">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <h2 className="text-xl md:text-3xl font-bold text-gray-900 flex items-center gap-2"><Users size={24} className="md:w-7 md:h-7" /> Gebruikers</h2>
-
-      {/* User count summary */}
-      <div className="bg-blue-50 rounded-xl p-4 flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-blue-700">{account.users.length} gebruiker{account.users.length !== 1 ? "s" : ""}</p>
-          <p className="text-xs text-blue-600">{branches.length} locatie{branches.length !== 1 ? "s" : ""} actief</p>
-        </div>
-        <div className="text-right">
-          <p className="text-xs text-blue-600">Abonnement: {account.plan.outlets} outlet{account.plan.outlets !== 1 ? "s" : ""}</p>
-        </div>
+      <div className="flex gap-2">
+        <button onClick={() => setTab("emballage")} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "emballage" ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600"}`}><Package size={14} className="inline mr-1" /> Emballage types</button>
+        <button onClick={() => setTab("suppliers")} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "suppliers" ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600"}`}><Truck size={14} className="inline mr-1" /> Leveranciers</button>
       </div>
 
-      {/* User list */}
-      <div className="space-y-3">
-        {account.users.map(u => (
-          <div key={u.id} className="bg-white rounded-lg p-3 md:p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="flex items-center gap-2 md:gap-3 min-w-0">
-              <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-white text-sm md:text-base font-bold flex-shrink-0 ${u.role === "master" ? "bg-gradient-to-br from-purple-400 to-purple-600" : "bg-gradient-to-br from-blue-400 to-blue-600"}`}>{u.name[0]}</div>
-              <div className="min-w-0">
-                <p className="text-sm md:text-base font-semibold text-gray-900 truncate">{u.name}</p>
-                <p className="text-[10px] md:text-xs text-gray-600">{u.role === "master" ? "Master Admin" : u.branch || "Geen locatie"}</p>
-              </div>
-            </div>
-            {u.role !== "master" && <button onClick={() => handleDeleteUser(u.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all duration-200 flex-shrink-0"><Trash2 size={16} className="md:w-[18px] md:h-[18px]" /></button>}
-          </div>
-        ))}
-      </div>
-
-      {/* Add user form */}
-      {showForm && (
-        <div className="bg-blue-50 rounded-xl p-4 space-y-3">
-          <p className="text-sm font-semibold text-gray-700 mb-1">Nieuwe locatie-gebruiker</p>
-          <input type="text" placeholder="Naam (bijv. Filiaal Amsterdam)" value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
-          <input type="email" placeholder="Email (voor inloggen)" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
-          <input type="password" placeholder="Wachtwoord (min. 6 tekens)" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
-
-          {/* Branch selection: existing or new */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1.5">Locatie</label>
-            <select value={newUser.branch} onChange={(e) => setNewUser({ ...newUser, branch: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg">
-              <option value="">Kies locatie...</option>
-              {branches.map((b, i) => <option key={i} value={b}>{b}</option>)}
-              <option value="__new__">+ Nieuwe locatie toevoegen</option>
-            </select>
-            {newUser.branch === "__new__" && (
-              <div className="flex gap-2 mt-2">
-                <input type="text" placeholder="Locatienaam" value={newBranch} onChange={(e) => setNewBranch(e.target.value)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg" />
-                <button onClick={handleAddBranch} disabled={!newBranch.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 disabled:opacity-40">OK</button>
-              </div>
-            )}
-          </div>
-
+      {tab === "emballage" && (
+        <div className="space-y-3">
           <div className="flex gap-2">
-            <button onClick={() => { setShowForm(false); setNewUser({ name: "", email: "", password: "", branch: "" }); }} className="flex-1 bg-gray-300 text-gray-800 py-2 rounded-lg font-bold hover:bg-gray-400 transition-all duration-200">Annuleren</button>
-            <button onClick={handleAddUser} disabled={isLoading} className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60">
-              {isLoading ? <><Loader2 size={18} className="animate-spin" /> Aanmaken...</> : <><Plus size={18} /> Toevoegen</>}
-            </button>
+            <input type="text" placeholder="Naam (bijv. Biervat 50L)" value={newEmb.name} onChange={(e) => setNewEmb({ ...newEmb, name: e.target.value })} className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+            <input type="number" placeholder="€ waarde" value={newEmb.value} onChange={(e) => setNewEmb({ ...newEmb, value: e.target.value })} className="w-24 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" step="0.50" />
+            <button onClick={handleAddEmballage} disabled={!newEmb.name || !newEmb.value} className="px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={16} /></button>
+          </div>
+          <div className="space-y-2">
+            {account.emballageTypes.map((e, i) => (
+              <div key={i} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3">
+                  <Package size={16} className="text-purple-400" />
+                  <span className="text-sm font-medium text-gray-900">{e.name}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-purple-600">{fmt(e.value)}</span>
+                  <button onClick={() => handleDeleteEmballage(e.name)} className="p-1.5 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14} /></button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
-      {!showForm && <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><PlusCircle size={20} /> Locatie-gebruiker toevoegen</button>}
+
+      {tab === "suppliers" && (
+        <div className="space-y-3">
+          <div className="flex gap-2">
+            <input type="text" placeholder="Leveranciersnaam" value={newSup} onChange={(e) => setNewSup(e.target.value)} className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+            <button onClick={handleAddSupplier} disabled={!newSup.trim()} className="px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={16} /></button>
+          </div>
+          <div className="space-y-2">
+            {account.suppliers.map((s, i) => {
+              const color = getSupplierColor(s, account.suppliers);
+              return (
+                <div key={i} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${color.dot}`} />
+                    <span className="text-sm font-medium text-gray-900">{s}</span>
+                  </div>
+                  <button onClick={() => handleDeleteSupplier(s)} className="p-1.5 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14} /></button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ALERTS & NOTIFICATIES ───────────────────────────────────────────────────
+function AlertsPanel({ account }) {
+  const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch))];
+  const alerts = [];
+
+  // Inactive branches
+  const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  branches.forEach(b => {
+    const bt = account.transactions.filter(t => t.branch === b);
+    const lastDate = bt.length > 0 ? [...bt].sort((a, b2) => b2.date.localeCompare(a.date))[0].date : null;
+    if (!lastDate || new Date(lastDate) < oneWeekAgo) {
+      alerts.push({ severity: "warning", title: `${b} is inactief`, message: `Laatste registratie: ${lastDate || "nooit"}`, icon: <Clock size={16} /> });
+    }
+  });
+
+  // High supplier balances
+  const saldo = buildSaldoData(account.transactions, account.emballageTypes, account.suppliers);
+  Object.entries(saldo).forEach(([sup, data]) => {
+    if (data.value > 500) alerts.push({ severity: "info", title: `Hoog saldo: ${sup}`, message: `${fmt(data.value)} uitstaand emballagewaarde`, icon: <TrendingUp size={16} /> });
+    if (data.in - data.out < -10) alerts.push({ severity: "error", title: `Negatief saldo: ${sup}`, message: `Saldo: ${data.in - data.out} stuks — meer uitgaand dan inkomend`, icon: <TrendingDown size={16} /> });
+  });
+
+  // Low activity overall
+  const thisWeek = account.transactions.filter(t => { const d = new Date(t.date); const w = new Date(); w.setDate(w.getDate() - 7); return d >= w; });
+  if (thisWeek.length === 0 && account.transactions.length > 0) {
+    alerts.push({ severity: "warning", title: "Geen activiteit deze week", message: "Er zijn deze week nog geen transacties geregistreerd", icon: <Activity size={16} /> });
+  }
+
+  return (
+    <div className="animate-fade-in space-y-6">
+      <div className="flex items-center gap-2 text-sm text-gray-500">
+        <Bell size={16} />
+        <span>{alerts.length} melding{alerts.length !== 1 ? "en" : ""}</span>
+      </div>
+      {alerts.length === 0 ? (
+        <div className="bg-emerald-50 rounded-xl p-8 text-center border border-emerald-200">
+          <CheckCircle size={32} className="mx-auto text-emerald-400 mb-2" />
+          <p className="text-emerald-700 font-semibold">Alles ziet er goed uit!</p>
+          <p className="text-sm text-emerald-600 mt-1">Geen meldingen op dit moment</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {alerts.map((a, i) => (
+            <div key={i} className={`flex items-start gap-3 px-4 py-3 rounded-xl border ${a.severity === "error" ? "bg-red-50 border-red-200" : a.severity === "warning" ? "bg-amber-50 border-amber-200" : "bg-blue-50 border-blue-200"}`}>
+              <div className={`mt-0.5 ${a.severity === "error" ? "text-red-500" : a.severity === "warning" ? "text-amber-500" : "text-blue-500"}`}>{a.icon}</div>
+              <div>
+                <p className={`text-sm font-semibold ${a.severity === "error" ? "text-red-800" : a.severity === "warning" ? "text-amber-800" : "text-blue-800"}`}>{a.title}</p>
+                <p className={`text-xs mt-0.5 ${a.severity === "error" ? "text-red-600" : a.severity === "warning" ? "text-amber-600" : "text-blue-600"}`}>{a.message}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── AUDIT LOG ───────────────────────────────────────────────────────────────
+function AuditLog({ account }) {
+  const [search, setSearch] = useState("");
+
+  // Build audit entries from transactions (since audit_log table may not have data yet)
+  const auditEntries = [...account.transactions].sort((a, b) => b.date.localeCompare(a.date)).map(t => ({
+    id: t.id,
+    date: t.date,
+    user: t.branch,
+    action: t.type === "IN" ? "Inkomende registratie" : "Uitgaande registratie",
+    detail: `${t.emballage} (${t.qty}x) — ${t.supplier}`,
+    type: t.type,
+  }));
+
+  const filtered = auditEntries.filter(e =>
+    !search || e.user.toLowerCase().includes(search.toLowerCase()) ||
+    e.detail.toLowerCase().includes(search.toLowerCase()) ||
+    e.action.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="animate-fade-in space-y-4">
+      <div className="relative">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Zoek in audit log..." className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+      </div>
+      <p className="text-xs text-gray-400">{filtered.length} vermelding{filtered.length !== 1 ? "en" : ""}</p>
+      {filtered.length === 0 ? (
+        <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100"><Shield size={32} className="mx-auto text-gray-300 mb-2" /><p className="text-gray-500">Geen audit vermeldingen</p></div>
+      ) : (
+        <div className="space-y-1">
+          {filtered.slice(0, 50).map(e => (
+            <div key={e.id} className="bg-white rounded-lg px-4 py-3 flex items-center gap-3 shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${e.type === "IN" ? "bg-emerald-50" : "bg-rose-50"}`}>
+                {e.type === "IN" ? <ArrowDownCircle size={14} className="text-emerald-600" /> : <ArrowUpCircle size={14} className="text-rose-600" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-900">{e.action}</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">{e.user}</span>
+                </div>
+                <p className="text-xs text-gray-500 truncate">{e.detail}</p>
+              </div>
+              <span className="text-[10px] text-gray-400 flex-shrink-0">{e.date}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1158,7 +1575,7 @@ function MasterLogboek({ account, setAccount }) {
   return (
     <div className="animate-fade-in space-y-6">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <h2 className="text-xl md:text-3xl font-bold text-gray-900 flex items-center gap-2"><ClipboardList size={24} className="md:w-7 md:h-7" /> Logboek</h2>
+      <div className="flex items-center justify-between"><p className="text-xs text-gray-400">{filtered.length} transactie{filtered.length !== 1 ? "s" : ""}</p></div>
 
       {/* Search */}
       <div className="relative">
@@ -1245,35 +1662,127 @@ function AbonnementTab({ account }) {
   );
 }
 
-// ─── MASTER APP ──────────────────────────────────────────────────────────────
+// ─── MASTER APP (SIDEBAR LAYOUT) ─────────────────────────────────────────────
 function MasterApp({ account, user, onLogout, setAccount }) {
   const [masterScreen, setMasterScreen] = useState("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const navItems = [
+    { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
+    { id: "filialen", label: "Filialen", icon: <Building2 size={18} /> },
+    { id: "leveranciers", label: "Leveranciers", icon: <Truck size={18} /> },
+    { id: "logboek", label: "Logboek", icon: <ClipboardList size={18} /> },
+    { id: "beheer", label: "Gebruikers", icon: <Users size={18} /> },
+    { id: "emballage", label: "Emballage & Leveranciers", icon: <Package size={18} /> },
+    { id: "alerts", label: "Meldingen", icon: <Bell size={18} /> },
+    { id: "audit", label: "Audit Log", icon: <Shield size={18} /> },
+    { id: "export", label: "Exporteren", icon: <Download size={18} /> },
+    { id: "abonnement", label: "Abonnement", icon: <CreditCard size={18} /> },
+  ];
+
+  // Count alerts for badge
+  const alertCount = (() => {
+    let count = 0;
+    const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch))];
+    branches.forEach(b => {
+      const bt = account.transactions.filter(t => t.branch === b);
+      const lastDate = bt.length > 0 ? [...bt].sort((a, b2) => b2.date.localeCompare(a.date))[0].date : null;
+      if (!lastDate || new Date(lastDate) < oneWeekAgo) count++;
+    });
+    const saldo = buildSaldoData(account.transactions, account.emballageTypes, account.suppliers);
+    Object.values(saldo).forEach(data => { if (data.value > 500) count++; });
+    return count;
+  })();
+
+  const screenTitle = navItems.find(n => n.id === masterScreen)?.label || "";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto p-4 md:p-6">
-        <div className="flex items-center justify-between mb-6 md:mb-8">
-          <div className="flex items-center gap-3 md:gap-4">
-            <BarcodeLogo size="sm" />
-            <div>
-              <h1 className="text-lg md:text-2xl font-bold text-gray-900">{account.companyName}</h1>
-              <p className="text-xs md:text-sm text-gray-600">{user.name}</p>
-            </div>
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Mobile overlay */}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+
+      {/* Sidebar */}
+      <aside className={`fixed lg:sticky top-0 left-0 h-screen w-64 bg-white border-r border-gray-200 z-50 transform transition-transform duration-300 lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} flex flex-col`}>
+        {/* Logo */}
+        <div className="px-5 py-5 border-b border-gray-100 flex items-center justify-between">
+          <BarcodeLogo size="sm" />
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-1 text-gray-400 hover:text-gray-600"><X size={20} /></button>
+        </div>
+
+        {/* Company */}
+        <div className="px-5 py-3 border-b border-gray-100">
+          <p className="text-sm font-semibold text-gray-900 truncate">{account.companyName}</p>
+          <p className="text-[10px] text-gray-500">{user.name} • Master Admin</p>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
+          {navItems.map(item => (
+            <button key={item.id} onClick={() => { setMasterScreen(item.id); setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${masterScreen === item.id ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}>
+              <span className={masterScreen === item.id ? "text-blue-600" : "text-gray-400"}>{item.icon}</span>
+              <span className="flex-1 text-left">{item.label}</span>
+              {item.id === "alerts" && alertCount > 0 && <span className="w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{alertCount}</span>}
+            </button>
+          ))}
+        </nav>
+
+        {/* Logout */}
+        <div className="px-3 py-3 border-t border-gray-100">
+          <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-all duration-200"><LogOut size={18} /> Afmelden</button>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <main className="flex-1 min-w-0">
+        {/* Top bar */}
+        <div className="sticky top-0 z-30 bg-white border-b border-gray-200 px-4 lg:px-8 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 -ml-2 text-gray-500 hover:bg-gray-100 rounded-xl"><Menu size={20} /></button>
+            <h1 className="text-lg font-bold text-gray-900">{screenTitle}</h1>
           </div>
-          <button onClick={onLogout} className="flex items-center gap-2 px-3 py-2 md:px-4 bg-red-500 text-white text-sm md:text-base rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={18} /> <span className="hidden sm:inline">Afmelden</span></button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setMasterScreen("alerts"); setSidebarOpen(false); }} className="relative p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all">
+              <Bell size={18} />
+              {alertCount > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />}
+            </button>
+          </div>
         </div>
 
-        <div className="flex gap-1 md:gap-2 mb-6 border-b border-gray-200 overflow-x-auto">
-          <button onClick={() => setMasterScreen("dashboard")} className={`px-3 md:px-4 py-3 text-sm md:text-base font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${masterScreen === "dashboard" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Dashboard</button>
-          <button onClick={() => setMasterScreen("logboek")} className={`px-3 md:px-4 py-3 text-sm md:text-base font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${masterScreen === "logboek" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Logboek</button>
-          <button onClick={() => setMasterScreen("beheer")} className={`px-3 md:px-4 py-3 text-sm md:text-base font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${masterScreen === "beheer" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Beheer</button>
-          <button onClick={() => setMasterScreen("abonnement")} className={`px-3 md:px-4 py-3 text-sm md:text-base font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${masterScreen === "abonnement" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Abonnement</button>
+        {/* Page content */}
+        <div className="p-4 lg:p-8 max-w-5xl">
+          {masterScreen === "dashboard" && <MasterDashboard account={account} />}
+          {masterScreen === "filialen" && <BranchComparison account={account} />}
+          {masterScreen === "leveranciers" && <CompanySupplierBalances account={account} />}
+          {masterScreen === "logboek" && <MasterLogboek account={account} setAccount={setAccount} />}
+          {masterScreen === "beheer" && <MasterBeheer account={account} setAccount={setAccount} />}
+          {masterScreen === "emballage" && <EmballageBeheer account={account} setAccount={setAccount} />}
+          {masterScreen === "alerts" && <AlertsPanel account={account} />}
+          {masterScreen === "audit" && <AuditLog account={account} />}
+          {masterScreen === "export" && <MasterExport account={account} />}
+          {masterScreen === "abonnement" && <AbonnementTab account={account} />}
         </div>
+      </main>
+    </div>
+  );
+}
 
-        {masterScreen === "dashboard" && <MasterDashboard account={account} />}
-        {masterScreen === "logboek" && <MasterLogboek account={account} setAccount={setAccount} />}
-        {masterScreen === "beheer" && <MasterBeheer account={account} setAccount={setAccount} />}
-        {masterScreen === "abonnement" && <AbonnementTab account={account} />}
+// ─── MASTER EXPORT ───────────────────────────────────────────────────────────
+function MasterExport({ account }) {
+  return (
+    <div className="animate-fade-in space-y-6">
+      <p className="text-sm text-gray-500">Exporteer uw bedrijfsgegevens naar CSV of PDF rapport.</p>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <button onClick={() => exportToCSV(account.transactions, account.emballageTypes, account.suppliers, account.companyName)} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md hover:border-blue-300 transition-all duration-200 text-left group">
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition-all"><FileText size={24} className="text-emerald-600" /></div>
+          <p className="text-lg font-bold text-gray-900">CSV / Excel</p>
+          <p className="text-sm text-gray-500 mt-1">Saldo-overzicht, detail per leverancier, alle transacties. Direct te openen in Excel.</p>
+        </button>
+        <button onClick={() => exportToPDF(account.transactions, account.emballageTypes, account.users, account.suppliers, account.companyName)} className="bg-white rounded-xl p-6 shadow-sm border border-gray-200 hover:shadow-md hover:border-blue-300 transition-all duration-200 text-left group">
+          <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center mb-4 group-hover:bg-red-100 transition-all"><FileText size={24} className="text-red-600" /></div>
+          <p className="text-lg font-bold text-gray-900">PDF Rapport</p>
+          <p className="text-sm text-gray-500 mt-1">Professioneel rapport met Reggy branding, statistieken, saldo en transactiehistorie.</p>
+        </button>
       </div>
     </div>
   );
