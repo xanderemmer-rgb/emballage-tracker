@@ -1,9 +1,53 @@
-import { useState, useRef, useEffect } from "react";
-import { Store, Crown, Settings, BarChart3, ClipboardList, PenSquare, CreditCard, Package, Truck, Download, ScanLine, ArrowDownCircle, ArrowUpCircle, Plus, PlusCircle, Pencil, Trash2, Paperclip, Key, FileText, TrendingUp, CheckCircle, Check, X, RotateCcw, Eye, EyeOff, Sparkles, Inbox, Lock, PackageOpen, AlertCircle, ChevronRight } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  Settings, BarChart3, ClipboardList, CreditCard, Package,
+  Truck, Download, ScanLine, ArrowDownCircle, ArrowUpCircle, Plus, PlusCircle, Pencil,
+  Trash2, Key, TrendingUp, CheckCircle, Check, X,
+  Sparkles, Inbox, AlertCircle, Search,
+  Calendar, LogOut, User, Users, Building2, Camera, Loader2
+} from "lucide-react";
+import { useSupabase, setSkipProfileLoad } from "./lib/useSupabase";
+import { supabase } from "./lib/supabase";
+
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const DEMO_MODE = false; // Supabase backend is active
+
+// ─── BARCODE LOGO ────────────────────────────────────────────────────────────
+function BarcodeLogo({ size = "md" }) {
+  const sizes = {
+    sm: { bars: "h-6", gap: "gap-[2px]", barW: "w-[3px]", text: "text-lg", wrap: "gap-2" },
+    md: { bars: "h-8", gap: "gap-[2.5px]", barW: "w-[3.5px]", text: "text-2xl", wrap: "gap-3" },
+    lg: { bars: "h-10", gap: "gap-[3px]", barW: "w-1", text: "text-3xl", wrap: "gap-3" },
+  };
+  const s = sizes[size] || sizes.md;
+  const barHeights = ["100%", "65%", "85%", "50%", "95%", "40%", "75%"];
+  const barColors = ["#a78bfa", "#8b5cf6", "#7c3aed", "#6d28d9", "#7c3aed", "#8b5cf6", "#a78bfa"];
+
+  return (
+    <div className={`flex items-center ${s.wrap}`}>
+      <div className={`flex items-end ${s.gap} ${s.bars}`}>
+        {barHeights.map((h, i) => (
+          <div
+            key={i}
+            className={`${s.barW} rounded-sm`}
+            style={{
+              height: h,
+              backgroundColor: barColors[i],
+              animation: `barPulse 3s ease-in-out ${i * 0.15}s infinite`,
+            }}
+          />
+        ))}
+      </div>
+      <span className={`${s.text} font-bold text-gray-900`} style={{ fontFamily: "'Inter', sans-serif", letterSpacing: "-0.04em" }}>
+        Reggy
+      </span>
+    </div>
+  );
+}
 
 // ─── PRICING ──────────────────────────────────────────────────────────────────
-const PRICE_OUTLET = 10;
-const PRICE_MASTER = 15;
+const PRICE_OUTLET = 10;      // € per outlet per maand
+const PRICE_MASTER = 15;      // € master admin per maand (verplicht vanaf 2 outlets)
 const MASTER_REQUIRED_FROM = 2;
 
 function calcPrice(outlets) {
@@ -62,12 +106,13 @@ const INIT_ACCOUNTS = [
   }
 ];
 
+// Super admin (platform beheerder)
 const SUPER_ADMIN = { id: "superadmin", name: "Super Admin", role: "superadmin", password: "super123" };
 
 const fmt = (v) => `€ ${parseFloat(v || 0).toFixed(2)}`;
 const uid = () => Math.random().toString(36).slice(2, 10);
-const getApiKey = () => localStorage.getItem("anthropic_key") || "";
-const setApiKey = (k) => localStorage.setItem("anthropic_key", k);
+const STORAGE_KEY = "reggy_data";
+const API_KEY_STORAGE = "reggy_api_key";
 
 // ─── TOAST COMPONENT ──────────────────────────────────────────────────────────
 function Toast({ message, type = "success", onClose }) {
@@ -76,14 +121,190 @@ function Toast({ message, type = "success", onClose }) {
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  const bgColor = type === "success" ? "bg-green-500" : type === "info" ? "bg-blue-500" : "bg-amber-500";
-  const Icon = type === "success" ? Check : type === "info" ? AlertCircle : AlertCircle;
+  const bgColor = type === "success" ? "bg-green-500" : type === "error" ? "bg-red-500" : "bg-blue-500";
+  const icon = type === "success" ? <CheckCircle size={20} /> : type === "error" ? <AlertCircle size={20} /> : <Inbox size={20} />;
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-slide-up">
-      <div className={`${bgColor} text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3`}>
-        <Icon size={20} />
-        <span className="text-sm font-medium">{message}</span>
+    <div className={`fixed bottom-4 right-4 ${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-slide-up`}>
+      {icon}
+      <span>{message}</span>
+    </div>
+  );
+}
+
+// ─── ONBOARDING WALKTHROUGH ──────────────────────────────────────────────
+const ONBOARDING_KEY = "reggy_onboarding_done";
+
+function OnboardingOverlay({ onDone }) {
+  const [step, setStep] = useState(0);
+
+  const steps = [
+    {
+      title: "Welkom bij Reggy!",
+      desc: "In een paar stappen leer je hoe je emballage registreert en je saldo bijhoudt.",
+      icon: <Sparkles size={32} className="text-purple-500" />,
+    },
+    {
+      title: "Registreer emballage",
+      desc: "Tik op de + knop onderaan om een levering of retour te registreren. Je kunt meerdere items tegelijk invoeren.",
+      icon: <Plus size={32} className="text-blue-500" />,
+    },
+    {
+      title: "Bekijk je saldo",
+      desc: "Onder 'Saldo' zie je precies hoeveel emballage je uitstaan hebt per leverancier, inclusief de geschatte waarde.",
+      icon: <TrendingUp size={32} className="text-emerald-500" />,
+    },
+    {
+      title: "Logboek & exports",
+      desc: "In het logboek vind je alle transacties terug. Je kunt zoeken, filteren en exporteren naar CSV of PDF.",
+      icon: <ClipboardList size={32} className="text-amber-500" />,
+    },
+  ];
+
+  const handleFinish = () => {
+    try { localStorage.setItem(ONBOARDING_KEY, "true"); } catch {}
+    onDone();
+  };
+
+  const current = steps[step];
+  const isLast = step === steps.length - 1;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-8 text-center animate-slide-up">
+        <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mx-auto mb-5">
+          {current.icon}
+        </div>
+        <h3 className="text-xl font-bold text-gray-900 mb-2">{current.title}</h3>
+        <p className="text-gray-500 text-sm leading-relaxed mb-6">{current.desc}</p>
+
+        {/* Progress dots */}
+        <div className="flex justify-center gap-2 mb-6">
+          {steps.map((_, i) => (
+            <div key={i} className={`w-2 h-2 rounded-full transition-all duration-300 ${i === step ? "bg-blue-600 w-6" : i < step ? "bg-blue-300" : "bg-gray-200"}`} />
+          ))}
+        </div>
+
+        <div className="flex gap-3">
+          {step > 0 && (
+            <button onClick={() => setStep(step - 1)} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:bg-gray-50 transition-all duration-200">
+              Terug
+            </button>
+          )}
+          {step === 0 && (
+            <button onClick={handleFinish} className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-400 font-semibold hover:bg-gray-50 transition-all duration-200 text-sm">
+              Overslaan
+            </button>
+          )}
+          <button onClick={isLast ? handleFinish : () => setStep(step + 1)} className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-all duration-200">
+            {isLast ? "Aan de slag!" : "Volgende"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function shouldShowOnboarding() {
+  try { return !localStorage.getItem(ONBOARDING_KEY); } catch { return false; }
+}
+
+// ─── BARCODE SCANNER ──────────────────────────────────────────────────────
+function BarcodeScannerModal({ onScan, onClose }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const [error, setError] = useState(null);
+  const [scanning, setScanning] = useState(true);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+        }
+      } catch (err) {
+        if (mounted) setError("Camera niet beschikbaar. Controleer je browserinstellingen.");
+      }
+    }
+
+    startCamera();
+    return () => { mounted = false; stopCamera(); };
+  }, [stopCamera]);
+
+  const handleClose = () => {
+    stopCamera();
+    onClose();
+  };
+
+  const handleManualInput = () => {
+    stopCamera();
+    onScan(null); // null means: open registration without barcode
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black z-[60] flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-black/80">
+        <h3 className="text-white font-semibold flex items-center gap-2"><Camera size={20} /> Scanner</h3>
+        <button onClick={handleClose} className="text-white p-2"><X size={24} /></button>
+      </div>
+
+      {/* Camera view */}
+      <div className="flex-1 relative overflow-hidden">
+        {error ? (
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="text-center">
+              <AlertCircle size={48} className="text-red-400 mx-auto mb-4" />
+              <p className="text-white mb-2">{error}</p>
+              <button onClick={handleManualInput} className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold">
+                Handmatig invoeren
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
+            <canvas ref={canvasRef} className="hidden" />
+
+            {/* Scan overlay */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-64 h-40 border-2 border-white/60 rounded-2xl relative">
+                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-xl" />
+                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-xl" />
+                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-xl" />
+                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-xl" />
+                {scanning && <div className="absolute left-2 right-2 h-0.5 bg-red-500 top-1/2 animate-pulse" />}
+              </div>
+            </div>
+
+            <p className="absolute bottom-24 left-0 right-0 text-center text-white/70 text-sm">
+              Richt de camera op een barcode
+            </p>
+          </>
+        )}
+      </div>
+
+      {/* Bottom bar */}
+      <div className="bg-black/80 px-4 py-4 safe-area-bottom">
+        <button onClick={handleManualInput} className="w-full py-3 bg-white/10 text-white rounded-xl font-semibold border border-white/20 hover:bg-white/20 transition-all duration-200">
+          Handmatig invoeren
+        </button>
       </div>
     </div>
   );
@@ -93,7 +314,7 @@ function Toast({ message, type = "success", onClose }) {
 function PricingCalc({ outlets, onChange }) {
   const p = calcPrice(outlets);
   return (
-    <div className="bg-blue-50 rounded-2xl p-5 space-y-3 transition-all duration-200">
+    <div className="bg-blue-50 rounded-2xl p-4 space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-700">Aantal outlets</span>
         <div className="flex items-center gap-3">
@@ -106,195 +327,151 @@ function PricingCalc({ outlets, onChange }) {
         <div className="flex justify-between text-gray-600"><span>{outlets}× outlet{outlets > 1 ? "s" : ""} à € {PRICE_OUTLET}/mnd</span><span>€ {p.outlets.toFixed(2)}</span></div>
         {outlets >= MASTER_REQUIRED_FROM && <div className="flex justify-between text-gray-600"><span>Master admin (verplicht)</span><span>€ {PRICE_MASTER.toFixed(2)}</span></div>}
       </div>
-      <div className="border-t border-blue-200 pt-3 flex justify-between items-center">
+      <div className="border-t border-blue-200 pt-2 flex justify-between items-center">
         <span className="font-bold text-gray-800">Totaal per maand</span>
         <span className="text-xl font-bold text-blue-700">€ {p.total.toFixed(2)}</span>
       </div>
-      {outlets >= MASTER_REQUIRED_FROM && <p className="text-xs text-blue-600 flex items-center gap-1"><Check size={14} /> Master admin inbegrepen — overzicht van alle filialen</p>}
+      {outlets >= MASTER_REQUIRED_FROM && <p className="text-xs text-blue-600 flex items-center gap-1"><CheckCircle size={14} /> Master admin inbegrepen, overzicht van alle filialen</p>}
     </div>
   );
 }
 
 // ─── REGISTRATION FLOW ────────────────────────────────────────────────────────
 function RegisterFlow({ accounts, setAccounts, onDone }) {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1); // 1: plan, 2: bedrijf, 3: aanmeldgegevens
   const [outlets, setOutlets] = useState(1);
-  const [company, setCompany] = useState({ name: "", email: "", phone: "" });
-  const [outletNames, setOutletNames] = useState([""]);
-  const [masterPw, setMasterPw] = useState("");
-  const [outletPasswords, setOutletPasswords] = useState([""]);
-  const [payMethod, setPayMethod] = useState("card");
-  const [processing, setProcessing] = useState(false);
-  const [newAccId, setNewAccId] = useState(null);
-  const p = calcPrice(outlets);
+  const [company, setCompany] = useState({ name: "", phone: "" });
+  const [credentials, setCredentials] = useState({ email: "", password: "", passwordConfirm: "" });
+  const [toast, setToast] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const updateOutlets = (n) => {
-    setOutlets(n);
-    setOutletNames(arr => { const a = [...arr]; while (a.length < n) a.push(""); return a.slice(0, n); });
-    setOutletPasswords(arr => { const a = [...arr]; while (a.length < n) a.push(""); return a.slice(0, n); });
-  };
+  const handleCreateAccount = async () => {
+    if (!company.name || !credentials.email || !credentials.password) {
+      setToast({ type: "error", message: "Alle velden zijn verplicht" });
+      return;
+    }
+    if (credentials.password !== credentials.passwordConfirm) {
+      setToast({ type: "error", message: "Wachtwoorden komen niet overeen" });
+      return;
+    }
+    if (credentials.password.length < 6) {
+      setToast({ type: "error", message: "Wachtwoord moet minimaal 6 tekens zijn" });
+      return;
+    }
 
-  const handleRegister = () => {
-    setProcessing(true);
-    setTimeout(() => {
-      const accId = "acc_" + uid();
-      const hasMaster = outlets >= MASTER_REQUIRED_FROM;
-      const users = [];
-      if (hasMaster) users.push({ id: "m_" + uid(), name: company.name + " Admin", role: "master", password: masterPw || "admin123", branch: null });
-      outletNames.forEach((name, i) => {
-        users.push({ id: "b_" + uid(), name: name || `Outlet ${i + 1}`, role: "branch", password: outletPasswords[i] || "pass123", branch: name || `Outlet ${i + 1}` });
+    setIsLoading(true);
+    // Tell useSupabase hook to NOT load profile during registration
+    setSkipProfileLoad(true);
+    try {
+      // 1. Create auth user via Supabase
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: credentials.email,
+        password: credentials.password,
       });
-      const newAcc = {
-        id: accId, companyName: company.name, email: company.email,
-        plan: { outlets, startDate: new Date().toISOString().split("T")[0], status: "active", nextBilling: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0] },
-        users, emballageTypes: INIT_EMBALLAGE, suppliers: INIT_SUPPLIERS, transactions: []
-      };
-      setAccounts(a => [...a, newAcc]);
-      setNewAccId(accId);
-      setProcessing(false);
-      setStep(5);
-    }, 1800);
-  };
+      if (authError) throw authError;
 
-  const STEPS = ["Plan", "Bedrijf", "Inloggegevens", "Betaling", "Klaar"];
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("Geen gebruiker aangemaakt");
+
+      // 1b. Ensure we have an active session (email confirmation may block it)
+      if (!authData.session) {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({
+          email: credentials.email,
+          password: credentials.password,
+        });
+        if (signInErr) throw signInErr;
+      }
+
+      // 2. Create account record
+      const { data: accountData, error: accError } = await supabase
+        .from("accounts")
+        .insert({
+          company_name: company.name,
+          email: credentials.email,
+          plan_outlets: outlets,
+          plan_start_date: new Date().toISOString().split("T")[0],
+          plan_status: "active",
+          plan_next_billing: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+          is_demo: false,
+        })
+        .select()
+        .single();
+      if (accError) throw accError;
+
+      // 3. Create profile linked to auth user and account
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert({
+          id: userId,
+          account_id: accountData.id,
+          display_name: company.name,
+          role: "master",
+          branch: null,
+        });
+      if (profileError) throw profileError;
+
+      // 4. Add default emballage types
+      const defaultEmballage = INIT_EMBALLAGE.map(e => ({
+        account_id: accountData.id,
+        name: e.name,
+        value: e.value,
+      }));
+      await supabase.from("emballage_types").insert(defaultEmballage);
+
+      // 5. Add default suppliers
+      const defaultSuppliers = INIT_SUPPLIERS.map(s => ({
+        account_id: accountData.id,
+        name: s,
+      }));
+      await supabase.from("suppliers").insert(defaultSuppliers);
+
+      // 6. Sign out so user can log in fresh (avoids stale profile state)
+      await supabase.auth.signOut();
+
+      setToast({ type: "success", message: "Account aangemaakt! Log nu in met je email en wachtwoord." });
+      setTimeout(() => onDone(), 2000);
+    } catch (err) {
+      console.error("Registration error:", err);
+      setToast({ type: "error", message: err.message || "Er ging iets mis bij het aanmaken" });
+    } finally {
+      setSkipProfileLoad(false);
+      setIsLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md lg:max-w-2xl xl:max-w-4xl">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 text-lg font-bold text-white">ET</div>
-          <h1 className="text-3xl font-bold text-white">Emballage Tracker</h1>
-          <p className="text-blue-200 text-sm mt-1">Nieuw abonnement starten</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-400 to-purple-500 flex items-center justify-center p-4">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md lg:max-w-2xl xl:max-w-4xl w-full p-8 animate-slide-up">
+        <div className="flex items-center justify-center mb-6">
+          <BarcodeLogo size="md" />
         </div>
-
-        <div className="flex items-center justify-center gap-1 mb-8">
-          {STEPS.map((s, i) => (
-            <div key={s} className="flex items-center gap-1">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-200 ${i + 1 < step ? "bg-green-400 text-white" : i + 1 === step ? "bg-white text-blue-600" : "bg-white/20 text-white/60"}`}>
-                {i + 1 < step ? "✓" : i + 1}
-              </div>
-              {i < STEPS.length - 1 && <div className={`w-6 h-0.5 transition-all duration-200 ${i + 1 < step ? "bg-green-400" : "bg-white/20"}`} />}
-            </div>
-          ))}
-        </div>
-
-        <div className="bg-white rounded-3xl p-6 shadow-2xl space-y-5 animate-fade-in">
-          {step === 1 && (
-            <>
-              <h2 className="font-bold text-gray-800 text-xl">Kies je plan</h2>
-              <PricingCalc outlets={outlets} onChange={updateOutlets} />
-              <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm text-gray-700">
-                <p className="flex items-center gap-2"><Check size={16} className="text-green-600" /> Onbeperkte transacties</p>
-                <p className="flex items-center gap-2"><Check size={16} className="text-green-600" /> Bon-scanning met AI</p>
-                <p className="flex items-center gap-2"><Check size={16} className="text-green-600" /> Excel & PDF export</p>
-                <p className="flex items-center gap-2"><Check size={16} className="text-green-600" /> Leveranciersbeheer</p>
-                {outlets >= MASTER_REQUIRED_FROM && <p className="flex items-center gap-2"><Check size={16} className="text-green-600" /> Master admin dashboard</p>}
-              </div>
-              <button onClick={() => setStep(2)} className="w-full py-3.5 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 transition-all duration-200">Verder →</button>
-              <button onClick={onDone} className="w-full text-center text-xs text-gray-400 hover:text-gray-600 transition-all duration-200">← Terug naar inloggen</button>
-            </>
-          )}
-
-          {step === 2 && (
-            <>
-              <h2 className="font-bold text-gray-800 text-xl">Bedrijfsgegevens</h2>
-              {[["Bedrijfsnaam", "name", "bijv. Horeca Groep De Smit"], ["E-mailadres", "email", "info@bedrijf.be"], ["Telefoonnummer", "phone", "+32 ..."]].map(([lbl, key, ph]) => (
-                <div key={key}>
-                  <label className="text-xs font-semibold text-gray-500 mb-2 block uppercase tracking-wide">{lbl}</label>
-                  <input value={company[key]} onChange={e => setCompany(c => ({ ...c, [key]: e.target.value }))} placeholder={ph}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200" />
-                </div>
-              ))}
-              <div className="flex gap-2 pt-2">
-                <button onClick={() => setStep(1)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-semibold text-sm hover:bg-gray-200 transition-all duration-200">← Terug</button>
-                <button onClick={() => setStep(3)} disabled={!company.name || !company.email}
-                  className="flex-[2] py-3 rounded-xl bg-blue-500 text-white font-bold text-sm hover:bg-blue-600 disabled:opacity-40 transition-all duration-200">Verder →</button>
-              </div>
-            </>
-          )}
-
-          {step === 3 && (
-            <>
-              <h2 className="font-bold text-gray-800 text-xl">Inloggegevens</h2>
-              {outlets >= MASTER_REQUIRED_FROM && (
-                <div className="bg-yellow-50 rounded-xl p-4 space-y-3 border border-yellow-200">
-                  <p className="text-sm font-bold text-yellow-800 flex items-center gap-2"><Crown size={16} /> Master admin</p>
-                  <input value={masterPw} onChange={e => setMasterPw(e.target.value)} placeholder="Wachtwoord master admin"
-                    className="w-full border border-yellow-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all duration-200" />
-                </div>
-              )}
-              <div className="space-y-3 max-h-52 overflow-y-auto pr-1">
-                {outletNames.map((name, i) => (
-                  <div key={i} className="bg-gray-50 rounded-xl p-4 space-y-2 border border-gray-100">
-                    <p className="text-sm font-bold text-gray-700 flex items-center gap-2"><Store size={16} /> Outlet {i + 1}</p>
-                    <input value={name} onChange={e => setOutletNames(a => { const n = [...a]; n[i] = e.target.value; return n; })} placeholder={`Naam outlet ${i + 1}`}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200" />
-                    <input value={outletPasswords[i]} onChange={e => setOutletPasswords(a => { const n = [...a]; n[i] = e.target.value; return n; })} placeholder="Wachtwoord"
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200" />
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button onClick={() => setStep(2)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-semibold text-sm hover:bg-gray-200 transition-all duration-200">← Terug</button>
-                <button onClick={() => setStep(4)} className="flex-[2] py-3 rounded-xl bg-blue-500 text-white font-bold text-sm hover:bg-blue-600 transition-all duration-200">Verder →</button>
-              </div>
-            </>
-          )}
-
-          {step === 4 && (
-            <>
-              <h2 className="font-bold text-gray-800 text-xl">Betaling</h2>
-              <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
-                <div className="flex justify-between text-sm mb-2"><span className="text-gray-700">{outlets}× outlet{outlets > 1 ? "s" : ""}</span><span className="font-semibold">€ {(outlets * PRICE_OUTLET).toFixed(2)}/mnd</span></div>
-                {outlets >= MASTER_REQUIRED_FROM && <div className="flex justify-between text-sm mb-2"><span className="text-gray-700">Master admin</span><span className="font-semibold">€ {PRICE_MASTER.toFixed(2)}/mnd</span></div>}
-                <div className="border-t border-blue-200 pt-3 mt-2 flex justify-between font-bold"><span>Totaal</span><span className="text-blue-700 text-lg">€ {p.total.toFixed(2)}/mnd</span></div>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-500 mb-3 block uppercase tracking-wide">Betaalmethode</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[["card", <CreditCard size={24} />, "Kaart"], ["bancontact", "🏦", "Bancontact"], ["sepa", <RotateCcw size={24} />, "SEPA"]].map(([id, ico, lbl]) => (
-                    <button key={id} onClick={() => setPayMethod(id)}
-                      className={`py-3 rounded-xl border-2 flex flex-col items-center gap-2 text-xs font-medium transition-all duration-200 ${payMethod === id ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:border-gray-300"}`}>
-                      {typeof ico === "string" ? <span className="text-xl">{ico}</span> : ico}{lbl}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4 space-y-3 border border-gray-200">
-                <div className="flex gap-2">
-                  <input placeholder="Kaartnummer" className="flex-[3] border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 transition-all duration-200" />
-                  <input placeholder="MM/JJ" className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 transition-all duration-200" />
-                  <input placeholder="CVV" className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 transition-all duration-200" />
-                </div>
-                <input placeholder="Naam kaarthouder" className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 transition-all duration-200" />
-                <p className="text-xs text-gray-400 text-center flex items-center justify-center gap-1"><Lock size={12} /> Demo — geen echte betaling</p>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button onClick={() => setStep(3)} className="flex-1 py-3 rounded-xl bg-gray-100 text-gray-600 font-semibold text-sm hover:bg-gray-200 transition-all duration-200">← Terug</button>
-                <button onClick={handleRegister} disabled={processing}
-                  className="flex-[2] py-3.5 rounded-xl bg-green-500 text-white font-bold text-sm hover:bg-green-600 disabled:opacity-60 flex items-center justify-center gap-2 transition-all duration-200">
-                  {processing ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />Verwerken...</> : `€ ${p.total.toFixed(2)}/mnd`}
-                </button>
-              </div>
-            </>
-          )}
-
-          {step === 5 && (
-            <div className="text-center space-y-5 py-3 animate-fade-in">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-3xl mx-auto"><CheckCircle size={40} className="text-green-600" /></div>
-              <div>
-                <h2 className="font-bold text-gray-800 text-xl">Welkom, {company.name}!</h2>
-                <p className="text-sm text-gray-500 mt-2">Je abonnement is actief. Je kan nu inloggen.</p>
-              </div>
-              <div className="bg-green-50 rounded-xl p-4 text-left space-y-2 border border-green-200">
-                <p className="text-xs font-bold text-green-700 uppercase tracking-wide">Abonnement</p>
-                <p className="text-sm text-gray-700 font-medium">{outlets} outlet{outlets > 1 ? "s" : ""}{outlets >= MASTER_REQUIRED_FROM ? " + master admin" : ""}</p>
-                <p className="text-lg font-bold text-green-600">€ {p.total.toFixed(2)} / maand</p>
-              </div>
-              <button onClick={onDone} className="w-full py-3.5 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 transition-all duration-200">Naar inloggen →</button>
-            </div>
-          )}
-        </div>
+        <h2 className="text-3xl font-bold text-gray-900 mb-2 text-center">Nieuw account</h2>
+        {step === 1 && (
+          <div className="space-y-6">
+            <p className="text-gray-600">Stap 1: Kies uw abonnement</p>
+            <PricingCalc outlets={outlets} onChange={setOutlets} />
+            <button onClick={() => setStep(2)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200">Volgende</button>
+            <button onClick={onDone} className="w-full text-gray-500 text-sm hover:text-gray-700">Terug naar inloggen</button>
+          </div>
+        )}
+        {step === 2 && (
+          <div className="space-y-6">
+            <p className="text-gray-600">Stap 2: Bedrijfsgegevens</p>
+            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Bedrijfsnaam</label><input type="text" value={company.name} onChange={(e) => setCompany({ ...company, name: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Naam" /></div>
+            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Telefoon (optioneel)</label><input type="tel" value={company.phone} onChange={(e) => setCompany({ ...company, phone: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Telefoon" /></div>
+            <div className="flex gap-3"><button onClick={() => setStep(1)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Terug</button><button onClick={() => setStep(3)} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200">Volgende</button></div>
+          </div>
+        )}
+        {step === 3 && (
+          <div className="space-y-6">
+            <p className="text-gray-600">Stap 3: Aanmeldgegevens</p>
+            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Email</label><input type="email" value={credentials.email} onChange={(e) => setCredentials({ ...credentials, email: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Email" /></div>
+            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Wachtwoord</label><input type="password" value={credentials.password} onChange={(e) => setCredentials({ ...credentials, password: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Wachtwoord" /></div>
+            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Wachtwoord herhalen</label><input type="password" value={credentials.passwordConfirm} onChange={(e) => setCredentials({ ...credentials, passwordConfirm: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Wachtwoord herhalen" /></div>
+            <div className="flex gap-3"><button onClick={() => setStep(2)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Terug</button><button onClick={handleCreateAccount} disabled={isLoading} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60">{isLoading ? <><Loader2 size={20} className="animate-spin" /> Aanmaken...</> : <><Sparkles size={20} /> Account aanmaken</>}</button></div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -302,348 +479,324 @@ function RegisterFlow({ accounts, setAccounts, onDone }) {
 
 // ─── SUPER ADMIN PANEL ────────────────────────────────────────────────────────
 function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
-  const [tab, setTab] = useState("accounts");
-  const [editAcc, setEditAcc] = useState(null);
-  const [showNewAcc, setShowNewAcc] = useState(false);
-  const [confirm, setConfirm] = useState(null);
-  const activeCount = accounts.filter(a => a.plan.status === "active").length;
-  const totalMRR = accounts.filter(a => a.plan.status === "active").reduce((a, x) => a + calcPrice(x.plan.outlets).total, 0);
+  const [newForm, setNewForm] = useState(false);
+  const [newAccount, setNewAccount] = useState(null);
 
-  const deleteAcc = (id) => {
-    setAccounts(a => a.filter(x => x.id !== id));
-    setConfirm(null);
+  const handleDeleteAccount = async (id) => {
+    if (confirm("Weet je zeker dat je dit account wilt verwijderen?")) {
+      try {
+        // supabase is imported at the top of App.jsx
+        const { error } = await supabase.from("accounts").delete().eq("id", id);
+        if (error) throw error;
+        setAccounts(accounts.filter(a => a.id !== id));
+      } catch (err) {
+        alert("Fout bij verwijderen: " + err.message);
+      }
+    }
   };
-
-  const toggleStatus = (id) => {
-    setAccounts(a => a.map(x => x.id !== id ? x : { ...x, plan: { ...x.plan, status: x.plan.status === "active" ? "suspended" : "active" } }));
-  };
-
-  const changeOutlets = (id, n) => {
-    if (n < 1) return;
-    setAccounts(a => a.map(x => {
-      if (x.id !== id) return x;
-      const hasMaster = n >= MASTER_REQUIRED_FROM;
-      let users = x.users.filter(u => u.role === "branch").slice(0, n);
-      while (users.length < n) users.push({ id: "b_" + uid(), name: `Outlet ${users.length + 1}`, role: "branch", password: "pass123", branch: `Outlet ${users.length + 1}` });
-      if (hasMaster && !x.users.find(u => u.role === "master")) users = [{ id: "m_" + uid(), name: x.companyName + " Admin", role: "master", password: "admin123", branch: null }, ...users];
-      if (!hasMaster) users = users.filter(u => u.role !== "master");
-      return { ...x, plan: { ...x.plan, outlets: n }, users };
-    }));
-  };
-
-  const STATUS_COLOR = { active: "bg-green-100 text-green-700", expired: "bg-red-100 text-red-700", suspended: "bg-orange-100 text-orange-700" };
-  const STATUS_LABEL = { active: "Actief", expired: "Verlopen", suspended: "Geblokkeerd" };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto">
-      {confirm && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-xs shadow-2xl space-y-4 animate-slide-up">
-            <p className="font-bold text-gray-800">Account verwijderen?</p>
-            <p className="text-sm text-gray-600">Verwijder <span className="font-semibold">"{confirm.name}"</span> inclusief alle data. Onomkeerbaar.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setConfirm(null)} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-semibold text-sm hover:bg-gray-200 transition-all duration-200">Annuleren</button>
-              <button onClick={() => deleteAcc(confirm.id)} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 transition-all duration-200">Verwijderen</button>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 p-6">
+      {newForm && newAccount && <RegisterFlow accounts={accounts} setAccounts={setAccounts} onDone={() => setNewForm(false)} />}
+      <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <BarcodeLogo size="sm" />
+            <h1 className="text-3xl font-bold text-gray-900">Super Admin</h1>
           </div>
+          <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
         </div>
-      )}
 
-      <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white px-5 pt-7 pb-5 rounded-b-2xl shadow-md">
-        <div className="flex items-center justify-between mb-4">
-          <div><p className="text-xs text-blue-200 uppercase tracking-wide">Platform beheer</p><h1 className="text-2xl font-bold flex items-center gap-2"><Settings size={24} /> Super Admin</h1></div>
-          <button onClick={onLogout} className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full transition-all duration-200">Uitloggen</button>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white/10 rounded-xl p-3 text-center"><p className="text-2xl font-bold">{accounts.length}</p><p className="text-xs text-blue-200">Accounts</p></div>
-          <div className="bg-white/10 rounded-xl p-3 text-center"><p className="text-2xl font-bold">{activeCount}</p><p className="text-xs text-blue-200">Actief</p></div>
-          <div className="bg-green-500/30 rounded-xl p-3 text-center"><p className="text-xl font-bold">€{totalMRR.toFixed(0)}</p><p className="text-xs text-blue-200">MRR</p></div>
-        </div>
-      </div>
-
-      <div className="bg-white border-b border-gray-200 px-2 flex sticky top-0 z-10">
-        {[["accounts", <ClipboardList size={18} />, "Accounts"], ["stats", <BarChart3 size={18} />, "Statistieken"]].map(([id, ico, lbl]) => (
-          <button key={id} onClick={() => setTab(id)}
-            className={`flex-1 py-3 text-xs font-medium flex flex-col items-center gap-1 transition-all duration-200 ${tab === id ? "text-gray-800 border-b-2 border-gray-800" : "text-gray-400 hover:text-gray-600"}`}>
-            {ico}<span>{lbl}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 pb-8 space-y-4">
-        {tab === "accounts" && (
-          <>
-            <button onClick={() => setShowNewAcc(true)} className="w-full py-3 rounded-2xl bg-blue-600 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all duration-200 shadow-sm">
-              <Plus size={18} /> Nieuw account aanmaken
-            </button>
-            {showNewAcc && <NewAccountForm onSave={(acc) => { setAccounts(a => [...a, acc]); setShowNewAcc(false); }} onCancel={() => setShowNewAcc(false)} />}
-            {accounts.length === 0 ? (
-              <div className="bg-white rounded-2xl p-12 text-center space-y-3 border border-gray-200">
-                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto"><Inbox size={24} className="text-gray-400" /></div>
-                <p className="text-sm text-gray-600 font-medium">Geen accounts</p>
-                <p className="text-xs text-gray-500">Maak een nieuw account aan om te beginnen</p>
-              </div>
-            ) : (
-              accounts.map(acc => {
-                const p = calcPrice(acc.plan.outlets);
-                const isEditing = editAcc === acc.id;
-                return (
-                  <div key={acc.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden hover:shadow-md transition-all duration-200">
-                    <div className="p-5 space-y-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <p className="font-bold text-gray-800 text-lg">{acc.companyName}</p>
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[acc.plan.status]}`}>{STATUS_LABEL[acc.plan.status]}</span>
-                          </div>
-                          <p className="text-xs text-gray-500">{acc.email}</p>
-                          <p className="text-xs text-gray-600 mt-1 font-medium">{acc.plan.outlets} outlet{acc.plan.outlets > 1 ? "s" : ""} · {acc.transactions.length} transacties</p>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="font-bold text-green-600 text-lg">€ {p.total.toFixed(2)}</p>
-                          <p className="text-xs text-gray-500">/maand</p>
-                        </div>
-                      </div>
-
-                      {isEditing && (
-                        <div className="pt-4 border-t border-gray-200 space-y-4 animate-fade-in">
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-gray-700">Aantal outlets</span>
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => changeOutlets(acc.id, acc.plan.outlets - 1)} className="w-7 h-7 rounded-lg bg-gray-100 font-bold text-sm hover:bg-gray-200 transition-all duration-200">−</button>
-                              <span className="w-5 text-center font-bold">{acc.plan.outlets}</span>
-                              <button onClick={() => changeOutlets(acc.id, acc.plan.outlets + 1)} className="w-7 h-7 rounded-lg bg-gray-100 font-bold text-sm hover:bg-gray-200 transition-all duration-200">+</button>
-                            </div>
-                          </div>
-                          <PricingCalc outlets={acc.plan.outlets} onChange={(n) => changeOutlets(acc.id, n)} />
-                          <div>
-                            <p className="text-xs font-medium text-gray-600 mb-2 uppercase tracking-wide">Gebruikers</p>
-                            {acc.users.map(u => (
-                              <div key={u.id} className="flex items-center gap-2 py-2 border-b border-gray-100 last:border-0 text-sm">
-                                <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                                  {u.role === "master" ? <Crown size={14} className="text-amber-600" /> : <Store size={14} className="text-blue-600" />}
-                                </div>
-                                <span className="flex-1 font-medium text-gray-700">{u.name}</span>
-                                <span className="font-mono text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">{u.password}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex gap-2">
-                        <button onClick={() => setEditAcc(isEditing ? null : acc.id)}
-                          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center justify-center gap-1 ${isEditing ? "bg-blue-500 text-white hover:bg-blue-600" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-                          {isEditing ? <><Check size={14} /> Sluiten</> : <><Pencil size={14} /> Beheren</>}
-                        </button>
-                        <button onClick={() => toggleStatus(acc.id)}
-                          className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${acc.plan.status === "active" ? "bg-orange-100 text-orange-600 hover:bg-orange-200" : "bg-green-100 text-green-600 hover:bg-green-200"}`}>
-                          {acc.plan.status === "active" ? "Blokkeren" : "Activeren"}
-                        </button>
-                        <button onClick={() => setConfirm({ id: acc.id, name: acc.companyName })}
-                          className="px-3 py-2.5 rounded-xl bg-red-100 text-red-600 text-xs font-semibold hover:bg-red-200 transition-all duration-200"><Trash2 size={14} /></button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </>
-        )}
-
-        {tab === "stats" && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><TrendingUp size={18} className="text-green-600" /> Omzet overzicht</h3>
-              {accounts.length === 0 ? (
-                <p className="text-xs text-gray-500 text-center py-4">Geen accounts</p>
-              ) : (
-                <>
-                  {accounts.map(acc => {
-                    const p = calcPrice(acc.plan.outlets);
-                    return (
-                      <div key={acc.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-                        <div><p className="text-sm font-medium text-gray-800">{acc.companyName}</p>
-                          <p className="text-xs text-gray-500">{acc.plan.outlets} outlet{acc.plan.outlets > 1 ? "s" : ""} · {STATUS_LABEL[acc.plan.status]}</p></div>
-                        <p className={`font-bold text-sm ${acc.plan.status === "active" ? "text-green-600" : "text-gray-400"}`}>
-                          {acc.plan.status === "active" ? `€ ${p.total.toFixed(2)}` : "—"}</p>
-                      </div>
-                    );
-                  })}
-                  <div className="border-t-2 border-gray-200 pt-4 mt-2 flex justify-between items-center">
-                    <span className="font-bold text-gray-800">Totaal MRR</span>
-                    <span className="text-2xl font-bold text-green-600">€ {totalMRR.toFixed(2)}</span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">Jaarlijks: € {(totalMRR * 12).toFixed(2)}</p>
-                </>
-              )}
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><BarChart3 size={18} className="text-blue-600" /> Accounts per type</h3>
-              {[["Actief", "active", "bg-green-100 text-green-700"], ["Verlopen", "expired", "bg-red-100 text-red-700"], ["Geblokkeerd", "suspended", "bg-orange-100 text-orange-700"]].map(([lbl, status, cls]) => (
-                <div key={status} className="flex items-center justify-between py-2.5">
-                  <span className={`text-xs px-3 py-1 rounded-full font-medium ${cls}`}>{lbl}</span>
-                  <span className="font-bold text-gray-700">{accounts.filter(a => a.plan.status === status).length}</span>
+        <div className="grid gap-4 mb-8">
+          {accounts.map(acc => (
+            <div key={acc.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-bold text-gray-900">{acc.companyName}</h3>
+                  <p className="text-sm text-gray-600">{acc.email} • {acc.users.length} gebruikers</p>
                 </div>
-              ))}
+                <div className="text-right">
+                  <p className={`text-sm font-semibold ${acc.plan.status === "active" ? "text-green-600" : "text-red-600"}`}>{acc.plan.status.toUpperCase()}</p>
+                  <p className="text-xs text-gray-600">{acc.plan.outlets} outlet{acc.plan.outlets > 1 ? "s" : ""}</p>
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button onClick={() => handleDeleteAccount(acc.id)} className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-semibold"><Trash2 size={16} /> Verwijderen</button>
+              </div>
             </div>
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-              <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Store size={18} className="text-amber-600" /> Outlets verdeling</h3>
-              {[1, 2, 3, 5].map(n => {
-                const cnt = accounts.filter(a => a.plan.outlets === n).length;
-                const cntPlus = n === 5 ? accounts.filter(a => a.plan.outlets >= 5).length : cnt;
-                if (n === 5 && cntPlus === 0) return null;
-                return (
-                  <div key={n} className="flex items-center gap-3 py-2">
-                    <span className="text-xs text-gray-600 w-20 font-medium">{n === 5 ? "5+" : n} outlet{n > 1 ? "s" : ""}</span>
-                    <div className="flex-1 bg-gray-100 rounded-full h-2"><div className="bg-blue-400 h-2 rounded-full transition-all duration-300" style={{ width: `${(cntPlus / Math.max(accounts.length, 1)) * 100}%` }} /></div>
-                    <span className="text-xs font-bold text-gray-600 w-4">{cntPlus}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+          ))}
+        </div>
+
+        <button onClick={() => { setNewAccount(true); setNewForm(true); }} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Plus size={20} /> Nieuw account</button>
       </div>
     </div>
   );
 }
 
+// ─── NEW ACCOUNT FORM ─────────────────────────────────────────────────────────
 function NewAccountForm({ onSave, onCancel }) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [outlets, setOutlets] = useState(1);
-  const [pw, setPw] = useState("");
-
-  const save = () => {
-    if (!name || !email) return;
-    const hasMaster = outlets >= MASTER_REQUIRED_FROM;
-    const users = [];
-    if (hasMaster) users.push({ id: "m_" + uid(), name: name + " Admin", role: "master", password: pw || "admin123", branch: null });
-    for (let i = 0; i < outlets; i++) users.push({ id: "b_" + uid(), name: `Outlet ${i + 1}`, role: "branch", password: "pass123", branch: `Outlet ${i + 1}` });
-    onSave({ id: "acc_" + uid(), companyName: name, email, plan: { outlets, startDate: new Date().toISOString().split("T")[0], status: "active", nextBilling: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0] }, users, emballageTypes: INIT_EMBALLAGE, suppliers: INIT_SUPPLIERS, transactions: [] });
-  };
+  const [formData, setFormData] = useState({ name: "", email: "", phone: "", outlets: 1 });
 
   return (
-    <div className="bg-gradient-to-br from-blue-50 to-gray-50 rounded-2xl border border-blue-200 p-5 space-y-3 animate-fade-in">
-      <p className="font-bold text-gray-800 text-sm flex items-center gap-2"><Plus size={16} className="text-blue-600" /> Nieuw account</p>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="Bedrijfsnaam" className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200" />
-      <input value={email} onChange={e => setEmail(e.target.value)} placeholder="E-mail" className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200" />
-      <input value={pw} onChange={e => setPw(e.target.value)} placeholder="Master wachtwoord (bij 2+ outlets)" className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200" />
-      <PricingCalc outlets={outlets} onChange={setOutlets} />
-      <div className="flex gap-2 pt-2">
-        <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl bg-white border border-gray-300 text-gray-600 font-semibold text-sm hover:bg-gray-50 transition-all duration-200">Annuleren</button>
-        <button onClick={save} disabled={!name || !email} className="flex-[2] py-2.5 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 disabled:opacity-40 transition-all duration-200">Aanmaken</button>
+    <div className="space-y-4">
+      <input type="text" placeholder="Bedrijfsnaam" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
+      <input type="email" placeholder="Email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
+      <input type="tel" placeholder="Telefoon" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
+      <div className="flex gap-3">
+        <button onClick={onCancel} className="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Annuleren</button>
+        <button onClick={() => onSave(formData)} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200">Opslaan</button>
       </div>
     </div>
   );
 }
 
-// ─── EXPORT UTILS ────────────────────────────────────────────────────────────
-function exportToCSV(transactions, emballageTypes) {
-  const getVal = (n) => emballageTypes.find(e => e.name === n)?.value || 0;
-  const headers = ["Datum", "Filiaal", "Type", "Leverancier", "Emballage", "Aantal", "Stukwaarde (€)", "Totaalwaarde (€)", "Opmerking"];
-  const rows = [...transactions].sort((a, b) => b.date.localeCompare(a.date)).map(t => {
-    const v = getVal(t.emballage), tot = (t.type === "IN" ? 1 : -1) * t.qty * v;
-    return [t.date, t.branch, t.type === "IN" ? "Inkomend" : "Uitgaand", t.supplier, t.emballage, t.qty, v.toFixed(2), tot.toFixed(2), t.note || ""];
+// ─── EXPORT HELPERS ──────────────────────────────────────────────────────────
+function buildSaldoData(transactions, emballageTypes, suppliers) {
+  const saldo = {};
+  transactions.forEach(t => {
+    if (!saldo[t.supplier]) saldo[t.supplier] = { in: 0, out: 0, items: {} };
+    const s = saldo[t.supplier];
+    if (t.type === "IN") s.in += t.qty; else s.out += t.qty;
+    if (!s.items[t.emballage]) s.items[t.emballage] = { in: 0, out: 0 };
+    if (t.type === "IN") s.items[t.emballage].in += t.qty; else s.items[t.emballage].out += t.qty;
   });
-  const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" }));
-  a.download = "emballage_export.csv";
-  a.click();
+  // Add value calculations
+  Object.entries(saldo).forEach(([sup, data]) => {
+    data.value = Object.entries(data.items).reduce((sum, [name, qty]) => {
+      const emb = emballageTypes.find(e => e.name === name);
+      return sum + ((qty.in - qty.out) * (emb?.value || 0));
+    }, 0);
+  });
+  return saldo;
 }
 
+// ─── CSV EXPORT ──────────────────────────────────────────────────────────────
+function exportToCSV(transactions, emballageTypes, suppliers, companyName) {
+  const date = new Date().toLocaleDateString("nl-BE");
+  const lines = [];
+
+  // Header info
+  lines.push(["REGGY RAPPORT", companyName, "", "", "", "", ""]);
+  lines.push(["Datum:", date, "", "", "", "", ""]);
+  lines.push([]);
+
+  // Saldo per leverancier
+  lines.push(["SALDO PER LEVERANCIER", "", "", "", "", "", ""]);
+  lines.push(["Leverancier", "Inkomend", "Uitgaand", "Saldo", "Waarde", "", ""]);
+  const saldo = buildSaldoData(transactions, emballageTypes, suppliers);
+  let totalValue = 0;
+  Object.entries(saldo).forEach(([sup, data]) => {
+    const s = data.in - data.out;
+    totalValue += data.value;
+    lines.push([sup, data.in, data.out, s, `€ ${data.value.toFixed(2)}`, "", ""]);
+  });
+  lines.push(["TOTAAL", "", "", "", `€ ${totalValue.toFixed(2)}`, "", ""]);
+  lines.push([]);
+
+  // Detail per leverancier per emballage
+  lines.push(["DETAIL PER LEVERANCIER", "", "", "", "", "", ""]);
+  lines.push(["Leverancier", "Emballage", "Inkomend", "Uitgaand", "Saldo", "Stukprijs", "Waarde"]);
+  Object.entries(saldo).forEach(([sup, data]) => {
+    Object.entries(data.items).forEach(([item, qty]) => {
+      const emb = emballageTypes.find(e => e.name === item);
+      const itemSaldo = qty.in - qty.out;
+      const val = itemSaldo * (emb?.value || 0);
+      lines.push([sup, item, qty.in, qty.out, itemSaldo, `€ ${(emb?.value || 0).toFixed(2)}`, `€ ${val.toFixed(2)}`]);
+    });
+  });
+  lines.push([]);
+
+  // All transactions
+  lines.push(["TRANSACTIES", "", "", "", "", "", ""]);
+  lines.push(["Datum", "Type", "Leverancier", "Emballage", "Aantal", "Filiaal", "Opmerking"]);
+  [...transactions].sort((a, b) => b.date.localeCompare(a.date)).forEach(t => {
+    lines.push([t.date, t.type === "IN" ? "Inkomend" : "Uitgaand", t.supplier, t.emballage, t.qty, t.branch, t.note || ""]);
+  });
+
+  const csv = lines.map(row => row.map(cell => `"${(cell ?? "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
+  const bom = "\uFEFF"; // UTF-8 BOM for Excel
+  const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `reggy_export_${new Date().toISOString().split("T")[0]}.csv`;
+  link.click();
+}
+
+// ─── PDF EXPORT (HTML → print) ───────────────────────────────────────────────
 function exportToPDF(transactions, emballageTypes, users, suppliers, companyName) {
-  const getVal = (n) => emballageTypes.find(e => e.name === n)?.value || 0;
-  const branches = users.filter(u => u.role === "branch").map(u => u.branch);
-  const now = new Date().toLocaleDateString("nl-NL", { day: "2-digit", month: "long", year: "numeric" });
-  const branchSummary = branches.map(b => {
-    const tx = transactions.filter(t => t.branch === b);
-    const balances = {};
-    tx.forEach(t => { balances[t.emballage] = (balances[t.emballage] || 0) + (t.type === "IN" ? t.qty : -t.qty); });
-    return { b, balances, totalVal: Object.entries(balances).reduce((a, [emb, qty]) => a + qty * getVal(emb), 0), totalQty: Object.values(balances).reduce((a, v) => a + v, 0), txCount: tx.length };
-  });
-  const grandTotal = branchSummary.reduce((a, s) => a + s.totalVal, 0);
-  const embTotals = {};
-  transactions.forEach(t => { embTotals[t.emballage] = (embTotals[t.emballage] || 0) + (t.type === "IN" ? t.qty : -t.qty); });
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Emballage Export</title>
-  <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"Inter",Arial,sans-serif;font-size:11px;color:#222;padding:20px}h1{font-size:20px;color:#1d4ed8;margin-bottom:4px}.sub{color:#6b7280;font-size:11px;margin-bottom:20px}h2{font-size:14px;color:#1e40af;margin:18px 0 8px;border-bottom:2px solid #dbeafe;padding-bottom:4px}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#1d4ed8;color:white;padding:6px 8px;text-align:left;font-size:10px}td{padding:5px 8px;border-bottom:1px solid #e5e7eb;font-size:10px}tr:nth-child(even) td{background:#f9fafb}.gi{color:#15803d;font-weight:bold}.go{color:#c2410c;font-weight:bold}.grand{background:linear-gradient(135deg,#1d4ed8,#0ea5e9);color:white;border-radius:8px;padding:12px 16px;margin-bottom:16px}.grand .val{font-size:26px;font-weight:bold}.grand .lbl{font-size:10px;opacity:.8}.bh{background:#f0f9ff;border-left:4px solid #1d4ed8;padding:8px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}.bh .nm{font-weight:bold;font-size:13px}.bh .tt{text-align:right;font-size:11px}</style></head><body>
-  <h1>${companyName} — Emballage Export</h1>
-  <div class="sub">Gegenereerd op ${now} · ${transactions.length} transacties · ${branches.length} filialen</div>
-  <div class="grand"><div class="lbl">TOTAAL SALDO</div><div class="val">€ ${grandTotal.toFixed(2)}</div><div class="lbl">${branchSummary.reduce((a, s) => a + s.totalQty, 0)} stuks</div></div>
-  <h2>Per emballagetype</h2>
-  <table><thead><tr><th>Type</th><th>Stukwaarde</th><th>Saldo stuks</th><th>Saldo waarde</th></tr></thead><tbody>
-  ${Object.entries(embTotals).map(([emb, qty]) => { const v = qty * getVal(emb); return `<tr><td>${emb}</td><td>€ ${getVal(emb).toFixed(2)}</td><td class="${qty >= 0 ? "gi" : "go"}">${qty >= 0 ? "+" : ""}${qty}</td><td class="${v >= 0 ? "gi" : "go"}">${v >= 0 ? "+" : ""}€ ${v.toFixed(2)}</td></tr>`; }).join("")}
-  </tbody></table>
-  <h2>Per filiaal</h2>
-  ${branchSummary.map(s => `<div class="bh"><div class="nm">${s.b}</div><div class="tt"><strong class="${s.totalVal >= 0 ? "gi" : "go"}">€ ${s.totalVal.toFixed(2)}</strong><br><span style="color:#6b7280">${s.totalQty} st · ${s.txCount} tx</span></div></div>
-  <table><thead><tr><th>Type</th><th>Saldo</th><th>Waarde</th></tr></thead><tbody>${Object.entries(s.balances).map(([emb, qty]) => { const v = qty * getVal(emb); return `<tr><td>${emb}</td><td class="${qty >= 0 ? "gi" : "go"}">${qty >= 0 ? "+" : ""}${qty} st</td><td class="${v >= 0 ? "gi" : "go"}">${v >= 0 ? "+" : ""}€ ${v.toFixed(2)}</td></tr>`; }).join("")}</tbody></table>`).join("")}
-  <h2>Transacties</h2>
-  <table><thead><tr><th>Datum</th><th>Filiaal</th><th>Type</th><th>Leverancier</th><th>Emballage</th><th>Aantal</th><th>Waarde</th><th>Opmerking</th></tr></thead><tbody>
-  ${[...transactions].sort((a, b) => b.date.localeCompare(a.date)).map(t => { const v = (t.type === "IN" ? 1 : -1) * t.qty * getVal(t.emballage); return `<tr><td>${t.date}</td><td>${t.branch}</td><td class="${t.type === "IN" ? "gi" : "go"}">${t.type === "IN" ? "IN" : "UIT"}</td><td>${t.supplier}</td><td>${t.emballage}</td><td style="text-align:center">${t.qty}</td><td class="${v >= 0 ? "gi" : "go"}">${v >= 0 ? "+" : ""}€ ${v.toFixed(2)}</td><td style="color:#6b7280">${t.note || ""}</td></tr>`; }).join("")}
-  </tbody></table></body></html>`;
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `emballage_export_${companyName.replace(/\s+/g, "_")}.html`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const date = new Date().toLocaleDateString("nl-BE");
+  const saldo = buildSaldoData(transactions, emballageTypes, suppliers);
+  const totalIn = transactions.filter(t => t.type === "IN").reduce((s, t) => s + t.qty, 0);
+  const totalOut = transactions.filter(t => t.type === "OUT").reduce((s, t) => s + t.qty, 0);
+  let totalValue = 0;
+  Object.values(saldo).forEach(d => { totalValue += d.value; });
+
+  // Build saldo rows
+  const saldoRows = Object.entries(saldo).map(([sup, data]) => {
+    const s = data.in - data.out;
+    return `<tr><td style="font-weight:600">${sup}</td><td style="color:#059669">+${data.in}</td><td style="color:#e11d48">−${data.out}</td><td style="font-weight:700;color:${s >= 0 ? "#059669" : "#e11d48"}">${s >= 0 ? "+" : ""}${s}</td><td style="text-align:right">€ ${data.value.toFixed(2)}</td></tr>`;
+  }).join("");
+
+  // Build detail rows
+  const detailRows = Object.entries(saldo).map(([sup, data]) =>
+    Object.entries(data.items).map(([item, qty]) => {
+      const emb = emballageTypes.find(e => e.name === item);
+      const itemSaldo = qty.in - qty.out;
+      const val = itemSaldo * (emb?.value || 0);
+      return `<tr><td>${sup}</td><td>${item}</td><td style="color:#059669">+${qty.in}</td><td style="color:#e11d48">−${qty.out}</td><td style="font-weight:600;color:${itemSaldo >= 0 ? "#059669" : "#e11d48"}">${itemSaldo >= 0 ? "+" : ""}${itemSaldo}</td><td style="text-align:right">€ ${(emb?.value || 0).toFixed(2)}</td><td style="text-align:right">€ ${val.toFixed(2)}</td></tr>`;
+    }).join("")
+  ).join("");
+
+  // Build transaction rows (latest 100)
+  const transRows = [...transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 100).map(t => {
+    const color = t.type === "IN" ? "#059669" : "#e11d48";
+    const label = t.type === "IN" ? "↓ IN" : "↑ UIT";
+    return `<tr><td>${t.date}</td><td style="color:${color};font-weight:600">${label}</td><td>${t.supplier}</td><td>${t.emballage}</td><td style="text-align:center">${t.qty}</td><td>${t.branch}</td><td style="color:#71717a;font-size:11px">${t.note || "-"}</td></tr>`;
+  }).join("");
+
+  const branches = [...new Set(users.filter(u => u.role === "branch").map(u => u.branch))];
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reggy Rapport | ${companyName}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, sans-serif; color: #18181b; font-size: 13px; background: #fff; }
+  .page { max-width: 800px; margin: 0 auto; padding: 40px; }
+
+  /* Header */
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 2px solid #ede9fe; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-bars { display: flex; align-items: flex-end; gap: 2.5px; height: 28px; }
+  .logo-bars div { width: 4px; border-radius: 2px; }
+  .logo-text { font-size: 28px; font-weight: 800; letter-spacing: -0.04em; color: #18181b; }
+  .header-right { text-align: right; }
+  .header-right h2 { font-size: 18px; font-weight: 700; color: #18181b; }
+  .header-right p { font-size: 12px; color: #71717a; margin-top: 2px; }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 32px; }
+  .stat { background: #fafafa; border: 1px solid #e4e4e7; border-radius: 12px; padding: 16px; }
+  .stat .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #71717a; margin-bottom: 4px; }
+  .stat .val { font-size: 24px; font-weight: 800; }
+
+  /* Section */
+  .section { margin-bottom: 28px; }
+  .section h3 { font-size: 15px; font-weight: 700; color: #18181b; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #f4f4f5; display: flex; align-items: center; gap: 8px; }
+  .section h3 .badge { font-size: 11px; font-weight: 600; background: #ede9fe; color: #7c3aed; padding: 2px 8px; border-radius: 6px; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #71717a; padding: 8px 10px; background: #fafafa; border-bottom: 1px solid #e4e4e7; }
+  td { padding: 8px 10px; border-bottom: 1px solid #f4f4f5; }
+  tr:hover { background: #fafafa; }
+  .total-row td { font-weight: 700; border-top: 2px solid #e4e4e7; background: #f5f3ff; }
+
+  /* Footer */
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e4e4e7; text-align: center; font-size: 11px; color: #a1a1aa; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .page { padding: 20px; }
+    .no-print { display: none !important; }
+  }
+</style></head><body>
+<div class="page">
+  <div class="no-print" style="text-align:center;margin-bottom:20px">
+    <button onclick="window.print()" style="background:#7c3aed;color:#fff;border:none;padding:12px 32px;border-radius:10px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer">Opslaan als PDF</button>
+    <p style="font-size:12px;color:#a1a1aa;margin-top:8px">Kies "Opslaan als PDF" in het printvenster</p>
+  </div>
+
+  <div class="header">
+    <div class="logo">
+      <div class="logo-bars">
+        <div style="height:100%;background:#a78bfa"></div>
+        <div style="height:65%;background:#8b5cf6"></div>
+        <div style="height:85%;background:#7c3aed"></div>
+        <div style="height:50%;background:#6d28d9"></div>
+        <div style="height:95%;background:#7c3aed"></div>
+        <div style="height:40%;background:#8b5cf6"></div>
+        <div style="height:75%;background:#a78bfa"></div>
+      </div>
+      <span class="logo-text">Reggy</span>
+    </div>
+    <div class="header-right">
+      <h2>${companyName}</h2>
+      <p>Rapport gegenereerd op ${date}</p>
+      <p>${branches.length} locatie${branches.length !== 1 ? "s" : ""} • ${transactions.length} transacties</p>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="label">Transacties</div><div class="val" style="color:#18181b">${transactions.length}</div></div>
+    <div class="stat"><div class="label">Inkomend</div><div class="val" style="color:#059669">${totalIn}</div></div>
+    <div class="stat"><div class="label">Uitgaand</div><div class="val" style="color:#e11d48">${totalOut}</div></div>
+    <div class="stat"><div class="label">Inventariswaarde</div><div class="val" style="color:#7c3aed">€${totalValue.toFixed(0)}</div></div>
+  </div>
+
+  <div class="section">
+    <h3>Saldo per leverancier <span class="badge">${Object.keys(saldo).length} leveranciers</span></h3>
+    <table>
+      <thead><tr><th>Leverancier</th><th>Inkomend</th><th>Uitgaand</th><th>Saldo</th><th style="text-align:right">Waarde</th></tr></thead>
+      <tbody>${saldoRows}
+      <tr class="total-row"><td>Totaal</td><td style="color:#059669">+${totalIn}</td><td style="color:#e11d48">−${totalOut}</td><td style="font-weight:700">${totalIn - totalOut >= 0 ? "+" : ""}${totalIn - totalOut}</td><td style="text-align:right">€ ${totalValue.toFixed(2)}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h3>Detail per emballage type</h3>
+    <table>
+      <thead><tr><th>Leverancier</th><th>Emballage</th><th>In</th><th>Uit</th><th>Saldo</th><th style="text-align:right">Stukprijs</th><th style="text-align:right">Waarde</th></tr></thead>
+      <tbody>${detailRows}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h3>Transactiehistorie <span class="badge">${transactions.length > 100 ? "Laatste 100" : `${transactions.length} stuks`}</span></h3>
+    <table>
+      <thead><tr><th>Datum</th><th>Type</th><th>Leverancier</th><th>Emballage</th><th style="text-align:center">Aantal</th><th>Filiaal</th><th>Opmerking</th></tr></thead>
+      <tbody>${transRows}</tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <p>Gegenereerd door Reggy | Smart Packaging Tracker • reggy.io</p>
+  </div>
+</div>
+</body></html>`;
+
+  const w = window.open("", "_blank");
+  w.document.write(html);
+  w.document.close();
 }
 
+// ─── EXPORT MODAL ─────────────────────────────────────────────────────────────
 function ExportModal({ account, onClose }) {
-  const [fb, setFb] = useState("Alle");
-  const [df, setDf] = useState("");
-  const [dt, setDt] = useState("");
-  const [exp, setExp] = useState(null);
-  const branches = account.users.filter(u => u.role === "branch").map(u => u.branch);
-  const filtered = account.transactions.filter(t => (fb === "Alle" || t.branch === fb) && (!df || t.date >= df) && (!dt || t.date <= dt));
-  const getVal = (n) => account.emballageTypes.find(e => e.name === n)?.value || 0;
-  const totalVal = filtered.reduce((a, t) => a + (t.type === "IN" ? 1 : -1) * t.qty * getVal(t.emballage), 0);
-
-  const doExport = (type) => {
-    setExp(type);
-    setTimeout(() => {
-      if (type === "csv") exportToCSV(filtered, account.emballageTypes);
-      else exportToPDF(filtered, account.emballageTypes, account.users, account.suppliers, account.companyName);
-      setExp(null);
-    }, 300);
-  };
+  const [format, setFormat] = useState("csv");
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 animate-fade-in">
-      <div className="bg-white rounded-t-3xl w-full max-w-md p-6 space-y-5 shadow-2xl animate-slide-up">
-        <div className="flex items-center justify-between">
-          <div><h2 className="text-lg font-bold flex items-center gap-2"><Download size={20} className="text-blue-600" /> Exporteren</h2><p className="text-xs text-gray-500">Filters instellen en formaat kiezen</p></div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-200"><X size={18} /></button>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md lg:max-w-2xl xl:max-w-4xl w-full p-8 animate-slide-up">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2"><Download size={24} /> Exporteren</h2>
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-all duration-200">
+            <input type="radio" name="format" value="csv" checked={format === "csv"} onChange={(e) => setFormat(e.target.value)} className="accent-blue-600" />
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900">CSV / Excel</p>
+              <p className="text-sm text-gray-500">Saldo-overzicht, detail per leverancier, alle transacties. Direct te openen in Excel.</p>
+            </div>
+          </label>
+          <label className="flex items-center gap-3 p-4 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-all duration-200">
+            <input type="radio" name="format" value="pdf" checked={format === "pdf"} onChange={(e) => setFormat(e.target.value)} className="accent-blue-600" />
+            <div className="flex-1">
+              <p className="font-semibold text-gray-900">PDF Rapport</p>
+              <p className="text-sm text-gray-500">Professioneel rapport met Reggy branding, statistieken, saldo en transactiehistorie.</p>
+            </div>
+          </label>
         </div>
-        <div className="space-y-4">
-          <div><label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2 block">Filiaal</label>
-            <select value={fb} onChange={e => setFb(e.target.value)} className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200">
-              <option>Alle</option>{branches.map(b => <option key={b}>{b}</option>)}
-            </select></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2 block">Datum van</label>
-              <input type="date" value={df} onChange={e => setDf(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200" /></div>
-            <div><label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2 block">Datum tot</label>
-              <input type="date" value={dt} onChange={e => setDt(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200" /></div>
-          </div>
-        </div>
-        <div className={`rounded-2xl px-5 py-4 flex justify-between transition-all duration-200 ${totalVal >= 0 ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`}>
-          <div><p className="text-xs text-gray-600">Geselecteerd</p><p className="font-bold text-gray-800 text-lg">{filtered.length}</p></div>
-          <div className="text-right"><p className="text-xs text-gray-600">Saldo</p><p className={`font-bold text-xl ${totalVal >= 0 ? "text-green-600" : "text-red-600"}`}>{fmt(totalVal)}</p></div>
-        </div>
-        <div className="grid grid-cols-2 gap-3 pt-2">
-          <button onClick={() => doExport("csv")} disabled={!!exp || filtered.length === 0}
-            className="py-4 rounded-2xl bg-green-500 text-white font-bold flex flex-col items-center gap-2 hover:bg-green-600 disabled:opacity-40 transition-all duration-200">
-            {exp === "csv" ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FileText size={24} />}
-            <span className="text-sm">Excel / CSV</span>
-          </button>
-          <button onClick={() => doExport("pdf")} disabled={!!exp || filtered.length === 0}
-            className="py-4 rounded-2xl bg-red-500 text-white font-bold flex flex-col items-center gap-2 hover:bg-red-600 disabled:opacity-40 transition-all duration-200">
-            {exp === "pdf" ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Download size={24} />}
-            <span className="text-sm">PDF</span>
-          </button>
+        <div className="flex gap-3 mt-6">
+          <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200">Annuleren</button>
+          <button onClick={() => { format === "csv" ? exportToCSV(account.transactions, account.emballageTypes, account.suppliers, account.companyName) : exportToPDF(account.transactions, account.emballageTypes, account.users, account.suppliers, account.companyName); onClose(); }} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Download size={20} /> Exporteren</button>
         </div>
       </div>
     </div>
@@ -651,466 +804,1006 @@ function ExportModal({ account, onClose }) {
 }
 
 // ─── BON SCAN MODAL ───────────────────────────────────────────────────────────
-function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport }) {
-  const [step, setStep] = useState("upload");
-  const [loading, setLoading] = useState(false);
-  const [preview, setPreview] = useState(null);
-  const [previewType, setPreviewType] = useState("image");
-  const [rawFile, setRawFile] = useState(null);
-  const [parsed, setParsed] = useState(null);
-  const [editLines, setEditLines] = useState([]);
-  const fileRef = useRef();
-  const [apiKeyInput, setApiKeyInput] = useState(getApiKey());
-  const [needsKey, setNeedsKey] = useState(false);
+function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, isEdit = false, initialData = null }) {
+  // Edit mode: single item
+  const [type, setType] = useState(initialData?.type || "IN");
+  const [supplier, setSupplier] = useState(initialData?.supplier || "");
+  const [note, setNote] = useState(initialData?.note || "");
 
-  const scanBon = async (base64, mediaType) => {
-    const key = getApiKey();
-    if (!key) { setNeedsKey(true); setLoading(false); return; }
-    setLoading(true);
-    try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-        body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: [mediaType === "application/pdf" ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } } : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } }, { type: "text", text: `Analyseer deze emballagebon. Types: ${emballageTypes.map(e => e.name).join(", ")}. Leveranciers: ${suppliers.join(", ")}. Geef ALLEEN JSON: {"supplier":null,"date":null,"type":"IN","bonNummer":null,"lines":[{"description":"","qty":1,"matchedType":null,"unitValue":null}]}` }] }] })
-      });
-      if (!res.ok) { const err = await res.text(); throw new Error(err); }
-      const d = await res.json();
-      const txt = d.content?.find(b => b.type === "text")?.text || "{}";
-      const result = JSON.parse(txt.replace(/```json|```/g, "").trim());
-      setParsed(result);
-      setEditLines(result.lines || []);
-      setStep("review");
-    } catch (e) {
-      alert("Fout bij scannen: " + e.message);
-    } finally {
-      setLoading(false);
+  // Multi-line mode (new registrations): array of {emballage, qty} rows
+  const [lines, setLines] = useState(
+    isEdit
+      ? [{ emballage: initialData?.emballage || "", qty: initialData?.qty || 1 }]
+      : [{ emballage: "", qty: 1 }]
+  );
+
+  const updateLine = (idx, field, value) => {
+    setLines(lines.map((l, i) => i === idx ? { ...l, [field]: value } : l));
+  };
+
+  const addLine = () => {
+    setLines([...lines, { emballage: "", qty: 1 }]);
+  };
+
+  const removeLine = (idx) => {
+    if (lines.length <= 1) return;
+    setLines(lines.filter((_, i) => i !== idx));
+  };
+
+  const validLines = lines.filter(l => l.emballage && parseInt(l.qty) > 0);
+
+  const handleImport = () => {
+    if (!supplier || validLines.length === 0) return;
+    if (isEdit) {
+      const l = lines[0];
+      onImport({ ...initialData, type, supplier, emballage: l.emballage, qty: parseInt(l.qty), note });
+    } else {
+      // Send array of transactions
+      const items = validLines.map(l => ({
+        type, supplier, emballage: l.emballage, qty: parseInt(l.qty), note, branch, date: new Date().toISOString().split("T")[0]
+      }));
+      onImport(items);
     }
   };
 
-  const handleFile = (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setRawFile(f);
-    const r = new FileReader();
-    r.onload = (ev) => {
-      const b64 = ev.target?.result?.split(",")[1];
-      const type = f.type;
-      setPreview(b64);
-      setPreviewType(type.startsWith("image") ? "image" : "pdf");
-      if (b64) scanBon(b64, type);
-    };
-    r.readAsDataURL(f);
-  };
-
-  const handleImport = () => {
-    if (!parsed) return;
-    const tx = {
-      id: Date.now(),
-      date: parsed.date || new Date().toISOString().split("T")[0],
-      type: parsed.type || "IN",
-      supplier: parsed.supplier || "Unknown",
-      branch,
-      attachment: preview ? { name: rawFile?.name || "scan.jpg", base64: preview } : null,
-      note: parsed.bonNummer ? `Bon #${parsed.bonNummer}` : ""
-    };
-    editLines.forEach(line => {
-      if (line.matchedType && line.qty > 0) onImport({ ...tx, emballage: line.matchedType, qty: line.qty });
-    });
-    onClose();
-  };
-
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-end justify-center z-50 animate-fade-in">
-      <div className="bg-white rounded-t-3xl w-full max-w-md p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto animate-slide-up">
-        <div className="flex items-center justify-between sticky top-0 bg-white pb-2">
-          <div><h2 className="text-lg font-bold flex items-center gap-2"><ScanLine size={20} className="text-blue-600" /> Bon scannen</h2><p className="text-xs text-gray-500">Upload een foto of PDF</p></div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-200"><X size={18} /></button>
-        </div>
-
-        {step === "upload" && (
-          <div className="space-y-4">
-            {needsKey && (
-              <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200 space-y-3">
-                <p className="text-sm font-bold text-yellow-800 flex items-center gap-2"><AlertCircle size={16} /> Anthropic API-sleutel nodig</p>
-                <input type="password" value={apiKeyInput} onChange={e => setApiKeyInput(e.target.value)} placeholder="Voer je API-sleutel in"
-                  className="w-full border border-yellow-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-400 transition-all duration-200" />
-                <button onClick={() => { setApiKey(apiKeyInput); setNeedsKey(false); }} className="w-full py-2 bg-yellow-600 text-white rounded-lg font-semibold text-sm hover:bg-yellow-700 transition-all duration-200">Opslaan</button>
-              </div>
-            )}
-            <div className="border-2 border-dashed border-blue-300 rounded-2xl p-8 text-center space-y-3 cursor-pointer hover:bg-blue-50 transition-all duration-200" onClick={() => fileRef.current?.click()}>
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mx-auto"><Package size={24} className="text-blue-600" /></div>
-              <p className="text-sm font-bold text-gray-700">Klik om bestand te kiezen</p>
-              <p className="text-xs text-gray-500">JPG, PNG of PDF</p>
-            </div>
-            <input ref={fileRef} type="file" accept="image/*,.pdf" onChange={handleFile} className="hidden" />
-            {loading && <div className="flex items-center justify-center gap-2 py-4"><div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /><span className="text-sm text-gray-600">Scannen...</span></div>}
-          </div>
-        )}
-
-        {step === "review" && parsed && (
-          <div className="space-y-4">
-            {preview && (
-              <div className="bg-gray-100 rounded-xl overflow-hidden h-48">
-                {previewType === "image" ? (
-                  <img src={`data:image/jpeg;base64,${preview}`} alt="preview" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center"><FileText size={48} className="text-gray-400" /></div>
-                )}
-              </div>
-            )}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Leverancier</label>
-              <select value={parsed.supplier || ""} onChange={e => setParsed({ ...parsed, supplier: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200">
-                <option>Selecteer...</option>{suppliers.map(s => <option key={s}>{s}</option>)}
+    <div className="fixed inset-0 bg-black/50 flex items-end z-50">
+      <div className="bg-white rounded-t-3xl w-full max-w-md lg:max-w-2xl xl:max-w-4xl p-6 animate-slide-up shadow-2xl" style={{ maxHeight: "90vh" }}>
+        <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">{isEdit ? <Pencil size={24} /> : <ScanLine size={24} />} {isEdit ? "Transactie bewerken" : "Registratie"}</h2>
+        <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "calc(90vh - 180px)" }}>
+          {/* Shared fields: type + supplier */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">Type</label>
+              <select value={type} onChange={(e) => setType(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                <option value="IN">↓ Inkomend</option>
+                <option value="OUT">↑ Uitgaand</option>
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2 block">Datum</label>
-                <input type="date" value={parsed.date || ""} onChange={e => setParsed({ ...parsed, date: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200" /></div>
-              <div><label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2 block">Type</label>
-                <select value={parsed.type || "IN"} onChange={e => setParsed({ ...parsed, type: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200">
-                  <option value="IN">Inkomend</option><option value="OUT">Uitgaand</option>
-                </select></div>
-            </div>
-            <div><label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2 block">Regels</label>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {editLines.map((line, i) => (
-                  <div key={i} className="bg-gray-50 rounded-lg p-3 space-y-2 border border-gray-200">
-                    <input type="number" value={line.qty} onChange={e => { const a = [...editLines]; a[i].qty = parseInt(e.target.value) || 0; setEditLines(a); }} placeholder="Aantal" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 transition-all duration-200" />
-                    <select value={line.matchedType || ""} onChange={e => { const a = [...editLines]; a[i].matchedType = e.target.value; setEditLines(a); }} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 transition-all duration-200">
-                      <option>Selecteer type...</option>{emballageTypes.map(et => <option key={et.name} value={et.name}>{et.name}</option>)}
-                    </select>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button onClick={() => { setStep("upload"); setParsed(null); }} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-semibold text-sm hover:bg-gray-200 transition-all duration-200">← Terug</button>
-              <button onClick={handleImport} disabled={!editLines.some(l => l.matchedType && l.qty > 0)} className="flex-[2] py-2.5 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 disabled:opacity-40 transition-all duration-200 flex items-center justify-center gap-2"><Plus size={16} /> Importeren</button>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">Leverancier</label>
+              <select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                <option value="">Selecteer...</option>
+                {suppliers.map((s, i) => <option key={i} value={s}>{s}</option>)}
+              </select>
             </div>
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
-// ─── ATTACHMENTS VIEWER ───────────────────────────────────────────────────────
-function AttViewer({ att, onClose }) {
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 animate-fade-in p-4">
-      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden animate-slide-up">
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <p className="font-bold text-gray-800 flex items-center gap-2"><Paperclip size={18} /> {att.name}</p>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-all duration-200"><X size={18} /></button>
-        </div>
-        <div className="p-4 bg-gray-50 h-96 flex items-center justify-center overflow-auto">
-          {att.base64?.startsWith("/") || att.base64?.includes("data:image") ? (
-            <img src={att.base64?.includes("data:") ? att.base64 : `data:image/jpeg;base64,${att.base64}`} alt={att.name} className="max-w-full max-h-full" />
-          ) : (
-            <div className="text-center space-y-2"><FileText size={48} className="text-gray-400 mx-auto" /><p className="text-sm text-gray-600">{att.name}</p></div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── MASTER DASHBOARD ─────────────────────────────────────────────────────────
-function MasterDashboard({ account, onLogout }) {
-  const branches = account.users.filter(u => u.role === "branch");
-  const totalValue = account.transactions.reduce((a, t) => {
-    const emb = account.emballageTypes.find(e => e.name === t.emballage);
-    return a + (t.type === "IN" ? 1 : -1) * t.qty * (emb?.value || 0);
-  }, 0);
-
-  return (
-    <div className="min-h-screen bg-gray-100 flex flex-col max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto">
-      <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white px-5 pt-7 pb-5 rounded-b-2xl shadow-md">
-        <div className="flex items-center justify-between mb-4">
-          <div><p className="text-xs text-blue-200 uppercase tracking-wide">Master Admin</p><h1 className="text-2xl font-bold flex items-center gap-2"><Crown size={24} /> {account.companyName}</h1></div>
-          <button onClick={onLogout} className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full transition-all duration-200">Uitloggen</button>
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white/10 rounded-xl p-3 text-center"><p className="text-2xl font-bold">{branches.length}</p><p className="text-xs text-blue-200">Filialen</p></div>
-          <div className="bg-white/10 rounded-xl p-3 text-center"><p className="text-2xl font-bold">{account.transactions.length}</p><p className="text-xs text-blue-200">Transacties</p></div>
-          <div className="bg-green-500/30 rounded-xl p-3 text-center"><p className="text-xl font-bold">{fmt(totalValue)}</p><p className="text-xs text-blue-200">Totaal</p></div>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 pb-8 space-y-4">
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Store size={18} className="text-blue-600" /> Filialen overzicht</h3>
-          {branches.length === 0 ? (
-            <div className="text-center py-8 space-y-2"><Inbox size={32} className="text-gray-300 mx-auto" /><p className="text-sm text-gray-600">Geen filialen</p></div>
-          ) : (
-            <div className="space-y-2">
-              {branches.map(b => {
-                const bTx = account.transactions.filter(t => t.branch === b.branch);
-                const bVal = bTx.reduce((a, t) => {
-                  const emb = account.emballageTypes.find(e => e.name === t.emballage);
-                  return a + (t.type === "IN" ? 1 : -1) * t.qty * (emb?.value || 0);
-                }, 0);
-                return (
-                  <div key={b.id} className="flex items-center justify-between py-3 px-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-all duration-200">
-                    <div><p className="font-medium text-gray-800">{b.branch}</p><p className="text-xs text-gray-500">{bTx.length} transacties</p></div>
-                    <p className={`font-bold ${bVal >= 0 ? "text-green-600" : "text-red-600"}`}>{fmt(bVal)}</p>
-                  </div>
-                );
-              })}
+          {/* Line items */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-gray-500">Artikelen</label>
+              {!isEdit && <span className="text-xs text-gray-400">{validLines.length} regel{validLines.length !== 1 ? "s" : ""}</span>}
             </div>
-          )}
-        </div>
-
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><TrendingUp size={18} className="text-green-600" /> Top emballages</h3>
-          {account.transactions.length === 0 ? (
-            <p className="text-xs text-gray-500 text-center py-4">Geen transacties</p>
-          ) : (
             <div className="space-y-2">
-              {Object.entries(account.transactions.reduce((a, t) => ({ ...a, [t.emballage]: (a[t.emballage] || 0) + (t.type === "IN" ? t.qty : -t.qty) }), {})).slice(0, 5).map(([emb, qty]) => (
-                <div key={emb} className="flex items-center justify-between py-2">
-                  <span className="text-sm text-gray-700">{emb}</span>
-                  <span className={`font-bold ${qty >= 0 ? "text-green-600" : "text-red-600"}`}>{qty >= 0 ? "+" : ""}{qty} st</span>
+              {lines.map((line, idx) => (
+                <div key={idx} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5 border border-gray-100">
+                  <select value={line.emballage} onChange={(e) => updateLine(idx, "emballage", e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-0">
+                    <option value="">Emballage...</option>
+                    {emballageTypes.map((e, i) => <option key={i} value={e.name}>{e.name} (€{e.value})</option>)}
+                  </select>
+                  <input type="number" value={line.qty} onChange={(e) => updateLine(idx, "qty", e.target.value)} className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm text-center bg-white focus:ring-2 focus:ring-blue-500 outline-none" min="1" placeholder="#" />
+                  {lines.length > 1 && (
+                    <button onClick={() => removeLine(idx)} className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 flex-shrink-0"><X size={16} /></button>
+                  )}
                 </div>
               ))}
             </div>
-          )}
+            {!isEdit && (
+              <button onClick={addLine} className="mt-2 w-full py-2 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 font-semibold hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50 transition-all duration-200 flex items-center justify-center gap-1.5">
+                <PlusCircle size={16} /> Regel toevoegen
+              </button>
+            )}
+          </div>
+
+          {/* Note */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5">Opmerking</label>
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Optioneel" />
+          </div>
+        </div>
+        <div className="flex gap-3 mt-4">
+          <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200">Annuleren</button>
+          <button onClick={handleImport} disabled={!supplier || validLines.length === 0} className={`flex-1 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${isEdit ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}>
+            {isEdit ? <><Check size={20} /> Opslaan</> : <><Check size={20} /> {validLines.length > 1 ? `${validLines.length} regels registreren` : "Registreren"}</>}
+          </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── ATTACHMENT VIEWER ────────────────────────────────────────────────────────
+function AttViewer({ att, onClose }) {
+  return att ? <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={onClose}><img src={att} alt="attachment" className="max-h-96 rounded-lg" /></div> : null;
+}
+
+// ─── MASTER DASHBOARD ─────────────────────────────────────────────────────────
+function MasterDashboard({ account }) {
+  const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch))];
+  const totalTrans = account.transactions.length;
+  const inCount = account.transactions.filter(t => t.type === "IN").length;
+  const outCount = account.transactions.filter(t => t.type === "OUT").length;
+
+  return (
+    <div className="animate-fade-in space-y-6">
+      <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><BarChart3 size={28} /> Dashboard</h2>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4">
+          <p className="text-sm text-blue-600 font-semibold">Totaal transacties</p>
+          <p className="text-3xl font-bold text-blue-900">{totalTrans}</p>
+        </div>
+        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4">
+          <p className="text-sm text-green-600 font-semibold flex items-center gap-1"><ArrowDownCircle size={16} /> Inkomend</p>
+          <p className="text-3xl font-bold text-green-900">{inCount}</p>
+        </div>
+        <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4">
+          <p className="text-sm text-red-600 font-semibold flex items-center gap-1"><ArrowUpCircle size={16} /> Uitgaand</p>
+          <p className="text-3xl font-bold text-red-900">{outCount}</p>
+        </div>
+      </div>
+      {branches.length === 0 ? (
+        <div className="bg-gray-50 rounded-xl p-8 text-center">
+          <Building2 size={32} className="mx-auto text-gray-400 mb-2" />
+          <p className="text-gray-600">Geen filialen ingesteld</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="font-semibold text-gray-700">Filialen ({branches.length})</p>
+          {branches.map((b, i) => <div key={i} className="bg-white rounded-lg p-3 flex items-center justify-between shadow-sm"><p className="font-semibold text-gray-900">{b}</p></div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MASTER BEHEER (USER MANAGEMENT) ───────────────────────────────────────────
+function MasterBeheer({ account, setAccount }) {
+  const [showForm, setShowForm] = useState(false);
+  const [newUser, setNewUser] = useState({ name: "", email: "", password: "", branch: "" });
+  const [newBranch, setNewBranch] = useState("");
+  const [toast, setToast] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch).filter(Boolean))];
+
+  const handleAddUser = async () => {
+    if (!newUser.name || !newUser.email || !newUser.password || !newUser.branch) {
+      setToast({ type: "error", message: "Alle velden zijn verplicht" });
+      return;
+    }
+    if (newUser.password.length < 6) {
+      setToast({ type: "error", message: "Wachtwoord moet minimaal 6 tekens zijn" });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      // 1. Create Supabase Auth user via admin invite (signUp)
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newUser.email,
+        password: newUser.password,
+        options: {
+          data: { display_name: newUser.name, branch: newUser.branch },
+        },
+      });
+      if (authError) throw authError;
+
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("Gebruiker kon niet aangemaakt worden");
+
+      // 2. Create profile record linked to this account
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .upsert({
+          id: userId,
+          account_id: account.id,
+          display_name: newUser.name,
+          role: "branch",
+          branch: newUser.branch,
+        });
+      if (profileError) throw profileError;
+
+      // 3. Update local state
+      setAccount({
+        ...account,
+        users: [...account.users, {
+          id: userId,
+          name: newUser.name,
+          role: "branch",
+          branch: newUser.branch,
+        }],
+      });
+
+      setNewUser({ name: "", email: "", password: "", branch: "" });
+      setShowForm(false);
+      setToast({ type: "success", message: `${newUser.name} toegevoegd! Ze kunnen inloggen met ${newUser.email}` });
+    } catch (err) {
+      console.error("Error adding user:", err);
+      const msg = err.message?.includes("already registered")
+        ? "Dit emailadres is al in gebruik"
+        : err.message || "Er ging iets mis";
+      setToast({ type: "error", message: msg });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (id) => {
+    const user = account.users.find(u => u.id === id);
+    if (!user || user.role === "master") return;
+    if (!confirm(`Weet je zeker dat je ${user.name} wilt verwijderen?`)) return;
+
+    try {
+      // Delete profile (auth user stays but can't access anything without profile)
+      const { error } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+
+      setAccount({ ...account, users: account.users.filter(u => u.id !== id) });
+      setToast({ type: "success", message: "Gebruiker verwijderd!" });
+    } catch (err) {
+      setToast({ type: "error", message: "Fout bij verwijderen: " + err.message });
+    }
+  };
+
+  const handleAddBranch = () => {
+    if (!newBranch.trim()) return;
+    setNewUser({ ...newUser, branch: newBranch.trim() });
+    setNewBranch("");
+  };
+
+  return (
+    <div className="animate-fade-in space-y-6">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><Users size={28} /> Gebruikers</h2>
+
+      {/* User count summary */}
+      <div className="bg-blue-50 rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-blue-700">{account.users.length} gebruiker{account.users.length !== 1 ? "s" : ""}</p>
+          <p className="text-xs text-blue-600">{branches.length} locatie{branches.length !== 1 ? "s" : ""} actief</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs text-blue-600">Abonnement: {account.plan.outlets} outlet{account.plan.outlets !== 1 ? "s" : ""}</p>
+        </div>
+      </div>
+
+      {/* User list */}
+      <div className="space-y-3">
+        {account.users.map(u => (
+          <div key={u.id} className="bg-white rounded-lg p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${u.role === "master" ? "bg-gradient-to-br from-purple-400 to-purple-600" : "bg-gradient-to-br from-blue-400 to-blue-600"}`}>{u.name[0]}</div>
+              <div>
+                <p className="font-semibold text-gray-900">{u.name}</p>
+                <p className="text-xs text-gray-600">{u.role === "master" ? "Master Admin" : u.branch || "Geen locatie"}</p>
+              </div>
+            </div>
+            {u.role !== "master" && <button onClick={() => handleDeleteUser(u.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all duration-200"><Trash2 size={18} /></button>}
+          </div>
+        ))}
+      </div>
+
+      {/* Add user form */}
+      {showForm && (
+        <div className="bg-blue-50 rounded-xl p-4 space-y-3">
+          <p className="text-sm font-semibold text-gray-700 mb-1">Nieuwe locatie-gebruiker</p>
+          <input type="text" placeholder="Naam (bijv. Filiaal Amsterdam)" value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
+          <input type="email" placeholder="Email (voor inloggen)" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
+          <input type="password" placeholder="Wachtwoord (min. 6 tekens)" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
+
+          {/* Branch selection: existing or new */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5">Locatie</label>
+            <select value={newUser.branch} onChange={(e) => setNewUser({ ...newUser, branch: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg">
+              <option value="">Kies locatie...</option>
+              {branches.map((b, i) => <option key={i} value={b}>{b}</option>)}
+              <option value="__new__">+ Nieuwe locatie toevoegen</option>
+            </select>
+            {newUser.branch === "__new__" && (
+              <div className="flex gap-2 mt-2">
+                <input type="text" placeholder="Locatienaam" value={newBranch} onChange={(e) => setNewBranch(e.target.value)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg" />
+                <button onClick={handleAddBranch} disabled={!newBranch.trim()} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 disabled:opacity-40">OK</button>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={() => { setShowForm(false); setNewUser({ name: "", email: "", password: "", branch: "" }); }} className="flex-1 bg-gray-300 text-gray-800 py-2 rounded-lg font-bold hover:bg-gray-400 transition-all duration-200">Annuleren</button>
+            <button onClick={handleAddUser} disabled={isLoading} className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60">
+              {isLoading ? <><Loader2 size={18} className="animate-spin" /> Aanmaken...</> : <><Plus size={18} /> Toevoegen</>}
+            </button>
+          </div>
+        </div>
+      )}
+      {!showForm && <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><PlusCircle size={20} /> Locatie-gebruiker toevoegen</button>}
+    </div>
+  );
+}
+
+// ─── MASTER LOGBOEK ───────────────────────────────────────────────────────────
+function MasterLogboek({ account, setAccount }) {
+  const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [toast, setToast] = useState(null);
+
+  const filtered = account.transactions
+    .filter(t => filter === "all" || t.type === filter)
+    .filter(t => !search || t.emballage.toLowerCase().includes(search.toLowerCase()) || t.supplier.toLowerCase().includes(search.toLowerCase()) || t.branch.toLowerCase().includes(search.toLowerCase()))
+    .filter(t => {
+      if (!dateFrom && !dateTo) return true;
+      const tDate = new Date(t.date);
+      if (dateFrom && tDate < new Date(dateFrom)) return false;
+      if (dateTo && tDate > new Date(dateTo)) return false;
+      return true;
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const handleDeleteTransaction = async (id) => {
+    try {
+      // supabase is imported at the top of App.jsx
+      const { error } = await supabase.from("transactions").delete().eq("id", id);
+      if (error) throw error;
+      setAccount({ ...account, transactions: account.transactions.filter(t => t.id !== id) });
+      setToast({ type: "success", message: "Transactie verwijderd!" });
+    } catch (err) {
+      setToast({ type: "error", message: "Fout bij verwijderen: " + err.message });
+    }
+  };
+
+  return (
+    <div className="animate-fade-in space-y-6">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><ClipboardList size={28} /> Logboek</h2>
+
+      {/* Search */}
+      <div className="relative">
+        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Zoek op emballage, leverancier of filiaal..." className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+      </div>
+
+      {/* Date filters */}
+      <div className="flex gap-2">
+        <div className="flex-1 relative">
+          <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+        </div>
+        <div className="flex-1 relative">
+          <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+        </div>
+      </div>
+
+      {/* Type filter */}
+      <div className="flex gap-2">
+        <button onClick={() => setFilter("all")} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${filter === "all" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Alles</button>
+        <button onClick={() => setFilter("IN")} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${filter === "IN" ? "bg-green-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Inkomend</button>
+        <button onClick={() => setFilter("OUT")} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${filter === "OUT" ? "bg-red-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Uitgaand</button>
+        {(search || dateFrom || dateTo) && (
+          <button onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setFilter("all"); }} className="px-3 py-2 rounded-lg text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-all duration-200 flex items-center gap-1">
+            <X size={14} /> Reset
+          </button>
+        )}
+      </div>
+
+      <p className="text-xs text-gray-400">{filtered.length} transactie{filtered.length !== 1 ? "s" : ""}</p>
+
+      {filtered.length === 0 ? (
+        <div className="bg-gray-50 rounded-xl p-8 text-center">
+          <Inbox size={32} className="mx-auto text-gray-400 mb-2" />
+          <p className="text-gray-600">{search ? "Geen resultaten" : "Geen transacties"}</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(t => (
+            <div key={t.id} className="bg-white rounded-lg p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
+              <div className="flex items-center gap-3 flex-1">
+                {t.type === "IN" ? <ArrowDownCircle size={20} className="text-green-600" /> : <ArrowUpCircle size={20} className="text-red-600" />}
+                <div className="flex-1">
+                  <p className="font-semibold text-gray-900">{t.emballage} ({t.qty}x)</p>
+                  <p className="text-xs text-gray-600">{t.date} • {t.supplier} • {t.branch}</p>
+                </div>
+              </div>
+              <button onClick={() => handleDeleteTransaction(t.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all duration-200"><Trash2 size={18} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ABONNEMENT TAB ───────────────────────────────────────────────────────────
+function AbonnementTab({ account }) {
+  return (
+    <div className="animate-fade-in space-y-6">
+      <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><CreditCard size={28} /> Abonnement</h2>
+      <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-gray-700">Status</p>
+          <p className={`font-bold ${account.plan.status === "active" ? "text-green-600" : "text-red-600"}`}>{account.plan.status.toUpperCase()}</p>
+        </div>
+        <div className="flex items-center justify-between">
+          <p className="text-gray-700">Outlets</p>
+          <p className="font-bold text-gray-900">{account.plan.outlets}</p>
+        </div>
+        <div className="flex items-center justify-between">
+          <p className="text-gray-700">Maandelijks bedrag</p>
+          <p className="text-xl font-bold text-blue-900">{fmt(calcPrice(account.plan.outlets).total)}</p>
+        </div>
+        <div className="border-t border-blue-200 pt-4 flex items-center justify-between">
+          <p className="text-gray-700">Volgende facturering</p>
+          <p className="font-semibold text-gray-900">{account.plan.nextBilling}</p>
+        </div>
+      </div>
+      <p className="text-xs text-gray-500">Het abonnement kan alleen gewijzigd worden via de administrateur van uw bedrijf.</p>
+    </div>
+  );
+}
+
+// ─── MASTER APP ──────────────────────────────────────────────────────────────
+function MasterApp({ account, user, onLogout, setAccount }) {
+  const [masterScreen, setMasterScreen] = useState("dashboard");
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto p-6">
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <BarcodeLogo size="sm" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">{account.companyName}</h1>
+              <p className="text-sm text-gray-600">{user.name}</p>
+            </div>
+          </div>
+          <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
+        </div>
+
+        <div className="flex gap-2 mb-6 border-b border-gray-200">
+          <button onClick={() => setMasterScreen("dashboard")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "dashboard" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Dashboard</button>
+          <button onClick={() => setMasterScreen("logboek")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "logboek" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Logboek</button>
+          <button onClick={() => setMasterScreen("beheer")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "beheer" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Beheer</button>
+          <button onClick={() => setMasterScreen("abonnement")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "abonnement" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Abonnement</button>
+        </div>
+
+        {masterScreen === "dashboard" && <MasterDashboard account={account} />}
+        {masterScreen === "logboek" && <MasterLogboek account={account} setAccount={setAccount} />}
+        {masterScreen === "beheer" && <MasterBeheer account={account} setAccount={setAccount} />}
+        {masterScreen === "abonnement" && <AbonnementTab account={account} />}
+      </div>
+    </div>
+  );
+}
+
+// ─── SUPPLIER COLORS ─────────────────────────────────────────────────────────
+const SUPPLIER_COLORS = [
+  { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700", bar: "#10b981", dot: "bg-emerald-500" },
+  { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700", bar: "#f59e0b", dot: "bg-amber-500" },
+  { bg: "bg-sky-50", border: "border-sky-200", text: "text-sky-700", bar: "#0ea5e9", dot: "bg-sky-500" },
+  { bg: "bg-rose-50", border: "border-rose-200", text: "text-rose-700", bar: "#f43f5e", dot: "bg-rose-500" },
+  { bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-700", bar: "#8b5cf6", dot: "bg-violet-500" },
+  { bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-700", bar: "#f97316", dot: "bg-orange-500" },
+];
+
+function getSupplierColor(supplier, allSuppliers) {
+  const idx = allSuppliers.indexOf(supplier);
+  return SUPPLIER_COLORS[idx % SUPPLIER_COLORS.length];
+}
+
+// ─── MINI BAR CHART ──────────────────────────────────────────────────────────
+function MiniBarChart({ data, maxVal }) {
+  if (!maxVal) maxVal = Math.max(...data.map(d => Math.max(d.in, d.out)), 1);
+  return (
+    <div className="flex items-end gap-1 h-24">
+      {data.map((d, i) => (
+        <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+          <div className="w-full flex gap-0.5 items-end" style={{ height: "80px" }}>
+            <div className="flex-1 bg-emerald-400 rounded-t-sm transition-all duration-500" style={{ height: `${(d.in / maxVal) * 100}%`, minHeight: d.in ? "4px" : "0" }} />
+            <div className="flex-1 bg-rose-400 rounded-t-sm transition-all duration-500" style={{ height: `${(d.out / maxVal) * 100}%`, minHeight: d.out ? "4px" : "0" }} />
+          </div>
+          <span className="text-[10px] text-gray-400 leading-none">{d.label}</span>
+        </div>
+      ))}
     </div>
   );
 }
 
 // ─── BRANCH APP ───────────────────────────────────────────────────────────────
-function BranchApp({ account, user, onLogout }) {
-  const [txs, setTxs] = useState(account.transactions);
-  const [tab, setTab] = useState("logboek");
-  const [showScan, setShowScan] = useState(false);
-  const [showExport, setShowExport] = useState(false);
-  const [showAtt, setShowAtt] = useState(null);
+function BranchApp({ user, account, setAccount, onLogout, language, setLanguage }) {
+  const [screen, setScreen] = useState("overzicht");
+  const [scanModal, setScanModal] = useState(false);
+  const [exportModal, setExportModal] = useState(false);
+  const [barcodeScanner, setBarcodeScanner] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(shouldShowOnboarding());
+  const [attViewer, setAttViewer] = useState(null);
   const [toast, setToast] = useState(null);
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState(null);
+  const [logFilter, setLogFilter] = useState("all");
+  const [logSearch, setLogSearch] = useState("");
+  const [logDateFrom, setLogDateFrom] = useState("");
+  const [logDateTo, setLogDateTo] = useState("");
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  const myTxs = txs.filter(t => t.branch === user.branch);
-  const getVal = (n) => account.emballageTypes.find(e => e.name === n)?.value || 0;
-  const balance = myTxs.reduce((a, t) => a + (t.type === "IN" ? 1 : -1) * t.qty * getVal(t.emballage), 0);
+  const branchTransactions = account.transactions.filter(t => t.branch === user.branch);
 
-  const handleAddTx = (base) => {
-    if (!base.emballage || !base.qty) { setToast({ msg: "Vul alles in", type: "warning" }); return; }
-    const tx = { ...base, id: Date.now(), branch: user.branch };
-    setTxs([...txs, tx]);
-    setToast({ msg: "Transactie toegevoegd", type: "success" });
+  const handleImportTransaction = async (transOrArray) => {
+    const items = Array.isArray(transOrArray) ? transOrArray : [transOrArray];
+    try {
+      // supabase is imported at the top of App.jsx
+      const inserts = items.map(t => ({
+        account_id: account.id,
+        date: t.date,
+        type: t.type,
+        supplier: t.supplier,
+        emballage: t.emballage,
+        qty: parseInt(t.qty),
+        note: t.note || null,
+        branch: t.branch || user.branch,
+      }));
+      const { data, error } = await supabase.from("transactions").insert(inserts).select();
+      if (error) throw error;
+      const newTrans = data.map(t => ({ id: t.id, date: t.date, type: t.type, supplier: t.supplier, emballage: t.emballage, qty: t.qty, note: t.note || "", attachment: t.attachment, branch: t.branch || "" }));
+      setAccount({ ...account, transactions: [...newTrans, ...account.transactions] });
+      setScanModal(false);
+      setToast({ type: "success", message: items.length > 1 ? `${items.length} transacties geregistreerd!` : "Transactie geregistreerd!" });
+    } catch (err) {
+      console.error("Error saving transaction:", err);
+      setToast({ type: "error", message: "Fout bij opslaan: " + err.message });
+    }
   };
 
-  const handleDeleteTx = (id) => {
-    setTxs(txs.filter(t => t.id !== id));
-    setToast({ msg: "Transactie verwijderd", type: "success" });
+  const handleDeleteTransaction = async (id) => {
+    try {
+      // supabase is imported at the top of App.jsx
+      const { error } = await supabase.from("transactions").delete().eq("id", id);
+      if (error) throw error;
+      setAccount({ ...account, transactions: account.transactions.filter(t => t.id !== id) });
+      setDeleteConfirm(null);
+      setToast({ type: "success", message: "Transactie verwijderd!" });
+    } catch (err) {
+      setToast({ type: "error", message: "Fout bij verwijderen: " + err.message });
+    }
   };
 
-  const handleEditTx = (id, updates) => {
-    setTxs(txs.map(t => t.id === id ? { ...t, ...updates } : t));
-    setEditingId(null);
-    setEditForm(null);
-    setToast({ msg: "Transactie bijgewerkt", type: "success" });
+  const handleEditTransaction = (transaction) => {
+    setEditingTransaction(transaction);
   };
+
+  const handleSaveTransaction = async (updatedTrans) => {
+    try {
+      // supabase is imported at the top of App.jsx
+      const { error } = await supabase.from("transactions").update({
+        type: updatedTrans.type,
+        supplier: updatedTrans.supplier,
+        emballage: updatedTrans.emballage,
+        qty: parseInt(updatedTrans.qty),
+        note: updatedTrans.note || null,
+      }).eq("id", updatedTrans.id);
+      if (error) throw error;
+      setAccount({ ...account, transactions: account.transactions.map(t => t.id === updatedTrans.id ? updatedTrans : t) });
+      setEditingTransaction(null);
+      setToast({ type: "success", message: "Transactie bijgewerkt!" });
+    } catch (err) {
+      setToast({ type: "error", message: "Fout bij bijwerken: " + err.message });
+    }
+  };
+
+  // Stats
+  const inCount = branchTransactions.filter(t => t.type === "IN").length;
+  const outCount = branchTransactions.filter(t => t.type === "OUT").length;
+  const value = branchTransactions.reduce((sum, t) => {
+    const emb = account.emballageTypes.find(e => e.name === t.emballage);
+    return sum + (t.type === "IN" ? (emb?.value || 0) * t.qty : -((emb?.value || 0) * t.qty));
+  }, 0);
+
+  // Saldo per leverancier
+  const supplierSaldo = {};
+  branchTransactions.forEach(t => {
+    if (!supplierSaldo[t.supplier]) supplierSaldo[t.supplier] = { in: 0, out: 0, items: {} };
+    const s = supplierSaldo[t.supplier];
+    if (t.type === "IN") s.in += t.qty; else s.out += t.qty;
+    if (!s.items[t.emballage]) s.items[t.emballage] = { in: 0, out: 0 };
+    if (t.type === "IN") s.items[t.emballage].in += t.qty; else s.items[t.emballage].out += t.qty;
+  });
+
+  // Weekly chart data (last 4 weeks)
+  const weekData = [];
+  const now = new Date();
+  for (let w = 3; w >= 0; w--) {
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - (w * 7 + now.getDay()));
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    const weekTrans = branchTransactions.filter(t => {
+      const d = new Date(t.date);
+      return d >= weekStart && d <= weekEnd;
+    });
+    weekData.push({
+      label: `W${Math.ceil((weekStart.getDate()) / 7)}`,
+      in: weekTrans.filter(t => t.type === "IN").reduce((s, t) => s + t.qty, 0),
+      out: weekTrans.filter(t => t.type === "OUT").reduce((s, t) => s + t.qty, 0),
+    });
+  }
+
+  // Filtered logboek
+  const filteredLog = branchTransactions
+    .filter(t => logFilter === "all" || t.type === logFilter)
+    .filter(t => !logSearch || t.emballage.toLowerCase().includes(logSearch.toLowerCase()) || t.supplier.toLowerCase().includes(logSearch.toLowerCase()))
+    .filter(t => {
+      if (!logDateFrom && !logDateTo) return true;
+      const tDate = new Date(t.date);
+      if (logDateFrom && tDate < new Date(logDateFrom)) return false;
+      if (logDateTo && tDate > new Date(logDateTo)) return false;
+      return true;
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const tabs = [
+    { id: "overzicht", label: "Overzicht", icon: <BarChart3 size={18} /> },
+    { id: "saldo", label: "Saldo", icon: <TrendingUp size={18} /> },
+    { id: "logboek", label: "Logboek", icon: <ClipboardList size={18} /> },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto">
-      {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-      {showScan && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} onClose={() => setShowScan(false)} onImport={handleAddTx} />}
-      {showExport && <ExportModal account={{ ...account, transactions: myTxs }} onClose={() => setShowExport(false)} />}
-      {showAtt && <AttViewer att={showAtt} onClose={() => setShowAtt(null)} />}
-
-      <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-white px-5 pt-7 pb-5 rounded-b-2xl shadow-md">
-        <div className="flex items-center justify-between mb-4">
-          <div><p className="text-xs text-amber-200 uppercase tracking-wide">Branch</p><h1 className="text-2xl font-bold flex items-center gap-2"><Store size={24} /> {user.branch}</h1></div>
-          <button onClick={onLogout} className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full transition-all duration-200">Uitloggen</button>
+    <div className="min-h-screen bg-gray-50 pb-24">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {showOnboarding && <OnboardingOverlay onDone={() => setShowOnboarding(false)} />}
+      {barcodeScanner && <BarcodeScannerModal onScan={(barcode) => { setBarcodeScanner(false); setScanModal(true); }} onClose={() => setBarcodeScanner(false)} />}
+      {scanModal && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} onClose={() => setScanModal(false)} onImport={handleImportTransaction} />}
+      {exportModal && <ExportModal account={account} onClose={() => setExportModal(false)} />}
+      {attViewer && <AttViewer att={attViewer} onClose={() => setAttViewer(null)} />}
+      {editingTransaction && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} onClose={() => setEditingTransaction(null)} onImport={handleSaveTransaction} isEdit={true} initialData={editingTransaction} />}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full">
+            <p className="text-gray-900 font-semibold mb-6">Weet je zeker dat je deze transactie wilt verwijderen?</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-all duration-200">Annuleren</button>
+              <button onClick={() => handleDeleteTransaction(deleteConfirm)} className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition-all duration-200">Verwijderen</button>
+            </div>
+          </div>
         </div>
-        <div className="bg-white/10 rounded-xl p-4 flex justify-between items-center">
-          <div><p className="text-xs text-amber-200 uppercase tracking-wide">Saldo</p><p className={`text-2xl font-bold ${balance >= 0 ? "text-green-300" : "text-red-300"}`}>{fmt(balance)}</p></div>
-          <div className="text-right"><p className="text-xs text-amber-200">Transacties</p><p className="text-2xl font-bold">{myTxs.length}</p></div>
+      )}
+
+      {/* Header */}
+      <div className="bg-white border-b border-gray-100 sticky top-0 z-30">
+        <div className="max-w-lg lg:max-w-2xl xl:max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <BarcodeLogo size="sm" />
+            <div>
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">{user.branch}</h1>
+              <p className="text-xs text-gray-500">{account.companyName}</p>
+            </div>
+          </div>
+          <div className="flex gap-1.5">
+            <select value={language} onChange={(e) => setLanguage(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white hover:bg-gray-50 transition-all duration-200">
+              <option value="nl">NL</option>
+              <option value="en">EN</option>
+            </select>
+            <button onClick={() => setExportModal(true)} className="p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><Download size={18} className="text-gray-500" /></button>
+            <button onClick={onLogout} className="p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><LogOut size={18} className="text-gray-500" /></button>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white border-b border-gray-200 px-2 flex sticky top-0 z-10">
-        {[["logboek", <ClipboardList size={18} />, "Logboek"], ["emballage", <Package size={18} />, "Emballage"], ["abonnement", <CreditCard size={18} />, "Abonnement"]].map(([id, ico, lbl]) => (
-          <button key={id} onClick={() => setTab(id)}
-            className={`flex-1 py-3 text-xs font-medium flex flex-col items-center gap-1 transition-all duration-200 ${tab === id ? "text-amber-600 border-b-2 border-amber-600" : "text-gray-400 hover:text-gray-600"}`}>
-            {ico}<span>{lbl}</span>
-          </button>
-        ))}
-      </div>
+      {/* Content */}
+      <div className="max-w-lg lg:max-w-2xl xl:max-w-4xl mx-auto px-4 pt-4">
 
-      <div className="flex-1 overflow-y-auto p-4 pb-8 space-y-4">
-        {tab === "logboek" && (
-          <>
-            <div className="flex gap-2">
-              <button onClick={() => setShowScan(true)} className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all duration-200 shadow-sm"><ScanLine size={18} /> Bon scannen</button>
-              <button onClick={() => setShowExport(true)} className="flex-1 py-3 rounded-xl bg-green-600 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-green-700 transition-all duration-200 shadow-sm"><Download size={18} /> Exporteren</button>
+        {screen === "overzicht" && (
+          <div className="space-y-4 animate-fade-in">
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <p className="text-xs text-gray-500 font-medium mb-1">Totaal</p>
+                <p className="text-2xl font-bold text-gray-900">{branchTransactions.length}</p>
+              </div>
+              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-1 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <p className="text-xs text-gray-500 font-medium">In</p>
+                </div>
+                <p className="text-2xl font-bold text-emerald-600">{inCount}</p>
+              </div>
+              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-1 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-rose-500" />
+                  <p className="text-xs text-gray-500 font-medium">Uit</p>
+                </div>
+                <p className="text-2xl font-bold text-rose-600">{outCount}</p>
+              </div>
             </div>
 
-            {myTxs.length === 0 ? (
-              <div className="bg-white rounded-2xl p-12 text-center space-y-3 border border-gray-200">
-                <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto"><Inbox size={24} className="text-gray-400" /></div>
-                <p className="text-sm text-gray-600 font-medium">Nog geen transacties</p>
-                <p className="text-xs text-gray-500">Scan een bon of voeg handmatig toe</p>
+            {/* Inventory value */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 font-medium mb-1">Geschatte waarde inventaris</p>
+                  <p className="text-3xl font-bold text-gray-900">{fmt(value)}</p>
+                </div>
+                <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
+                  <Package size={24} className="text-purple-500" />
+                </div>
+              </div>
+            </div>
+
+            {/* Weekly activity chart */}
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm font-semibold text-gray-900">Activiteit laatste 4 weken</p>
+                <div className="flex items-center gap-3 text-xs text-gray-500">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> In</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400" /> Uit</span>
+                </div>
+              </div>
+              <MiniBarChart data={weekData} />
+            </div>
+
+            {/* Top leveranciers quick view */}
+            {Object.keys(supplierSaldo).length > 0 && (
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold text-gray-900">Saldo per leverancier</p>
+                  <button onClick={() => setScreen("saldo")} className="text-xs text-blue-600 font-semibold hover:text-blue-700">Bekijk alles →</button>
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(supplierSaldo).slice(0, 3).map(([supplier, data]) => {
+                    const saldo = data.in - data.out;
+                    const color = getSupplierColor(supplier, account.suppliers);
+                    return (
+                      <div key={supplier} className={`flex items-center justify-between p-3 rounded-xl ${color.bg} border ${color.border}`}>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2.5 h-2.5 rounded-full ${color.dot}`} />
+                          <span className={`text-sm font-semibold ${color.text}`}>{supplier}</span>
+                        </div>
+                        <div className="flex items-center gap-4 text-sm">
+                          <span className="text-emerald-600 font-medium">+{data.in}</span>
+                          <span className="text-rose-600 font-medium">−{data.out}</span>
+                          <span className={`font-bold ${saldo >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{saldo >= 0 ? "+" : ""}{saldo}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Recent activity */}
+            {branchTransactions.length > 0 && (
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+                <p className="text-sm font-semibold text-gray-900 mb-3">Laatste registraties</p>
+                <div className="space-y-2">
+                  {branchTransactions.slice(-3).reverse().map(t => (
+                    <div key={t.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${t.type === "IN" ? "bg-emerald-50" : "bg-rose-50"}`}>
+                        {t.type === "IN" ? <ArrowDownCircle size={16} className="text-emerald-600" /> : <ArrowUpCircle size={16} className="text-rose-600" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{t.emballage} ({t.qty}x)</p>
+                        <p className="text-xs text-gray-500">{t.supplier} • {t.date}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {screen === "saldo" && (
+          <div className="space-y-4 animate-fade-in">
+            <h2 className="text-xl font-bold text-gray-900">Saldo per leverancier</h2>
+
+            {Object.keys(supplierSaldo).length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
+                <Truck size={32} className="mx-auto text-gray-300 mb-2" />
+                <p className="text-gray-500">Nog geen transacties geregistreerd</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {[...myTxs].reverse().map(t => {
-                  const isEditing = editingId === t.id;
-                  const emb = account.emballageTypes.find(e => e.name === t.emballage);
-                  const val = (t.type === "IN" ? 1 : -1) * t.qty * (emb?.value || 0);
-                  return (
-                    <div key={t.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-all duration-200">
-                      <div className="p-4 space-y-3">
-                        {!isEditing ? (
-                          <>
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex-1">
-                                <p className="font-bold text-gray-800">{t.emballage}</p>
-                                <p className="text-xs text-gray-500">{t.date} · {t.supplier}</p>
-                                {t.note && <p className="text-xs text-gray-600 mt-1">{t.note}</p>}
-                              </div>
-                              <div className="text-right flex-shrink-0">
-                                <p className={`text-lg font-bold ${val >= 0 ? "text-green-600" : "text-red-600"}`}>{val >= 0 ? "+" : ""}{fmt(val)}</p>
-                                <p className="text-xs text-gray-500">{t.qty} st</p>
-                              </div>
-                            </div>
-                            <div className="flex gap-2 pt-2">
-                              <button onClick={() => { setEditingId(t.id); setEditForm({...t}); }} className="flex-1 py-2 rounded-lg bg-gray-100 text-gray-600 text-xs font-semibold hover:bg-gray-200 transition-all duration-200 flex items-center justify-center gap-1"><Pencil size={14} /> Bewerk</button>
-                              {t.attachment && <button onClick={() => setShowAtt(t.attachment)} className="flex-1 py-2 rounded-lg bg-gray-100 text-gray-600 text-xs font-semibold hover:bg-gray-200 transition-all duration-200 flex items-center justify-center gap-1"><Paperclip size={14} /> Bijlage</button>}
-                              <button onClick={() => handleDeleteTx(t.id)} className="px-3 py-2 rounded-lg bg-red-100 text-red-600 text-xs font-semibold hover:bg-red-200 transition-all duration-200"><Trash2 size={14} /></button>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="space-y-3 animate-fade-in">
-                              <div><label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1 block">Emballage</label>
-                                <select value={editForm?.emballage || ""} onChange={e => setEditForm({...editForm, emballage: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200">
-                                  <option>Selecteer...</option>{account.emballageTypes.map(et => <option key={et.name}>{et.name}</option>)}
-                                </select></div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div><label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1 block">Aantal</label>
-                                  <input type="number" value={editForm?.qty || 0} onChange={e => setEditForm({...editForm, qty: parseInt(e.target.value) || 0})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200" /></div>
-                                <div><label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1 block">Type</label>
-                                  <select value={editForm?.type || "IN"} onChange={e => setEditForm({...editForm, type: e.target.value})} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200">
-                                    <option value="IN">Inkomend</option><option value="OUT">Uitgaand</option>
-                                  </select></div>
-                              </div>
-                            </div>
-                            <div className="flex gap-2 pt-2">
-                              <button onClick={() => { setEditingId(null); setEditForm(null); }} className="flex-1 py-2 rounded-lg bg-gray-100 text-gray-600 text-xs font-semibold hover:bg-gray-200 transition-all duration-200">Annuleer</button>
-                              <button onClick={() => handleEditTx(t.id, editForm)} className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-all duration-200">Opslaan</button>
-                            </div>
-                          </>
-                        )}
+              Object.entries(supplierSaldo).map(([supplier, data]) => {
+                const saldo = data.in - data.out;
+                const color = getSupplierColor(supplier, account.suppliers);
+                const emb = account.emballageTypes.find(e => e.name === Object.keys(data.items)[0]);
+                const totalValue = Object.entries(data.items).reduce((sum, [name, qty]) => {
+                  const e = account.emballageTypes.find(x => x.name === name);
+                  return sum + ((qty.in - qty.out) * (e?.value || 0));
+                }, 0);
+
+                return (
+                  <div key={supplier} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    {/* Supplier header */}
+                    <div className={`px-5 py-4 ${color.bg} border-b ${color.border}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${color.dot}`} />
+                          <span className={`font-bold ${color.text}`}>{supplier}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-500">Saldo</span>
+                          <span className={`text-lg font-bold ${saldo >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{saldo >= 0 ? "+" : ""}{saldo}</span>
+                        </div>
                       </div>
+                      <div className="flex gap-4 mt-2 text-xs">
+                        <span className="text-emerald-600 font-medium">↓ {data.in} in</span>
+                        <span className="text-rose-600 font-medium">↑ {data.out} uit</span>
+                        <span className="text-gray-600 font-medium">≈ {fmt(totalValue)}</span>
+                      </div>
+                    </div>
+
+                    {/* Item breakdown */}
+                    <div className="px-5 py-3">
+                      {Object.entries(data.items).map(([item, qty]) => {
+                        const itemSaldo = qty.in - qty.out;
+                        return (
+                          <div key={item} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                            <span className="text-sm text-gray-700">{item}</span>
+                            <div className="flex items-center gap-3 text-xs">
+                              <span className="text-emerald-600">+{qty.in}</span>
+                              <span className="text-rose-600">−{qty.out}</span>
+                              <span className={`font-bold min-w-[32px] text-right ${itemSaldo >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{itemSaldo >= 0 ? "+" : ""}{itemSaldo}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {screen === "logboek" && (
+          <div className="space-y-3 animate-fade-in">
+            {/* Search & filter bar */}
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input type="text" value={logSearch} onChange={(e) => setLogSearch(e.target.value)} placeholder="Zoek emballage of leverancier..." className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+            </div>
+
+            {/* Date filters */}
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input type="date" value={logDateFrom} onChange={(e) => setLogDateFrom(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+              <div className="flex-1 relative">
+                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input type="date" value={logDateTo} onChange={(e) => setLogDateTo(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+              </div>
+            </div>
+
+            <div className="flex gap-1.5">
+              {[["all", "Alles"], ["IN", "Inkomend"], ["OUT", "Uitgaand"]].map(([val, label]) => (
+                <button key={val} onClick={() => setLogFilter(val)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${logFilter === val ? (val === "IN" ? "bg-emerald-100 text-emerald-700" : val === "OUT" ? "bg-rose-100 text-rose-700" : "bg-gray-900 text-white") : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"}`}>{label}</button>
+              ))}
+            </div>
+
+            {filteredLog.length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
+                <ClipboardList size={32} className="mx-auto text-gray-300 mb-2" />
+                <p className="text-gray-500">{logSearch ? "Geen resultaten" : "Geen transacties"}</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredLog.map(t => {
+                  const color = getSupplierColor(t.supplier, account.suppliers);
+                  return (
+                    <div key={t.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${t.type === "IN" ? "bg-emerald-50" : "bg-rose-50"}`}>
+                        {t.type === "IN" ? <ArrowDownCircle size={20} className="text-emerald-600" /> : <ArrowUpCircle size={20} className="text-rose-600" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{t.emballage}</p>
+                          <span className={`text-sm font-bold ${t.type === "IN" ? "text-emerald-600" : "text-rose-600"}`}>{t.type === "IN" ? "+" : "−"}{t.qty}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`inline-flex items-center gap-1 text-xs font-medium ${color.text}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${color.dot}`} />{t.supplier}
+                          </span>
+                          <span className="text-xs text-gray-400">•</span>
+                          <span className="text-xs text-gray-400">{t.date}</span>
+                        </div>
+                        {t.note && <p className="text-xs text-gray-500 mt-1">{t.note}</p>}
+                      </div>
+                      <button onClick={() => handleEditTransaction(t)} className="p-2 hover:bg-blue-50 text-gray-300 hover:text-blue-500 rounded-lg transition-all duration-200 flex-shrink-0"><Pencil size={16} /></button>
+                      <button onClick={() => setDeleteConfirm(t.id)} className="p-2 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all duration-200 flex-shrink-0"><Trash2 size={16} /></button>
                     </div>
                   );
                 })}
               </div>
             )}
-          </>
-        )}
-
-        {tab === "emballage" && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-              <h3 className="font-bold text-gray-800 mb-4">Emballage types</h3>
-              {account.emballageTypes.length === 0 ? (
-                <p className="text-xs text-gray-500 text-center py-4">Geen types</p>
-              ) : (
-                <div className="space-y-2">
-                  {account.emballageTypes.map(et => {
-                    const qty = myTxs.filter(t => t.emballage === et.name).reduce((a, t) => a + (t.type === "IN" ? t.qty : -t.qty), 0);
-                    return (
-                      <div key={et.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <div><p className="font-medium text-gray-800">{et.name}</p><p className="text-xs text-gray-500">€ {et.value.toFixed(2)}</p></div>
-                        <p className={`font-bold text-sm ${qty >= 0 ? "text-green-600" : "text-red-600"}`}>{qty >= 0 ? "+" : ""}{qty} st</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
           </div>
         )}
+      </div>
 
-        {tab === "abonnement" && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-              <h3 className="font-bold text-gray-800 mb-4">Abonnement details</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between py-2 border-b border-gray-100"><span className="text-gray-700">Bedrijf</span><span className="font-bold">{account.companyName}</span></div>
-                <div className="flex justify-between py-2 border-b border-gray-100"><span className="text-gray-700">Status</span><span className={`font-bold ${account.plan.status === "active" ? "text-green-600" : "text-red-600"}`}>{account.plan.status === "active" ? "Actief" : "Verlopen"}</span></div>
-                <div className="flex justify-between py-2 border-b border-gray-100"><span className="text-gray-700">Outlets</span><span className="font-bold">{account.plan.outlets}</span></div>
-                <div className="flex justify-between py-2 border-b border-gray-100"><span className="text-gray-700">Startdatum</span><span className="font-bold">{account.plan.startDate}</span></div>
-                <div className="flex justify-between py-2"><span className="text-gray-700">Volgende facturatie</span><span className="font-bold">{account.plan.nextBilling}</span></div>
-              </div>
+      {/* Sticky bottom nav */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 safe-area-bottom">
+        <div className="max-w-lg lg:max-w-2xl xl:max-w-4xl mx-auto px-4 flex items-center justify-around">
+          {tabs.map(tab => (
+            <button key={tab.id} onClick={() => setScreen(tab.id)} className={`flex flex-col items-center gap-1 py-3 px-4 transition-all duration-200 ${screen === tab.id ? "text-blue-600" : "text-gray-400 hover:text-gray-600"}`}>
+              {tab.icon}
+              <span className="text-[10px] font-semibold">{tab.label}</span>
+            </button>
+          ))}
+          {/* Scanner button */}
+          <button onClick={() => setBarcodeScanner(true)} className="flex flex-col items-center gap-1 py-3 px-3">
+            <Camera size={18} className="text-gray-400" />
+            <span className="text-[10px] font-semibold text-gray-400">Scan</span>
+          </button>
+          {/* FAB-style register button */}
+          <button onClick={() => setScanModal(true)} className="flex flex-col items-center gap-1 py-2 px-4">
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200 -mt-5 hover:bg-blue-700 transition-all duration-200">
+              <Plus size={24} className="text-white" />
             </div>
-          </div>
-        )}
+            <span className="text-[10px] font-semibold text-blue-600">Nieuw</span>
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-// ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
-function LoginPage({ accounts, onLogin, onRegister }) {
-  const [email, setEmail] = useState("");
-  const [pw, setPw] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [error, setError] = useState("");
+// ─── STORAGE & API KEY (legacy, kept for PDF/CSV export compatibility) ────────
+function getApiKey() {
+  try { return localStorage.getItem(API_KEY_STORAGE) || ""; } catch { return ""; }
+}
 
-  const handleLogin = () => {
+function setApiKey(key) {
+  try { localStorage.setItem(API_KEY_STORAGE, key); } catch {}
+}
+
+// ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
+function LoginPage({ onLogin, onRegister }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleLogin = async () => {
     setError("");
-    if (email === "superadmin" && pw === "super123") { onLogin(SUPER_ADMIN, null); return; }
-    const acc = accounts.find(a => a.email === email);
-    if (!acc) { setError("Account niet gevonden"); return; }
-    const user = acc.users.find(u => u.password === pw);
-    if (!user) { setError("Wachtwoord incorrect"); return; }
-    onLogin(user, acc);
+    if (!email || !password) {
+      setError("Vul je email en wachtwoord in");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await onLogin(email, password);
+    } catch (err) {
+      setError(err.message === "Invalid login credentials"
+        ? "Ongeldige email of wachtwoord"
+        : err.message || "Er ging iets mis bij het inloggen");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4 text-xl font-bold text-white">ET</div>
-          <h1 className="text-3xl font-bold text-white">Emballage Tracker</h1>
-          <p className="text-blue-200 text-sm mt-2">Inloggen</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-400 to-purple-500 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md lg:max-w-2xl xl:max-w-4xl w-full p-8">
+        <div className="flex items-center justify-center mb-8">
+          <BarcodeLogo size="lg" />
         </div>
 
-        <div className="bg-white rounded-3xl p-6 shadow-2xl space-y-5">
-          {error && <div className="bg-red-50 rounded-xl p-3 flex items-start gap-3 border border-red-200"><AlertCircle size={18} className="text-red-600 flex-shrink-0 mt-0.5" /><p className="text-sm text-red-700">{error}</p></div>}
+        <div className="space-y-4 mb-6">
+          <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+          <input type="password" placeholder="Wachtwoord" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+        </div>
 
-          <div>
-            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2 block">Email of bedrijfsnaam</label>
-            <input value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} placeholder="demo@horeca.be"
-              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200" />
-          </div>
+        {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm flex items-center gap-2"><AlertCircle size={18} /> {error}</div>}
 
-          <div>
-            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2 block">Wachtwoord</label>
-            <div className="relative">
-              <input type={showPw ? "text" : "password"} value={pw} onChange={e => setPw(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} placeholder="••••••••"
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 transition-all duration-200" />
-              <button onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
+        <button onClick={handleLogin} disabled={isLoading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 mb-4 disabled:opacity-60 flex items-center justify-center gap-2">
+          {isLoading ? <><Loader2 size={20} className="animate-spin" /> Inloggen...</> : "Inloggen"}
+        </button>
 
-          <button onClick={handleLogin} className="w-full py-3.5 bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 transition-all duration-200">Inloggen</button>
-
-          <div className="relative"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div><div className="relative flex justify-center text-xs"><span className="px-2 bg-white text-gray-500">of</span></div></div>
-
-          <button onClick={onRegister} className="w-full py-3.5 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200 flex items-center justify-center gap-2"><Plus size={18} /> Nieuw account</button>
-
-          <p className="text-xs text-gray-500 text-center">Demo credentials: superadmin / super123 of demo@horeca.be / (user password)</p>
+        <div className="mt-6 text-center">
+          <button onClick={onRegister} className="text-blue-600 hover:text-blue-700 font-semibold text-sm">Nog geen account? Registreren</button>
         </div>
       </div>
     </div>
@@ -1118,37 +1811,128 @@ function LoginPage({ accounts, onLogin, onRegister }) {
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
-export default function App() {
-  const [accounts, setAccounts] = useState(() => JSON.parse(localStorage.getItem("accounts") || JSON.stringify(INIT_ACCOUNTS)));
-  const [page, setPage] = useState("login");
-  const [currentUser, setCurrentUser] = useState(null);
-  const [currentAccount, setCurrentAccount] = useState(null);
+// ─── TRANSLATIONS ─────────────────────────────────────────────────────────────
+const translations = {
+  nl: {
+    login: "Inloggen",
+    register: "Registreren",
+    username: "Gebruikersnaam",
+    password: "Wachtwoord",
+    language: "Taal",
+    logout: "Uitloggen",
+    settings: "Instellingen",
+    overview: "Overzicht",
+    balance: "Saldo",
+    logbook: "Logboek",
+    new: "Nieuw",
+  },
+  en: {
+    login: "Login",
+    register: "Register",
+    username: "Username",
+    password: "Password",
+    language: "Language",
+    logout: "Logout",
+    settings: "Settings",
+    overview: "Overview",
+    balance: "Balance",
+    logbook: "Logbook",
+    new: "New",
+  },
+};
 
+function App() {
+  const {
+    session, profile, account, accounts,
+    loading, error,
+    signIn, signOut,
+    addTransactions, updateTransaction, deleteTransaction,
+    addEmballageType, removeEmballageType,
+    addSupplier, removeSupplier,
+    deleteAccount: deleteAccountFn,
+    setAccountState,
+  } = useSupabase();
+
+  const [screen, setScreen] = useState("login");
+  const [language, setLanguage] = useState("nl");
+
+  // Sync screen with auth state
   useEffect(() => {
-    localStorage.setItem("accounts", JSON.stringify(accounts));
-  }, [accounts]);
+    if (loading) return;
+    if (session && profile) {
+      if (profile.role === "superadmin") setScreen("superadmin");
+      else setScreen("app");
+    } else {
+      setScreen("login");
+    }
+  }, [session, profile, loading]);
 
-  const handleLogin = (user, account) => {
-    setCurrentUser(user);
-    setCurrentAccount(account);
-    if (user.role === "superadmin") setPage("superadmin");
-    else if (user.role === "master") setPage("master");
-    else setPage("branch");
+  const handleLogin = async (email, password) => {
+    await signIn(email, password);
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    setCurrentAccount(null);
-    setPage("login");
+  const handleLogout = async () => {
+    await signOut();
+    setScreen("login");
   };
 
-  return (
-    <div>
-      {page === "login" && <LoginPage accounts={accounts} onLogin={handleLogin} onRegister={() => setPage("register")} />}
-      {page === "register" && <RegisterFlow accounts={accounts} setAccounts={setAccounts} onDone={() => setPage("login")} />}
-      {page === "superadmin" && currentUser && <SuperAdminPanel accounts={accounts} setAccounts={setAccounts} onLogout={handleLogout} />}
-      {page === "master" && currentUser && currentAccount && <MasterDashboard account={currentAccount} onLogout={handleLogout} />}
-      {page === "branch" && currentUser && currentAccount && <BranchApp account={currentAccount} user={currentUser} onLogout={handleLogout} />}
-    </div>
-  );
+  // Build currentUser object from profile (matching existing component interface)
+  const currentUser = profile ? {
+    id: profile.id,
+    name: profile.display_name,
+    role: profile.role,
+    branch: profile.branch,
+    accountId: profile.account_id,
+  } : null;
+
+  // Wrapper to update account state when child components call setAccount
+  const handleSetAccount = (updatedAcc) => {
+    setAccountState(updatedAcc);
+  };
+
+  // Loading screen
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
+        <div className="text-center">
+          <BarcodeLogo size="lg" />
+          <div className="mt-6 flex items-center justify-center gap-2 text-gray-500">
+            <Loader2 size={20} className="animate-spin" />
+            <span>Laden...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (screen === "login") {
+    return <LoginPage onLogin={handleLogin} onRegister={() => setScreen("register")} />;
+  }
+
+  if (screen === "register") {
+    return <RegisterFlow accounts={[]} setAccounts={() => {}} onDone={() => setScreen("login")} />;
+  }
+
+  if (screen === "superadmin" && currentUser?.role === "superadmin") {
+    return <SuperAdminPanel accounts={accounts} setAccounts={() => {}} onLogout={handleLogout} />;
+  }
+
+  if (!account || !currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 size={24} className="animate-spin mx-auto text-blue-600 mb-2" />
+          <p className="text-gray-500">Account laden...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentUser.role === "master") {
+    return <MasterApp account={account} user={currentUser} onLogout={handleLogout} setAccount={handleSetAccount} />;
+  }
+
+  return <BranchApp user={currentUser} account={account} setAccount={handleSetAccount} onLogout={handleLogout} language={language} setLanguage={setLanguage} />;
 }
+
+export default App;
