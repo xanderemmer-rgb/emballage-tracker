@@ -1107,7 +1107,12 @@ function MasterBeheer({ account, setAccount }) {
 
   const branches = [...new Set(account.users.filter(u => u.role === "branch").map(u => u.branch).filter(Boolean))];
 
+  const branchUserCount = account.users.filter(u => u.role === "branch").length;
+  const maxOutlets = account.plan.outlets || 1;
+  const canAddMore = branchUserCount < maxOutlets;
+
   const handleAddUser = async () => {
+    if (!canAddMore) { setToast({ type: "error", message: `Je abonnement staat maximaal ${maxOutlets} outlet${maxOutlets !== 1 ? "s" : ""} toe. Upgrade je abonnement om meer filialen toe te voegen.` }); return; }
     if (!newUser.name || !newUser.email || !newUser.password || !newUser.branch) { setToast({ type: "error", message: "Alle velden zijn verplicht" }); return; }
     if (newUser.password.length < 6) { setToast({ type: "error", message: "Wachtwoord moet minimaal 6 tekens zijn" }); return; }
     setIsLoading(true);
@@ -1146,7 +1151,10 @@ function MasterBeheer({ account, setAccount }) {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <div className="bg-blue-50 rounded-xl p-4 flex items-center justify-between">
         <div><p className="text-sm font-semibold text-blue-700">{account.users.length} gebruiker{account.users.length !== 1 ? "s" : ""}</p><p className="text-xs text-blue-600">{branches.length} locatie{branches.length !== 1 ? "s" : ""} actief</p></div>
-        <div className="text-right"><p className="text-xs text-blue-600">Abonnement: {account.plan.outlets} outlet{account.plan.outlets !== 1 ? "s" : ""}</p></div>
+        <div className="text-right">
+          <p className="text-xs text-blue-600">Outlets: {branchUserCount}/{maxOutlets} gebruikt</p>
+          <div className="w-24 h-1.5 bg-blue-200 rounded-full mt-1"><div className="h-full bg-blue-600 rounded-full transition-all" style={{ width: `${Math.min(100, (branchUserCount / maxOutlets) * 100)}%` }} /></div>
+        </div>
       </div>
       <div className="space-y-2">
         {account.users.map(u => (
@@ -1179,7 +1187,16 @@ function MasterBeheer({ account, setAccount }) {
           </div>
         </div>
       )}
-      {!showForm && <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all duration-200"><PlusCircle size={16} /> Gebruiker toevoegen</button>}
+      {!showForm && (
+        canAddMore ? (
+          <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all duration-200"><PlusCircle size={16} /> Gebruiker toevoegen ({branchUserCount}/{maxOutlets})</button>
+        ) : (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+            <p className="text-sm font-semibold text-amber-800">Limiet bereikt ({branchUserCount}/{maxOutlets} outlets)</p>
+            <p className="text-xs text-amber-600 mt-1">Upgrade je abonnement om meer filialen toe te voegen.</p>
+          </div>
+        )
+      )}
     </div>
   );
 }
