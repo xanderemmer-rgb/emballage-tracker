@@ -7,7 +7,8 @@ import {
   Calendar, LogOut, User, Users, Building2, Camera, Loader2,
   LayoutDashboard, ChevronRight, Bell, Shield, FileText, MapPin,
   Activity, Eye, AlertTriangle, ChevronDown, ChevronUp, Menu, XCircle,
-  DollarSign, Hash, Percent, Clock, TrendingDown, MoreHorizontal
+  DollarSign, Hash, Percent, Clock, TrendingDown, MoreHorizontal,
+  Upload, Image, Save
 } from "lucide-react";
 import { useSupabase, setSkipProfileLoad } from "./lib/useSupabase";
 import { supabase } from "./lib/supabase";
@@ -1662,6 +1663,175 @@ function AbonnementTab({ account }) {
   );
 }
 
+// ─── LOGO UPLOAD HELPER ──────────────────────────────────────────────────────
+function resizeImageToBase64(file, maxSize = 200) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = document.createElement("img");
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let w = img.width, h = img.height;
+        if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+        else { w = Math.round(w * maxSize / h); h = maxSize; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/png", 0.85));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function LogoUpload({ currentUrl, onUpload, label = "Logo uploaden", size = "lg" }) {
+  const fileRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const dims = size === "lg" ? "w-24 h-24" : "w-14 h-14";
+  const iconSize = size === "lg" ? 32 : 18;
+
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return;
+    setUploading(true);
+    try {
+      const base64 = await resizeImageToBase64(file, size === "lg" ? 200 : 128);
+      await onUpload(base64);
+    } catch (err) { console.error("Logo upload error:", err); }
+    finally { setUploading(false); }
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <button onClick={() => fileRef.current?.click()} className={`${dims} rounded-2xl border-2 border-dashed border-gray-300 hover:border-blue-400 flex items-center justify-center overflow-hidden transition-all duration-200 bg-gray-50 hover:bg-blue-50 group relative`}>
+        {uploading ? (
+          <Loader2 size={iconSize} className="text-blue-500 animate-spin" />
+        ) : currentUrl ? (
+          <>
+            <img src={currentUrl} alt="logo" className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all"><Upload size={iconSize * 0.6} className="text-white" /></div>
+          </>
+        ) : (
+          <Image size={iconSize} className="text-gray-300 group-hover:text-blue-400 transition-all" />
+        )}
+      </button>
+      <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
+      <span className="text-[10px] text-gray-400">{label}</span>
+    </div>
+  );
+}
+
+// ─── INSTELLINGEN (COMPANY SETTINGS) ─────────────────────────────────────────
+function CompanySettings({ account, setAccount }) {
+  const [companyName, setCompanyName] = useState(account.companyName);
+  const [toast, setToast] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleSaveName = async () => {
+    if (!companyName.trim()) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("accounts").update({ company_name: companyName.trim() }).eq("id", account.id);
+      if (error) throw error;
+      setAccount({ ...account, companyName: companyName.trim() });
+      setToast({ type: "success", message: "Bedrijfsnaam bijgewerkt!" });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+    finally { setSaving(false); }
+  };
+
+  const handleLogoUpload = async (base64) => {
+    try {
+      const { error } = await supabase.from("accounts").update({ logo_url: base64 }).eq("id", account.id);
+      if (error) throw error;
+      setAccount({ ...account, logoUrl: base64 });
+      setToast({ type: "success", message: "Logo bijgewerkt!" });
+    } catch (err) {
+      // If column doesn't exist yet, store in local state only
+      console.warn("Could not save logo to DB:", err.message);
+      setAccount({ ...account, logoUrl: base64 });
+      setToast({ type: "info", message: "Logo ingesteld (voer de SQL migratie uit voor permanente opslag)" });
+    }
+  };
+
+  const handleRemoveLogo = async () => {
+    try {
+      await supabase.from("accounts").update({ logo_url: null }).eq("id", account.id);
+    } catch {}
+    setAccount({ ...account, logoUrl: null });
+    setToast({ type: "success", message: "Logo verwijderd" });
+  };
+
+  return (
+    <div className="animate-fade-in space-y-8">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Company Logo */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Bedrijfslogo</h3>
+        <div className="flex items-center gap-6">
+          <LogoUpload currentUrl={account.logoUrl} onUpload={handleLogoUpload} label="Klik om logo te uploaden" size="lg" />
+          <div className="flex-1">
+            <p className="text-sm text-gray-600">Upload je bedrijfslogo. Het wordt getoond in de sidebar, op rapporten en voor je filiaalgebruikers.</p>
+            <p className="text-xs text-gray-400 mt-1">Aanbevolen: vierkant formaat, minimaal 200×200px</p>
+            {account.logoUrl && <button onClick={handleRemoveLogo} className="mt-2 text-xs text-red-500 hover:text-red-700 font-medium">Logo verwijderen</button>}
+          </div>
+        </div>
+      </div>
+
+      {/* Company Name */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Bedrijfsnaam</h3>
+        <div className="flex gap-3">
+          <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Bedrijfsnaam" />
+          <button onClick={handleSaveName} disabled={saving || companyName.trim() === account.companyName} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-blue-700 transition-all disabled:opacity-40">
+            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Opslaan
+          </button>
+        </div>
+      </div>
+
+      {/* Branch logos */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Filiaallogo's</h3>
+        <p className="text-sm text-gray-500 mb-4">Geef elk filiaal een eigen logo. Dit wordt getoond in hun app en in het admin overzicht.</p>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {account.users.filter(u => u.role === "branch").map(u => (
+            <BranchLogoCard key={u.id} user={u} account={account} setAccount={setAccount} />
+          ))}
+          {account.users.filter(u => u.role === "branch").length === 0 && (
+            <div className="col-span-full text-center py-6"><Building2 size={24} className="mx-auto text-gray-300 mb-2" /><p className="text-xs text-gray-400">Nog geen filialen</p></div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BranchLogoCard({ user: u, account, setAccount }) {
+  const [toast, setToast] = useState(null);
+
+  const handleBranchLogo = async (base64) => {
+    try {
+      const { error } = await supabase.from("profiles").update({ branch_logo_url: base64 }).eq("id", u.id);
+      if (error) throw error;
+      setAccount({ ...account, users: account.users.map(usr => usr.id === u.id ? { ...usr, branchLogoUrl: base64 } : usr) });
+    } catch (err) {
+      console.warn("Could not save branch logo to DB:", err.message);
+      setAccount({ ...account, users: account.users.map(usr => usr.id === u.id ? { ...usr, branchLogoUrl: base64 } : usr) });
+    }
+  };
+
+  return (
+    <div className="bg-gray-50 rounded-xl p-4 flex flex-col items-center gap-2 border border-gray-100">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <LogoUpload currentUrl={u.branchLogoUrl} onUpload={handleBranchLogo} label="" size="sm" />
+      <p className="text-xs font-medium text-gray-700 text-center truncate w-full">{u.branch || u.name}</p>
+    </div>
+  );
+}
+
 // ─── MASTER APP (SIDEBAR LAYOUT) ─────────────────────────────────────────────
 function MasterApp({ account, user, onLogout, setAccount }) {
   const [masterScreen, setMasterScreen] = useState("dashboard");
@@ -1677,6 +1847,7 @@ function MasterApp({ account, user, onLogout, setAccount }) {
     { id: "alerts", label: "Meldingen", icon: <Bell size={18} /> },
     { id: "audit", label: "Audit Log", icon: <Shield size={18} /> },
     { id: "export", label: "Exporteren", icon: <Download size={18} /> },
+    { id: "instellingen", label: "Instellingen", icon: <Settings size={18} /> },
     { id: "abonnement", label: "Abonnement", icon: <CreditCard size={18} /> },
   ];
 
@@ -1711,9 +1882,16 @@ function MasterApp({ account, user, onLogout, setAccount }) {
         </div>
 
         {/* Company */}
-        <div className="px-5 py-3 border-b border-gray-100">
-          <p className="text-sm font-semibold text-gray-900 truncate">{account.companyName}</p>
-          <p className="text-[10px] text-gray-500">{user.name} • Master Admin</p>
+        <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-3">
+          {account.logoUrl ? (
+            <img src={account.logoUrl} alt="logo" className="w-9 h-9 rounded-lg object-cover flex-shrink-0 border border-gray-200" />
+          ) : (
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">{account.companyName?.[0] || "R"}</div>
+          )}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-900 truncate">{account.companyName}</p>
+            <p className="text-[10px] text-gray-500">{user.name} • Master Admin</p>
+          </div>
         </div>
 
         {/* Nav */}
@@ -1760,6 +1938,7 @@ function MasterApp({ account, user, onLogout, setAccount }) {
           {masterScreen === "alerts" && <AlertsPanel account={account} />}
           {masterScreen === "audit" && <AuditLog account={account} />}
           {masterScreen === "export" && <MasterExport account={account} />}
+          {masterScreen === "instellingen" && <CompanySettings account={account} setAccount={setAccount} />}
           {masterScreen === "abonnement" && <AbonnementTab account={account} />}
         </div>
       </main>
@@ -1982,7 +2161,15 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
       <div className="bg-white border-b border-gray-100 sticky top-0 z-30">
         <div className="max-w-lg md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2 md:gap-3">
-            <BarcodeLogo size="sm" />
+            {(() => {
+              const branchUser = account.users.find(u => u.id === user.id);
+              const logo = branchUser?.branchLogoUrl || account.logoUrl;
+              return logo ? (
+                <img src={logo} alt="logo" className="w-8 h-8 rounded-lg object-cover border border-gray-200" />
+              ) : (
+                <BarcodeLogo size="sm" />
+              );
+            })()}
             <div>
               <h1 className="text-base md:text-lg font-bold text-gray-900 leading-tight">{user.branch}</h1>
               <p className="text-[10px] md:text-xs text-gray-500">{account.companyName}</p>

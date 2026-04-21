@@ -161,6 +161,7 @@ export function useSupabase() {
       id: acc.id,
       companyName: acc.company_name,
       email: acc.email,
+      logoUrl: acc.logo_url || null,
       plan: {
         outlets: acc.plan_outlets,
         startDate: acc.plan_start_date,
@@ -173,6 +174,7 @@ export function useSupabase() {
         role: p.role,
         branch: p.branch,
         branch_id: p.branch_id,
+        branchLogoUrl: p.branch_logo_url || null,
       })),
       emballageTypes: emballageTypes.map(e => ({
         id: e.id,
