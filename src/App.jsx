@@ -847,8 +847,8 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end z-50">
-      <div className="bg-white rounded-t-3xl w-full max-w-md lg:max-w-2xl xl:max-w-4xl p-6 animate-slide-up shadow-2xl" style={{ maxHeight: "90vh" }}>
+    <div className="fixed inset-0 bg-black/50 flex items-end md:items-center md:justify-center z-50">
+      <div className="bg-white rounded-t-3xl md:rounded-2xl w-full max-w-md md:max-w-lg lg:max-w-2xl p-5 md:p-6 animate-slide-up shadow-2xl mx-auto" style={{ maxHeight: "90vh" }}>
         <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">{isEdit ? <Pencil size={24} /> : <ScanLine size={24} />} {isEdit ? "Transactie bewerken" : "Registratie"}</h2>
         <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "calc(90vh - 180px)" }}>
           {/* Shared fields: type + supplier */}
@@ -927,19 +927,19 @@ function MasterDashboard({ account }) {
 
   return (
     <div className="animate-fade-in space-y-6">
-      <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><BarChart3 size={28} /> Dashboard</h2>
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-4">
-          <p className="text-sm text-blue-600 font-semibold">Totaal transacties</p>
-          <p className="text-3xl font-bold text-blue-900">{totalTrans}</p>
+      <h2 className="text-xl md:text-3xl font-bold text-gray-900 flex items-center gap-2"><BarChart3 size={24} className="md:w-7 md:h-7" /> Dashboard</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-3 md:p-4">
+          <p className="text-xs md:text-sm text-blue-600 font-semibold">Totaal transacties</p>
+          <p className="text-2xl md:text-3xl font-bold text-blue-900">{totalTrans}</p>
         </div>
-        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4">
-          <p className="text-sm text-green-600 font-semibold flex items-center gap-1"><ArrowDownCircle size={16} /> Inkomend</p>
-          <p className="text-3xl font-bold text-green-900">{inCount}</p>
+        <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-3 md:p-4">
+          <p className="text-xs md:text-sm text-green-600 font-semibold flex items-center gap-1"><ArrowDownCircle size={16} /> Inkomend</p>
+          <p className="text-2xl md:text-3xl font-bold text-green-900">{inCount}</p>
         </div>
-        <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4">
-          <p className="text-sm text-red-600 font-semibold flex items-center gap-1"><ArrowUpCircle size={16} /> Uitgaand</p>
-          <p className="text-3xl font-bold text-red-900">{outCount}</p>
+        <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-3 md:p-4">
+          <p className="text-xs md:text-sm text-red-600 font-semibold flex items-center gap-1"><ArrowUpCircle size={16} /> Uitgaand</p>
+          <p className="text-2xl md:text-3xl font-bold text-red-900">{outCount}</p>
         </div>
       </div>
       {branches.length === 0 ? (
@@ -1057,7 +1057,7 @@ function MasterBeheer({ account, setAccount }) {
   return (
     <div className="animate-fade-in space-y-6">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><Users size={28} /> Gebruikers</h2>
+      <h2 className="text-xl md:text-3xl font-bold text-gray-900 flex items-center gap-2"><Users size={24} className="md:w-7 md:h-7" /> Gebruikers</h2>
 
       {/* User count summary */}
       <div className="bg-blue-50 rounded-xl p-4 flex items-center justify-between">
@@ -1073,15 +1073,15 @@ function MasterBeheer({ account, setAccount }) {
       {/* User list */}
       <div className="space-y-3">
         {account.users.map(u => (
-          <div key={u.id} className="bg-white rounded-lg p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${u.role === "master" ? "bg-gradient-to-br from-purple-400 to-purple-600" : "bg-gradient-to-br from-blue-400 to-blue-600"}`}>{u.name[0]}</div>
-              <div>
-                <p className="font-semibold text-gray-900">{u.name}</p>
-                <p className="text-xs text-gray-600">{u.role === "master" ? "Master Admin" : u.branch || "Geen locatie"}</p>
+          <div key={u.id} className="bg-white rounded-lg p-3 md:p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="flex items-center gap-2 md:gap-3 min-w-0">
+              <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-white text-sm md:text-base font-bold flex-shrink-0 ${u.role === "master" ? "bg-gradient-to-br from-purple-400 to-purple-600" : "bg-gradient-to-br from-blue-400 to-blue-600"}`}>{u.name[0]}</div>
+              <div className="min-w-0">
+                <p className="text-sm md:text-base font-semibold text-gray-900 truncate">{u.name}</p>
+                <p className="text-[10px] md:text-xs text-gray-600">{u.role === "master" ? "Master Admin" : u.branch || "Geen locatie"}</p>
               </div>
             </div>
-            {u.role !== "master" && <button onClick={() => handleDeleteUser(u.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all duration-200"><Trash2 size={18} /></button>}
+            {u.role !== "master" && <button onClick={() => handleDeleteUser(u.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all duration-200 flex-shrink-0"><Trash2 size={16} className="md:w-[18px] md:h-[18px]" /></button>}
           </div>
         ))}
       </div>
@@ -1158,7 +1158,7 @@ function MasterLogboek({ account, setAccount }) {
   return (
     <div className="animate-fade-in space-y-6">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><ClipboardList size={28} /> Logboek</h2>
+      <h2 className="text-xl md:text-3xl font-bold text-gray-900 flex items-center gap-2"><ClipboardList size={24} className="md:w-7 md:h-7" /> Logboek</h2>
 
       {/* Search */}
       <div className="relative">
@@ -1179,10 +1179,10 @@ function MasterLogboek({ account, setAccount }) {
       </div>
 
       {/* Type filter */}
-      <div className="flex gap-2">
-        <button onClick={() => setFilter("all")} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${filter === "all" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Alles</button>
-        <button onClick={() => setFilter("IN")} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${filter === "IN" ? "bg-green-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Inkomend</button>
-        <button onClick={() => setFilter("OUT")} className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${filter === "OUT" ? "bg-red-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Uitgaand</button>
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => setFilter("all")} className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm md:text-base font-semibold transition-all duration-200 ${filter === "all" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Alles</button>
+        <button onClick={() => setFilter("IN")} className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm md:text-base font-semibold transition-all duration-200 ${filter === "IN" ? "bg-green-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Inkomend</button>
+        <button onClick={() => setFilter("OUT")} className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm md:text-base font-semibold transition-all duration-200 ${filter === "OUT" ? "bg-red-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Uitgaand</button>
         {(search || dateFrom || dateTo) && (
           <button onClick={() => { setSearch(""); setDateFrom(""); setDateTo(""); setFilter("all"); }} className="px-3 py-2 rounded-lg text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-all duration-200 flex items-center gap-1">
             <X size={14} /> Reset
@@ -1200,15 +1200,15 @@ function MasterLogboek({ account, setAccount }) {
       ) : (
         <div className="space-y-2">
           {filtered.map(t => (
-            <div key={t.id} className="bg-white rounded-lg p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
-              <div className="flex items-center gap-3 flex-1">
-                {t.type === "IN" ? <ArrowDownCircle size={20} className="text-green-600" /> : <ArrowUpCircle size={20} className="text-red-600" />}
-                <div className="flex-1">
-                  <p className="font-semibold text-gray-900">{t.emballage} ({t.qty}x)</p>
-                  <p className="text-xs text-gray-600">{t.date} • {t.supplier} • {t.branch}</p>
+            <div key={t.id} className="bg-white rounded-lg p-3 md:p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-all duration-200">
+              <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+                {t.type === "IN" ? <ArrowDownCircle size={18} className="text-green-600 flex-shrink-0 md:w-5 md:h-5" /> : <ArrowUpCircle size={18} className="text-red-600 flex-shrink-0 md:w-5 md:h-5" />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm md:text-base font-semibold text-gray-900 truncate">{t.emballage} ({t.qty}x)</p>
+                  <p className="text-[10px] md:text-xs text-gray-600 truncate">{t.date} • {t.supplier} • {t.branch}</p>
                 </div>
               </div>
-              <button onClick={() => handleDeleteTransaction(t.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all duration-200"><Trash2 size={18} /></button>
+              <button onClick={() => handleDeleteTransaction(t.id)} className="p-2 hover:bg-red-50 text-red-600 rounded-lg transition-all duration-200 flex-shrink-0"><Trash2 size={16} className="md:w-[18px] md:h-[18px]" /></button>
             </div>
           ))}
         </div>
@@ -1221,7 +1221,7 @@ function MasterLogboek({ account, setAccount }) {
 function AbonnementTab({ account }) {
   return (
     <div className="animate-fade-in space-y-6">
-      <h2 className="text-3xl font-bold text-gray-900 flex items-center gap-2"><CreditCard size={28} /> Abonnement</h2>
+      <h2 className="text-xl md:text-3xl font-bold text-gray-900 flex items-center gap-2"><CreditCard size={24} className="md:w-7 md:h-7" /> Abonnement</h2>
       <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-gray-700">Status</p>
@@ -1251,23 +1251,23 @@ function MasterApp({ account, user, onLogout, setAccount }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
-      <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
+      <div className="max-w-md md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto p-4 md:p-6">
+        <div className="flex items-center justify-between mb-6 md:mb-8">
+          <div className="flex items-center gap-3 md:gap-4">
             <BarcodeLogo size="sm" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{account.companyName}</h1>
-              <p className="text-sm text-gray-600">{user.name}</p>
+              <h1 className="text-lg md:text-2xl font-bold text-gray-900">{account.companyName}</h1>
+              <p className="text-xs md:text-sm text-gray-600">{user.name}</p>
             </div>
           </div>
-          <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
+          <button onClick={onLogout} className="flex items-center gap-2 px-3 py-2 md:px-4 bg-red-500 text-white text-sm md:text-base rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={18} /> <span className="hidden sm:inline">Afmelden</span></button>
         </div>
 
-        <div className="flex gap-2 mb-6 border-b border-gray-200">
-          <button onClick={() => setMasterScreen("dashboard")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "dashboard" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Dashboard</button>
-          <button onClick={() => setMasterScreen("logboek")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "logboek" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Logboek</button>
-          <button onClick={() => setMasterScreen("beheer")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "beheer" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Beheer</button>
-          <button onClick={() => setMasterScreen("abonnement")} className={`px-4 py-3 font-semibold transition-all duration-200 border-b-2 ${masterScreen === "abonnement" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Abonnement</button>
+        <div className="flex gap-1 md:gap-2 mb-6 border-b border-gray-200 overflow-x-auto">
+          <button onClick={() => setMasterScreen("dashboard")} className={`px-3 md:px-4 py-3 text-sm md:text-base font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${masterScreen === "dashboard" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Dashboard</button>
+          <button onClick={() => setMasterScreen("logboek")} className={`px-3 md:px-4 py-3 text-sm md:text-base font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${masterScreen === "logboek" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Logboek</button>
+          <button onClick={() => setMasterScreen("beheer")} className={`px-3 md:px-4 py-3 text-sm md:text-base font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${masterScreen === "beheer" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Beheer</button>
+          <button onClick={() => setMasterScreen("abonnement")} className={`px-3 md:px-4 py-3 text-sm md:text-base font-semibold transition-all duration-200 border-b-2 whitespace-nowrap ${masterScreen === "abonnement" ? "border-blue-600 text-blue-600" : "border-transparent text-gray-600 hover:text-gray-900"}`}>Abonnement</button>
         </div>
 
         {masterScreen === "dashboard" && <MasterDashboard account={account} />}
@@ -1471,61 +1471,61 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
 
       {/* Header */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-30">
-        <div className="max-w-lg lg:max-w-2xl xl:max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-lg md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2 md:gap-3">
             <BarcodeLogo size="sm" />
             <div>
-              <h1 className="text-lg font-bold text-gray-900 leading-tight">{user.branch}</h1>
-              <p className="text-xs text-gray-500">{account.companyName}</p>
+              <h1 className="text-base md:text-lg font-bold text-gray-900 leading-tight">{user.branch}</h1>
+              <p className="text-[10px] md:text-xs text-gray-500">{account.companyName}</p>
             </div>
           </div>
-          <div className="flex gap-1.5">
-            <select value={language} onChange={(e) => setLanguage(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white hover:bg-gray-50 transition-all duration-200">
+          <div className="flex gap-1 md:gap-1.5">
+            <select value={language} onChange={(e) => setLanguage(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-1.5 md:px-2 py-1.5 bg-white hover:bg-gray-50 transition-all duration-200">
               <option value="nl">NL</option>
               <option value="en">EN</option>
             </select>
-            <button onClick={() => setExportModal(true)} className="p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><Download size={18} className="text-gray-500" /></button>
-            <button onClick={onLogout} className="p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><LogOut size={18} className="text-gray-500" /></button>
+            <button onClick={() => setExportModal(true)} className="p-2 md:p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><Download size={18} className="text-gray-500" /></button>
+            <button onClick={onLogout} className="p-2 md:p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><LogOut size={18} className="text-gray-500" /></button>
           </div>
         </div>
       </div>
 
       {/* Content */}
-      <div className="max-w-lg lg:max-w-2xl xl:max-w-4xl mx-auto px-4 pt-4">
+      <div className="max-w-lg md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto px-4 pt-4 pb-24">
 
         {screen === "overzicht" && (
           <div className="space-y-4 animate-fade-in">
             {/* Stats row */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-                <p className="text-xs text-gray-500 font-medium mb-1">Totaal</p>
-                <p className="text-2xl font-bold text-gray-900">{branchTransactions.length}</p>
+            <div className="grid grid-cols-3 md:grid-cols-3 gap-2 md:gap-3">
+              <div className="bg-white rounded-2xl p-3 md:p-4 shadow-sm border border-gray-100">
+                <p className="text-[10px] md:text-xs text-gray-500 font-medium mb-1">Totaal</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-900">{branchTransactions.length}</p>
               </div>
-              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+              <div className="bg-white rounded-2xl p-3 md:p-4 shadow-sm border border-gray-100">
                 <div className="flex items-center gap-1 mb-1">
                   <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <p className="text-xs text-gray-500 font-medium">In</p>
+                  <p className="text-[10px] md:text-xs text-gray-500 font-medium">In</p>
                 </div>
-                <p className="text-2xl font-bold text-emerald-600">{inCount}</p>
+                <p className="text-xl md:text-2xl font-bold text-emerald-600">{inCount}</p>
               </div>
-              <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+              <div className="bg-white rounded-2xl p-3 md:p-4 shadow-sm border border-gray-100">
                 <div className="flex items-center gap-1 mb-1">
                   <div className="w-2 h-2 rounded-full bg-rose-500" />
-                  <p className="text-xs text-gray-500 font-medium">Uit</p>
+                  <p className="text-[10px] md:text-xs text-gray-500 font-medium">Uit</p>
                 </div>
-                <p className="text-2xl font-bold text-rose-600">{outCount}</p>
+                <p className="text-xl md:text-2xl font-bold text-rose-600">{outCount}</p>
               </div>
             </div>
 
             {/* Inventory value */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+            <div className="bg-white rounded-2xl p-4 md:p-5 shadow-sm border border-gray-100">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-500 font-medium mb-1">Geschatte waarde inventaris</p>
-                  <p className="text-3xl font-bold text-gray-900">{fmt(value)}</p>
+                  <p className="text-[10px] md:text-xs text-gray-500 font-medium mb-1">Geschatte waarde inventaris</p>
+                  <p className="text-2xl md:text-3xl font-bold text-gray-900">{fmt(value)}</p>
                 </div>
-                <div className="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
-                  <Package size={24} className="text-purple-500" />
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-purple-50 rounded-xl flex items-center justify-center">
+                  <Package size={20} className="text-purple-500 md:w-6 md:h-6" />
                 </div>
               </div>
             </div>
@@ -1725,7 +1725,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
 
       {/* Sticky bottom nav */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 safe-area-bottom">
-        <div className="max-w-lg lg:max-w-2xl xl:max-w-4xl mx-auto px-4 flex items-center justify-around">
+        <div className="max-w-lg md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto px-4 flex items-center justify-around">
           {tabs.map(tab => (
             <button key={tab.id} onClick={() => setScreen(tab.id)} className={`flex flex-col items-center gap-1 py-3 px-4 transition-all duration-200 ${screen === tab.id ? "text-blue-600" : "text-gray-400 hover:text-gray-600"}`}>
               {tab.icon}
