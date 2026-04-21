@@ -8,11 +8,5 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
     emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        main: resolve(__dirname, 'index.html'),
-        landing: resolve(__dirname, 'landing.html'),
-      },
-    },
   },
 })
