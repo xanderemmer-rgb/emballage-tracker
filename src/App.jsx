@@ -1475,11 +1475,18 @@ function BranchManagement({ account, setAccount }) {
 
   const handleBranchLogo = async (branchId, base64) => {
     try {
-      const { data, error } = await supabase.from("branches").update({ logo_url: base64 }).eq("id", branchId).select();
+      // First verify we can read this branch (RLS check)
+      const { data: checkData } = await supabase.from("branches").select("id").eq("id", branchId).single();
+      if (!checkData) throw new Error("Filiaal niet gevonden of geen toegang (RLS)");
+
+      // Try the update
+      const { error } = await supabase.from("branches").update({ logo_url: base64 }).eq("id", branchId);
       if (error) throw error;
-      if (!data || data.length === 0) throw new Error("Geen rijen bijgewerkt — controleer of de branches tabel correct is ingesteld");
-      // Verify logo_url was actually saved
-      if (data[0] && !data[0].logo_url) throw new Error("Logo werd niet opgeslagen in de database");
+
+      // Verify it was actually saved by re-reading
+      const { data: verify } = await supabase.from("branches").select("logo_url").eq("id", branchId).single();
+      if (!verify?.logo_url) throw new Error("Update leek te slagen maar logo is niet opgeslagen. Mogelijk is de base64 te groot.");
+
       setAccount({ ...account, branches: branches.map(b => b.id === branchId ? { ...b, logoUrl: base64 } : b) });
       setToast({ type: "success", message: "Logo bijgewerkt!" });
     } catch (err) {
@@ -2263,7 +2270,8 @@ function resizeImageToBase64(file, maxSize = 200) {
         else { w = Math.round(w * maxSize / h); h = maxSize; }
         canvas.width = w; canvas.height = h;
         canvas.getContext("2d").drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL("image/png", 0.85));
+        // Use JPEG for much smaller base64 output (PNG quality param is ignored)
+        resolve(canvas.toDataURL("image/jpeg", 0.7));
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -2285,7 +2293,7 @@ function LogoUpload({ currentUrl, onUpload, label = "Logo uploaden", size = "lg"
     if (!file.type.startsWith("image/")) return;
     setUploading(true);
     try {
-      const base64 = await resizeImageToBase64(file, size === "lg" ? 200 : 128);
+      const base64 = await resizeImageToBase64(file, size === "lg" ? 150 : 64);
       await onUpload(base64);
     } catch (err) { console.error("Logo upload error:", err); }
     finally { setUploading(false); }
