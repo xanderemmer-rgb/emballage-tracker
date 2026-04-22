@@ -20,6 +20,13 @@
     </style>
   </head>
   <body>
+    <script>
+      // Redirect non-app domains to the landing page
+      var h = window.location.hostname;
+      if (h === 'reggy.io' || h === 'www.reggy.io') {
+        window.location.replace('/landing.html');
+      }
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
