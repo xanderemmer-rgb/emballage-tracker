@@ -2107,6 +2107,13 @@ function EmballageBeheer({ account, setAccount }) {
   const handleAddSupplier = async (supplierName) => {
     const name = supplierName || newSup.trim();
     if (!name) return;
+    // Prevent duplicate suppliers (case-insensitive)
+    const exists = account.suppliers.some(s => s.toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setToast({ type: "error", message: `"${name}" bestaat al als leverancier` });
+      setNewSup("");
+      return;
+    }
     try {
       const { error } = await supabase.from("suppliers").insert({ account_id: account.id, name });
       if (error) throw error;
