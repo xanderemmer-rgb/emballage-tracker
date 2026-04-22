@@ -433,22 +433,11 @@ function RegisterFlow({ accounts, setAccounts, onDone }) {
         });
       if (profileError) throw profileError;
 
-      // 4. Add default emballage types
-      const defaultEmballage = INIT_EMBALLAGE.map(e => ({
-        account_id: accountData.id,
-        name: e.name,
-        value: e.value,
-      }));
-      await supabase.from("emballage_types").insert(defaultEmballage);
+      // 4. New accounts start empty — no pre-populated emballage or suppliers.
+      //    Default supplier suggestions (from default_supplier_emballage table)
+      //    are shown in the "Snel toevoegen" section of Emballage & Leveranciers.
 
-      // 5. Add default suppliers
-      const defaultSuppliers = INIT_SUPPLIERS.map(s => ({
-        account_id: accountData.id,
-        name: s,
-      }));
-      await supabase.from("suppliers").insert(defaultSuppliers);
-
-      // 6. Sign out so user can log in fresh (avoids stale profile state)
+      // 5. Sign out so user can log in fresh (avoids stale profile state)
       await supabase.auth.signOut();
 
       setToast({ type: "success", message: "Account aangemaakt! Log nu in met je email en wachtwoord." });
