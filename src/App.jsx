@@ -1856,7 +1856,7 @@ function AuditLog({ account }) {
     return full || u.name || null;
   };
 
-  const auditEntries = [...account.transactions].sort((a, b) => b.date.localeCompare(a.date)).map(t => ({
+  const auditEntries = [...account.transactions].sort((a, b) => (b.createdAt || b.date).localeCompare(a.createdAt || a.date)).map(t => ({
     id: t.id,
     date: t.date,
     user: t.branch,
@@ -2635,7 +2635,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
       }));
       const { data, error } = await supabase.from("transactions").insert(inserts).select();
       if (error) throw error;
-      const newTrans = data.map(t => ({ id: t.id, date: t.date, type: t.type, supplier: t.supplier, emballage: t.emballage, qty: t.qty, note: t.note || "", attachment: t.attachment, branch: t.branch || "", userId: t.user_id || null }));
+      const newTrans = data.map(t => ({ id: t.id, date: t.date, type: t.type, supplier: t.supplier, emballage: t.emballage, qty: t.qty, note: t.note || "", attachment: t.attachment, branch: t.branch || "", userId: t.user_id || null, createdAt: t.created_at || null }));
       setAccount({ ...account, transactions: [...newTrans, ...account.transactions] });
       setScanModal(false);
       setToast({ type: "success", message: items.length > 1 ? `${items.length} transacties geregistreerd!` : "Transactie geregistreerd!" });

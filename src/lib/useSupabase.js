@@ -89,7 +89,7 @@ export function useSupabase() {
         supabase.from("accounts").select("*").eq("id", accountId).single(),
         supabase.from("profiles").select("*").eq("account_id", accountId).order("created_at"),
         supabase.from("branches").select("*").eq("account_id", accountId).order("name").then(r => r).catch(() => ({ data: [], error: null })),
-        supabase.from("transactions").select("*").eq("account_id", accountId).order("date", { ascending: false }),
+        supabase.from("transactions").select("*").eq("account_id", accountId).order("created_at", { ascending: false }),
         supabase.from("emballage_types").select("*").eq("account_id", accountId).order("name"),
         supabase.from("suppliers").select("*").eq("account_id", accountId).order("name"),
       ]);
@@ -206,6 +206,7 @@ export function useSupabase() {
         attachment: t.attachment,
         branch: t.branch || "",
         userId: t.user_id || null,
+        createdAt: t.created_at || null,
       })),
     };
   }
