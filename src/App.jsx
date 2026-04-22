@@ -1416,10 +1416,10 @@ function BranchManagement({ account, setAccount }) {
   const maxBranches = account.plan.outlets || 1;
   const canAddBranch = branches.length < maxBranches;
 
-  // Legacy branches (from users who have branch names but no branch_id — backwards compat)
-  const legacyBranches = [...new Set(
+  // Legacy branches (only shown when branches table is completely empty — backwards compat)
+  const legacyBranches = branches.length > 0 ? [] : [...new Set(
     account.users.filter(u => u.role === "branch" && u.branch && !u.branchId).map(u => u.branch)
-  )].filter(name => !branches.some(b => b.name === name));
+  )];
 
   const getBranchStats = (branchName) => {
     const bt = account.transactions.filter(t => t.branch === branchName);
