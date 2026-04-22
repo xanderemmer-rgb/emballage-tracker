@@ -998,10 +998,12 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end md:items-center md:justify-center z-50">
-      <div className="bg-white rounded-t-3xl md:rounded-2xl w-full max-w-md md:max-w-lg lg:max-w-2xl p-5 md:p-6 animate-slide-up shadow-2xl mx-auto" style={{ maxHeight: "90vh" }}>
-        <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">{isEdit ? <Pencil size={24} /> : <ScanLine size={24} />} {isEdit ? "Transactie bewerken" : "Registratie"}</h2>
-        <div className="space-y-4 overflow-y-auto" style={{ maxHeight: "calc(90vh - 180px)" }}>
+    <div className="fixed inset-0 bg-black/50 flex items-stretch md:items-center md:justify-center z-50">
+      <div className="bg-white w-full md:rounded-2xl md:max-w-lg lg:max-w-2xl md:mx-auto md:max-h-[90vh] flex flex-col shadow-2xl animate-slide-up">
+        <div className="p-5 md:p-6 pb-0 flex-shrink-0">
+          <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">{isEdit ? <Pencil size={24} /> : <ScanLine size={24} />} {isEdit ? "Transactie bewerken" : "Registratie"}</h2>
+        </div>
+        <div className="space-y-4 overflow-y-auto flex-1 px-5 md:px-6 pb-2">
           {/* Shared fields: type + supplier */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1059,7 +1061,7 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
             <input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Optioneel" />
           </div>
         </div>
-        <div className="flex gap-3 mt-4">
+        <div className="flex gap-3 p-5 md:p-6 pt-4 flex-shrink-0 border-t border-gray-100">
           <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200">Annuleren</button>
           <button onClick={handleImport} disabled={!supplier || validLines.length === 0} className={`flex-1 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${isEdit ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}>
             {isEdit ? <><Check size={20} /> Opslaan</> : <><Check size={20} /> {validLines.length > 1 ? `${validLines.length} regels registreren` : "Registreren"}</>}
