@@ -970,8 +970,8 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
   // When supplier changes in non-edit mode, populate qtyMap with all supplier's items at qty 0
   const supplierItems = supplier ? emballageTypes.filter(e => e.supplierName === supplier) : [];
 
-  const prevSupplierRef = React.useRef(supplier);
-  React.useEffect(() => {
+  const prevSupplierRef = useRef(supplier);
+  useEffect(() => {
     if (!isEdit && supplier && supplier !== prevSupplierRef.current) {
       const newMap = {};
       emballageTypes.filter(e => e.supplierName === supplier).forEach(e => { newMap[e.name] = 0; });
