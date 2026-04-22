@@ -1032,12 +1032,11 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
                   <select value={line.emballage} onChange={(e) => updateLine(idx, "emballage", e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-0">
                     <option value="">Emballage...</option>
                     {(() => {
-                      const supplierItems = supplier ? emballageTypes.filter(e => e.supplierName === supplier) : [];
-                      const otherItems = supplier ? emballageTypes.filter(e => e.supplierName !== supplier) : emballageTypes;
-                      return (<>
-                        {supplierItems.length > 0 && <optgroup label={supplier}>{supplierItems.map((e, i) => <option key={`s${i}`} value={e.name}>{e.name} (€{e.value})</option>)}</optgroup>}
-                        {otherItems.length > 0 && <optgroup label={supplierItems.length > 0 ? "Overig" : "Alle emballage"}>{otherItems.map((e, i) => <option key={`o${i}`} value={e.name}>{e.name} (€{e.value})</option>)}</optgroup>}
-                      </>);
+                      // Show only this supplier's emballage items
+                      const items = supplier ? emballageTypes.filter(e => e.supplierName === supplier) : emballageTypes;
+                      return items.length > 0
+                        ? items.map((e, i) => <option key={i} value={e.name}>{e.name} (€{e.value})</option>)
+                        : <option value="" disabled>{supplier ? `Geen emballage voor ${supplier}` : "Selecteer eerst een leverancier"}</option>;
                     })()}
                   </select>
                   <input type="number" value={line.qty} onChange={(e) => updateLine(idx, "qty", e.target.value)} className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm text-center bg-white focus:ring-2 focus:ring-blue-500 outline-none" min="1" placeholder="#" />
