@@ -1066,6 +1066,50 @@ function MasterDashboard({ account }) {
         </div>
       </div>
 
+      {/* Insights & Upsell */}
+      <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl p-5 text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-1/2 -translate-x-1/2" />
+        <div className="relative">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles size={18} className="text-purple-200" />
+            <p className="text-sm font-semibold text-purple-100">Inzichten</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <p className="text-2xl font-bold">{fmt(totalValue)}</p>
+              <p className="text-xs text-purple-200 mt-0.5">Emballagewaarde uitstaand</p>
+              <p className="text-[10px] text-purple-300 mt-1">
+                {totalValue > 0
+                  ? `Reggy bespaart je gemiddeld ${fmt(totalValue * 0.15)} per maand door nauwkeurige registratie`
+                  : "Start met registreren om inzicht in je emballagewaarde te krijgen"}
+              </p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{branches.length}/{account.plan.outlets}</p>
+              <p className="text-xs text-purple-200 mt-0.5">Filialen actief</p>
+              {branches.length >= account.plan.outlets && (
+                <p className="text-[10px] text-amber-300 mt-1 flex items-center gap-1"><AlertTriangle size={10} /> Limiet bereikt — upgrade voor meer filialen</p>
+              )}
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{account.users.filter(u => u.role === "branch").length}</p>
+              <p className="text-xs text-purple-200 mt-0.5">Actieve gebruikers</p>
+              {(() => {
+                const branchesAtLimit = (account.branches || []).filter(b => {
+                  const maxForBranch = (account.maxUsersPerBranch || 2) + (b.extraUsers || 0);
+                  const usersInBranch = account.users.filter(u => u.branchId === b.id).length;
+                  return usersInBranch >= maxForBranch;
+                });
+                return branchesAtLimit.length > 0 ? (
+                  <p className="text-[10px] text-amber-300 mt-1 flex items-center gap-1"><Users size={10} /> {branchesAtLimit.length} filia{branchesAtLimit.length !== 1 ? "len" : "al"} op gebruikerslimiet</p>
+                ) : null;
+              })()}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Branch overview */}
       <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
         <p className="text-sm font-semibold text-gray-900 mb-3">Filiaaloverzicht</p>
@@ -1114,6 +1158,10 @@ function MasterBeheer({ account, setAccount }) {
   const totalUsers = account.users.length;
 
   const usersInBranch = (branchId) => branchUsers.filter(u => u.branchId === branchId).length;
+  const maxForBranch = (branchId) => {
+    const branch = branches.find(b => b.id === branchId);
+    return maxPerBranch + (branch?.extraUsers || 0);
+  };
 
   const handleAddUser = async () => {
     if (!newUser.firstName.trim() || !newUser.lastName.trim() || !newUser.email || !newUser.password || !newUser.branchId) {
@@ -1124,9 +1172,10 @@ function MasterBeheer({ account, setAccount }) {
     const branch = branches.find(b => b.id === newUser.branchId);
     if (!branch) { setToast({ type: "error", message: "Kies een geldig filiaal" }); return; }
 
+    const branchMax = maxForBranch(newUser.branchId);
     const currentCount = usersInBranch(newUser.branchId);
-    if (currentCount >= maxPerBranch) {
-      setToast({ type: "error", message: `Dit filiaal heeft al ${maxPerBranch} gebruiker${maxPerBranch !== 1 ? "s" : ""}. Maximaal ${maxPerBranch} per filiaal.` }); return;
+    if (currentCount >= branchMax) {
+      setToast({ type: "error", message: `Dit filiaal heeft al ${branchMax} gebruiker${branchMax !== 1 ? "s" : ""} (${maxPerBranch} basis${branch.extraUsers ? ` + ${branch.extraUsers} extra` : ""}). Koop extra gebruikers onder "Abonnement".` }); return;
     }
 
     setIsLoading(true);
@@ -1202,7 +1251,7 @@ function MasterBeheer({ account, setAccount }) {
           <button onClick={() => setFilterBranch("all")} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterBranch === "all" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Alle</button>
           {branches.map(b => (
             <button key={b.id} onClick={() => setFilterBranch(b.id)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterBranch === b.id ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-              {b.name} ({usersInBranch(b.id)}/{maxPerBranch})
+              {b.name} ({usersInBranch(b.id)}/{maxForBranch(b.id)})
             </button>
           ))}
         </div>
@@ -1237,8 +1286,8 @@ function MasterBeheer({ account, setAccount }) {
               <div key={b.id}>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1"><MapPin size={12} /> {b.name}</p>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${bUsers.length >= maxPerBranch ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
-                    {bUsers.length}/{maxPerBranch}
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${bUsers.length >= maxForBranch(b.id) ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
+                    {bUsers.length}/{maxForBranch(b.id)}
                   </span>
                 </div>
                 <div className="space-y-2">
@@ -1315,8 +1364,9 @@ function MasterBeheer({ account, setAccount }) {
             <option value="">Kies filiaal... *</option>
             {branches.map(b => {
               const count = usersInBranch(b.id);
-              const full = count >= maxPerBranch;
-              return <option key={b.id} value={b.id} disabled={full}>{b.name} ({count}/{maxPerBranch}){full ? " — vol" : ""}</option>;
+              const bMax = maxForBranch(b.id);
+              const full = count >= bMax;
+              return <option key={b.id} value={b.id} disabled={full}>{b.name} ({count}/{bMax}){full ? " — vol" : ""}</option>;
             })}
           </select>
           {branches.length === 0 && <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2">Maak eerst filialen aan onder "Filialen" voordat je gebruikers toevoegt.</p>}
@@ -1915,10 +1965,66 @@ function MasterLogboek({ account, setAccount }) {
 }
 
 // ─── ABONNEMENT TAB ───────────────────────────────────────────────────────────
-function AbonnementTab({ account }) {
+const PRICE_EXTRA_USER = 5; // € per extra gebruiker per maand
+
+function AbonnementTab({ account, setAccount }) {
+  const [toast, setToast] = useState(null);
+  const [loadingBranch, setLoadingBranch] = useState(null);
+
+  const branches = account.branches || [];
+  const basePerBranch = account.maxUsersPerBranch || 2;
+  const totalExtraUsers = branches.reduce((sum, b) => sum + (b.extraUsers || 0), 0);
+  const extraUsersCost = totalExtraUsers * PRICE_EXTRA_USER;
+  const baseCost = calcPrice(account.plan.outlets).total;
+  const totalMonthlyCost = baseCost + extraUsersCost;
+
+  const handleAddExtraUser = async (branchId) => {
+    const branch = branches.find(b => b.id === branchId);
+    if (!branch) return;
+    setLoadingBranch(branchId);
+    try {
+      const newExtra = (branch.extraUsers || 0) + 1;
+      const { error } = await supabase.from("branches").update({ extra_users: newExtra }).eq("id", branchId);
+      if (error) throw error;
+      setAccount({
+        ...account,
+        branches: branches.map(b => b.id === branchId ? { ...b, extraUsers: newExtra } : b),
+      });
+      setToast({ type: "success", message: `Extra gebruiker toegevoegd aan ${branch.name} (+€${PRICE_EXTRA_USER}/maand)` });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+    finally { setLoadingBranch(null); }
+  };
+
+  const handleRemoveExtraUser = async (branchId) => {
+    const branch = branches.find(b => b.id === branchId);
+    if (!branch || (branch.extraUsers || 0) <= 0) return;
+    const currentUsers = account.users.filter(u => u.branchId === branchId).length;
+    const newMax = basePerBranch + (branch.extraUsers - 1);
+    if (currentUsers > newMax) {
+      setToast({ type: "error", message: `Kan niet verlagen: er zijn ${currentUsers} gebruikers in ${branch.name}. Verwijder eerst een gebruiker.` });
+      return;
+    }
+    setLoadingBranch(branchId);
+    try {
+      const newExtra = (branch.extraUsers || 0) - 1;
+      const { error } = await supabase.from("branches").update({ extra_users: newExtra }).eq("id", branchId);
+      if (error) throw error;
+      setAccount({
+        ...account,
+        branches: branches.map(b => b.id === branchId ? { ...b, extraUsers: newExtra } : b),
+      });
+      setToast({ type: "success", message: `Extra gebruiker verwijderd bij ${branch.name}` });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+    finally { setLoadingBranch(null); }
+  };
+
   return (
     <div className="animate-fade-in space-y-6">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
       <h2 className="text-xl md:text-3xl font-bold text-gray-900 flex items-center gap-2"><CreditCard size={24} className="md:w-7 md:h-7" /> Abonnement</h2>
+
+      {/* Plan overview */}
       <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-gray-700">Status</p>
@@ -1929,15 +2035,98 @@ function AbonnementTab({ account }) {
           <p className="font-bold text-gray-900">{account.plan.outlets}</p>
         </div>
         <div className="flex items-center justify-between">
-          <p className="text-gray-700">Maandelijks bedrag</p>
-          <p className="text-xl font-bold text-blue-900">{fmt(calcPrice(account.plan.outlets).total)}</p>
+          <p className="text-gray-700">Basisabonnement</p>
+          <p className="font-bold text-gray-900">{fmt(baseCost)}/maand</p>
         </div>
+        {totalExtraUsers > 0 && (
+          <div className="flex items-center justify-between">
+            <p className="text-gray-700">Extra gebruikers ({totalExtraUsers}x)</p>
+            <p className="font-bold text-purple-700">+{fmt(extraUsersCost)}/maand</p>
+          </div>
+        )}
         <div className="border-t border-blue-200 pt-4 flex items-center justify-between">
+          <p className="text-gray-900 font-semibold">Totaal maandelijks</p>
+          <p className="text-xl font-bold text-blue-900">{fmt(totalMonthlyCost)}</p>
+        </div>
+        <div className="flex items-center justify-between">
           <p className="text-gray-700">Volgende facturering</p>
           <p className="font-semibold text-gray-900">{account.plan.nextBilling}</p>
         </div>
       </div>
-      <p className="text-xs text-gray-500">Het abonnement kan alleen gewijzigd worden via de administrateur van uw bedrijf.</p>
+
+      {/* Extra users per branch */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <div className="flex items-center gap-2 mb-1">
+          <Users size={18} className="text-purple-600" />
+          <h3 className="text-sm font-semibold text-gray-900">Extra gebruikers per filiaal</h3>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">
+          Standaard {basePerBranch} gebruikers per filiaal. Voeg extra gebruikers toe voor €{PRICE_EXTRA_USER}/gebruiker/maand per filiaal.
+        </p>
+
+        {branches.length === 0 ? (
+          <div className="bg-gray-50 rounded-xl p-6 text-center">
+            <Building2 size={24} className="mx-auto text-gray-300 mb-2" />
+            <p className="text-xs text-gray-400">Maak eerst filialen aan onder "Filialen"</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {branches.map(b => {
+              const extra = b.extraUsers || 0;
+              const maxForBranch = basePerBranch + extra;
+              const currentUsers = account.users.filter(u => u.branchId === b.id).length;
+              const isLoading = loadingBranch === b.id;
+              return (
+                <div key={b.id} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{b.name}</p>
+                      <p className="text-xs text-gray-500">{currentUsers}/{maxForBranch} gebruikers</p>
+                    </div>
+                    {extra > 0 && (
+                      <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
+                        +{extra} extra • {fmt(extra * PRICE_EXTRA_USER)}/mnd
+                      </span>
+                    )}
+                  </div>
+                  {/* User slots visualization */}
+                  <div className="flex gap-1.5 mb-3">
+                    {Array.from({ length: maxForBranch }).map((_, i) => (
+                      <div key={i} className={`h-2 flex-1 rounded-full ${i < currentUsers ? "bg-blue-500" : i < basePerBranch ? "bg-gray-200" : "bg-purple-200"}`} />
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2 text-[10px] text-gray-400 mb-3">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Bezet ({currentUsers})</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-200" /> Basis ({basePerBranch})</span>
+                    {extra > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-200" /> Extra ({extra})</span>}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleAddExtraUser(b.id)}
+                      disabled={isLoading}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg text-xs font-semibold hover:bg-purple-700 transition-all disabled:opacity-60"
+                    >
+                      {isLoading ? <Loader2 size={14} className="animate-spin" /> : <PlusCircle size={14} />}
+                      Extra gebruiker (+€{PRICE_EXTRA_USER}/mnd)
+                    </button>
+                    {extra > 0 && (
+                      <button
+                        onClick={() => handleRemoveExtraUser(b.id)}
+                        disabled={isLoading}
+                        className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-300 transition-all disabled:opacity-60"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <p className="text-xs text-gray-500">Het basisabonnement kan alleen gewijzigd worden via de administrateur van uw bedrijf. Extra gebruikers kun je hierboven direct beheren.</p>
     </div>
   );
 }
@@ -2213,7 +2402,7 @@ function MasterApp({ account, user, onLogout, setAccount }) {
           {masterScreen === "audit" && <AuditLog account={account} />}
           {masterScreen === "export" && <MasterExport account={account} />}
           {masterScreen === "instellingen" && <CompanySettings account={account} setAccount={setAccount} />}
-          {masterScreen === "abonnement" && <AbonnementTab account={account} />}
+          {masterScreen === "abonnement" && <AbonnementTab account={account} setAccount={setAccount} />}
         </div>
       </main>
     </div>

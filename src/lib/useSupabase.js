@@ -175,6 +175,7 @@ export function useSupabase() {
         id: b.id,
         name: b.name,
         logoUrl: b.logo_url || null,
+        extraUsers: b.extra_users || 0,
       })),
       users: profiles.map(p => ({
         id: p.id,
