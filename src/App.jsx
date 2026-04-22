@@ -1081,7 +1081,7 @@ function AttViewer({ att, onClose }) {
 }
 
 // ─── MASTER DASHBOARD (RICH) ──────────────────────────────────────────────────
-function MasterDashboard({ account }) {
+function MasterDashboard({ account, user }) {
   // Use branches table if available, otherwise fall back to legacy user branch names
   const branches = (account.branches || []).length > 0
     ? (account.branches || []).map(b => b.name)
@@ -1138,8 +1138,20 @@ function MasterDashboard({ account }) {
     }
   });
 
+  // Greeting based on time of day
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Goedemorgen" : hour < 18 ? "Goedemiddag" : "Goedenavond";
+  const masterUser = account.users.find(u => u.id === user?.id);
+  const firstName = masterUser?.firstName || user?.name?.split(" ")[0] || "";
+
   return (
     <div className="animate-fade-in space-y-6">
+      {/* Welcome */}
+      <div>
+        <h2 className="text-xl md:text-2xl font-bold text-gray-900">{greeting}{firstName ? `, ${firstName}` : ""}</h2>
+        <p className="text-sm text-gray-500 mt-0.5">Hier is je overzicht van {account.companyName}</p>
+      </div>
+
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -2879,7 +2891,7 @@ function MasterApp({ account, user, onLogout, setAccount }) {
 
         {/* Page content */}
         <div className="p-4 lg:p-8 max-w-5xl">
-          {masterScreen === "dashboard" && <MasterDashboard account={account} />}
+          {masterScreen === "dashboard" && <MasterDashboard account={account} user={user} />}
           {masterScreen === "filialen" && <BranchManagement account={account} setAccount={setAccount} />}
           {masterScreen === "leveranciers" && <CompanySupplierBalances account={account} />}
           {masterScreen === "logboek" && <MasterLogboek account={account} setAccount={setAccount} />}
@@ -3143,6 +3155,20 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
 
         {screen === "overzicht" && (
           <div className="space-y-4 animate-fade-in">
+            {/* Welcome */}
+            {(() => {
+              const hour = new Date().getHours();
+              const greeting = hour < 12 ? "Goedemorgen" : hour < 18 ? "Goedemiddag" : "Goedenavond";
+              const branchUser = account.users.find(u => u.id === user.id);
+              const firstName = branchUser?.firstName || user.name?.split(" ")[0] || "";
+              return (
+                <div>
+                  <h2 className="text-lg md:text-xl font-bold text-gray-900">{greeting}{firstName ? `, ${firstName}` : ""}</h2>
+                  <p className="text-xs md:text-sm text-gray-500 mt-0.5">{user.branch}</p>
+                </div>
+              );
+            })()}
+
             {/* Stats row */}
             <div className="grid grid-cols-3 md:grid-cols-3 gap-2 md:gap-3">
               <div className="bg-white rounded-2xl p-3 md:p-4 shadow-sm border border-gray-100">
