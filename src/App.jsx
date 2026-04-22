@@ -2624,10 +2624,39 @@ function LogoUpload({ currentUrl, onUpload, label = "Logo uploaden", size = "lg"
 }
 
 // ─── INSTELLINGEN (COMPANY SETTINGS) ─────────────────────────────────────────
-function CompanySettings({ account, setAccount }) {
+function CompanySettings({ account, setAccount, user }) {
   const [companyName, setCompanyName] = useState(account.companyName);
   const [toast, setToast] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  // Master admin profile
+  const masterUser = account.users.find(u => u.id === user?.id) || {};
+  const [profileFirst, setProfileFirst] = useState(masterUser.firstName || "");
+  const [profileLast, setProfileLast] = useState(masterUser.lastName || "");
+  const [profilePhone, setProfilePhone] = useState(masterUser.phone || "");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  const handleSaveProfile = async () => {
+    if (!profileFirst.trim() || !profileLast.trim()) { setToast({ type: "error", message: "Voornaam en achternaam zijn verplicht" }); return; }
+    setSavingProfile(true);
+    try {
+      const displayName = `${profileFirst.trim()} ${profileLast.trim()}`;
+      const { error } = await supabase.from("profiles").update({
+        first_name: profileFirst.trim(), last_name: profileLast.trim(),
+        display_name: displayName, phone: profilePhone.trim() || null,
+      }).eq("id", user.id);
+      if (error) throw error;
+      setAccount({
+        ...account,
+        users: account.users.map(u => u.id === user.id ? {
+          ...u, firstName: profileFirst.trim(), lastName: profileLast.trim(),
+          name: displayName, phone: profilePhone.trim(),
+        } : u),
+      });
+      setToast({ type: "success", message: "Profiel bijgewerkt!" });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+    finally { setSavingProfile(false); }
+  };
 
   const handleSaveName = async () => {
     if (!companyName.trim()) return;
@@ -2666,6 +2695,30 @@ function CompanySettings({ account, setAccount }) {
   return (
     <div className="animate-fade-in space-y-8">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Master Admin Profile */}
+      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2"><User size={16} className="text-blue-500" /> Mijn profiel</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Voornaam</label>
+            <input type="text" value={profileFirst} onChange={(e) => setProfileFirst(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Voornaam" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Achternaam</label>
+            <input type="text" value={profileLast} onChange={(e) => setProfileLast(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Achternaam" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Telefoonnummer</label>
+            <input type="tel" value={profilePhone} onChange={(e) => setProfilePhone(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="+31 6..." />
+          </div>
+          <div className="flex items-end">
+            <button onClick={handleSaveProfile} disabled={savingProfile || (!profileFirst.trim() || !profileLast.trim())} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-blue-700 transition-all disabled:opacity-40">
+              {savingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Profiel opslaan
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Company Logo */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
@@ -2783,7 +2836,11 @@ function MasterApp({ account, user, onLogout, setAccount }) {
           )}
           <div className="min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">{account.companyName}</p>
-            <p className="text-[10px] text-gray-500">{user.name} • Master Admin</p>
+            <p className="text-[10px] text-gray-500">{(() => {
+              const mu = account.users.find(u => u.id === user.id);
+              const fullName = mu ? [mu.firstName, mu.lastName].filter(Boolean).join(" ") : "";
+              return fullName || user.name || "Master Admin";
+            })()} • Master Admin</p>
           </div>
         </div>
 
@@ -2831,7 +2888,7 @@ function MasterApp({ account, user, onLogout, setAccount }) {
           {masterScreen === "alerts" && <AlertsPanel account={account} />}
           {masterScreen === "audit" && <AuditLog account={account} />}
           {masterScreen === "export" && <MasterExport account={account} />}
-          {masterScreen === "instellingen" && <CompanySettings account={account} setAccount={setAccount} />}
+          {masterScreen === "instellingen" && <CompanySettings account={account} setAccount={setAccount} user={user} />}
           {masterScreen === "abonnement" && <AbonnementTab account={account} setAccount={setAccount} />}
         </div>
       </main>
