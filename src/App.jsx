@@ -16,6 +16,24 @@ import { supabase } from "./lib/supabase";
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 const DEMO_MODE = false; // Supabase backend is active
 
+// ─── DEFAULT EMBALLAGE CATALOGUS PER LEVERANCIER ─────────────────────────────
+const DEFAULT_SUPPLIER_EMBALLAGE = {
+  Hanos: [
+    { name: "Bierkrat (24 flesjes)", value: 3.90 },
+    { name: "Bierkrat (12 flesjes)", value: 3.90 },
+    { name: "Frisdrankbak", value: 4.20 },
+    { name: "Fustje 20L", value: 30.00 },
+    { name: "Fustje 50L", value: 75.00 },
+    { name: "Rolcontainer", value: 75.00 },
+    { name: "Pallet (Europallet)", value: 25.00 },
+    { name: "Melkkrat", value: 5.00 },
+    { name: "Broodkrat", value: 5.00 },
+    { name: "Groentebak", value: 3.50 },
+    { name: "Viskist (EPS)", value: 2.50 },
+    { name: "Dolly (transportkar)", value: 50.00 },
+  ],
+};
+
 // ─── BARCODE LOGO ────────────────────────────────────────────────────────────
 function BarcodeLogo({ size = "md" }) {
   const sizes = {
@@ -1683,6 +1701,9 @@ function EmballageBeheer({ account, setAccount }) {
   const [newEmb, setNewEmb] = useState({ name: "", value: "" });
   const [newSup, setNewSup] = useState("");
   const [toast, setToast] = useState(null);
+  const [showImportModal, setShowImportModal] = useState(null); // supplier name or null
+  const [selectedImportItems, setSelectedImportItems] = useState([]);
+  const [isImporting, setIsImporting] = useState(false);
 
   const handleAddEmballage = async () => {
     if (!newEmb.name || !newEmb.value) return;
@@ -1705,15 +1726,62 @@ function EmballageBeheer({ account, setAccount }) {
     } catch (err) { setToast({ type: "error", message: err.message }); }
   };
 
-  const handleAddSupplier = async () => {
-    if (!newSup.trim()) return;
+  // Open import modal when adding a supplier that has a default catalog
+  const handleAddSupplier = async (supplierName) => {
+    const name = supplierName || newSup.trim();
+    if (!name) return;
     try {
-      const { error } = await supabase.from("suppliers").insert({ account_id: account.id, name: newSup.trim() });
+      const { error } = await supabase.from("suppliers").insert({ account_id: account.id, name });
       if (error) throw error;
-      setAccount({ ...account, suppliers: [...account.suppliers, newSup.trim()] });
+      setAccount(prev => ({ ...prev, suppliers: [...prev.suppliers, name] }));
       setNewSup("");
-      setToast({ type: "success", message: `${newSup} toegevoegd` });
+      // Check if this supplier has a default emballage catalog
+      const catalog = DEFAULT_SUPPLIER_EMBALLAGE[name];
+      if (catalog) {
+        // Filter out items that already exist
+        const existingNames = account.emballageTypes.map(e => e.name.toLowerCase());
+        const newItems = catalog.filter(item => !existingNames.includes(item.name.toLowerCase()));
+        if (newItems.length > 0) {
+          setSelectedImportItems(newItems.map(item => ({ ...item, selected: true })));
+          setShowImportModal(name);
+        } else {
+          setToast({ type: "success", message: `${name} toegevoegd (standaard emballage al aanwezig)` });
+        }
+      } else {
+        setToast({ type: "success", message: `${name} toegevoegd` });
+      }
     } catch (err) { setToast({ type: "error", message: err.message }); }
+  };
+
+  // Import selected default emballage items
+  const handleImportEmballage = async () => {
+    const toImport = selectedImportItems.filter(i => i.selected);
+    if (toImport.length === 0) { setShowImportModal(null); return; }
+    setIsImporting(true);
+    try {
+      const inserts = toImport.map(item => ({ account_id: account.id, name: item.name, value: item.value }));
+      const { data, error } = await supabase.from("emballage_types").insert(inserts).select();
+      if (error) throw error;
+      const newTypes = data.map(d => ({ id: d.id, name: d.name, value: d.value }));
+      setAccount(prev => ({ ...prev, emballageTypes: [...prev.emballageTypes, ...newTypes] }));
+      setShowImportModal(null);
+      setToast({ type: "success", message: `${toImport.length} emballage-type${toImport.length !== 1 ? "s" : ""} geïmporteerd van ${showImportModal}` });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+    setIsImporting(false);
+  };
+
+  // Show import button for existing suppliers with catalogs
+  const handleShowCatalog = (supplierName) => {
+    const catalog = DEFAULT_SUPPLIER_EMBALLAGE[supplierName];
+    if (!catalog) return;
+    const existingNames = account.emballageTypes.map(e => e.name.toLowerCase());
+    const newItems = catalog.filter(item => !existingNames.includes(item.name.toLowerCase()));
+    if (newItems.length === 0) {
+      setToast({ type: "info", message: `Alle standaard ${supplierName} emballage is al toegevoegd` });
+      return;
+    }
+    setSelectedImportItems(newItems.map(item => ({ ...item, selected: true })));
+    setShowImportModal(supplierName);
   };
 
   const handleDeleteSupplier = async (name) => {
@@ -1762,21 +1830,78 @@ function EmballageBeheer({ account, setAccount }) {
         <div className="space-y-3">
           <div className="flex gap-2">
             <input type="text" placeholder="Leveranciersnaam" value={newSup} onChange={(e) => setNewSup(e.target.value)} className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
-            <button onClick={handleAddSupplier} disabled={!newSup.trim()} className="px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={16} /></button>
+            <button onClick={() => handleAddSupplier()} disabled={!newSup.trim()} className="px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={16} /></button>
           </div>
+
+          {/* Suggest default suppliers with catalogs that haven't been added yet */}
+          {Object.keys(DEFAULT_SUPPLIER_EMBALLAGE).filter(s => !account.suppliers.includes(s)).length > 0 && (
+            <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+              <p className="text-xs font-semibold text-blue-700 mb-2">Snel toevoegen met standaard emballage:</p>
+              <div className="flex flex-wrap gap-2">
+                {Object.keys(DEFAULT_SUPPLIER_EMBALLAGE).filter(s => !account.suppliers.includes(s)).map(s => (
+                  <button key={s} onClick={() => handleAddSupplier(s)} className="px-3 py-1.5 bg-white border border-blue-200 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-all flex items-center gap-1.5">
+                    <Sparkles size={12} /> {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             {account.suppliers.map((s, i) => {
               const color = getSupplierColor(s, account.suppliers);
+              const hasCatalog = !!DEFAULT_SUPPLIER_EMBALLAGE[s];
+              const existingNames = account.emballageTypes.map(e => e.name.toLowerCase());
+              const catalogNewItems = hasCatalog ? DEFAULT_SUPPLIER_EMBALLAGE[s].filter(item => !existingNames.includes(item.name.toLowerCase())) : [];
               return (
                 <div key={i} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100">
                   <div className="flex items-center gap-3">
                     <div className={`w-3 h-3 rounded-full ${color.dot}`} />
                     <span className="text-sm font-medium text-gray-900">{s}</span>
+                    {hasCatalog && catalogNewItems.length > 0 && (
+                      <button onClick={() => handleShowCatalog(s)} className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-all flex items-center gap-1">
+                        <Download size={10} /> {catalogNewItems.length} emballage importeren
+                      </button>
+                    )}
                   </div>
                   <button onClick={() => handleDeleteSupplier(s)} className="p-1.5 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14} /></button>
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Import emballage modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowImportModal(null)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Package size={20} className="text-purple-500" /> Standaard emballage</h3>
+              <button onClick={() => setShowImportModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400"><X size={18} /></button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">Selecteer de emballage-types van <strong>{showImportModal}</strong> die je wilt importeren:</p>
+            <div className="space-y-1.5 max-h-72 overflow-y-auto">
+              {selectedImportItems.map((item, idx) => (
+                <label key={idx} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition-all ${item.selected ? "bg-purple-50 border-purple-200" : "bg-gray-50 border-gray-100"}`}>
+                  <input type="checkbox" checked={item.selected} onChange={() => setSelectedImportItems(prev => prev.map((it, i) => i === idx ? { ...it, selected: !it.selected } : it))} className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
+                  <span className="flex-1 text-sm font-medium text-gray-900">{item.name}</span>
+                  <span className="text-sm text-purple-600 font-semibold">€{item.value.toFixed(2)}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
+              <button onClick={() => setSelectedImportItems(prev => prev.map(it => ({ ...it, selected: !prev.every(i => i.selected) })))} className="text-xs text-blue-600 font-medium hover:underline">
+                {selectedImportItems.every(i => i.selected) ? "Deselecteer alles" : "Selecteer alles"}
+              </button>
+              <div className="flex gap-2">
+                <button onClick={() => setShowImportModal(null)} className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-xl transition-all">Overslaan</button>
+                <button onClick={handleImportEmballage} disabled={isImporting || selectedImportItems.filter(i => i.selected).length === 0} className="px-4 py-2 bg-purple-600 text-white rounded-xl text-sm font-bold hover:bg-purple-700 disabled:opacity-40 transition-all flex items-center gap-1.5">
+                  {isImporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                  {selectedImportItems.filter(i => i.selected).length} importeren
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
