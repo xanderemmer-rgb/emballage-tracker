@@ -924,10 +924,10 @@ function AttViewer({ att, onClose }) {
 
 // ─── MASTER DASHBOARD (RICH) ──────────────────────────────────────────────────
 function MasterDashboard({ account }) {
-  const branches = [...new Set([
-    ...(account.branches || []).map(b => b.name),
-    ...account.users.filter(u => u.role === "branch" && u.branch).map(u => u.branch),
-  ])];
+  // Use branches table if available, otherwise fall back to legacy user branch names
+  const branches = (account.branches || []).length > 0
+    ? (account.branches || []).map(b => b.name)
+    : [...new Set(account.users.filter(u => u.role === "branch" && u.branch).map(u => u.branch))];
   const totalTrans = account.transactions.length;
   const inCount = account.transactions.filter(t => t.type === "IN").length;
   const outCount = account.transactions.filter(t => t.type === "OUT").length;
@@ -1760,10 +1760,9 @@ function EmballageBeheer({ account, setAccount }) {
 
 // ─── ALERTS & NOTIFICATIES ───────────────────────────────────────────────────
 function AlertsPanel({ account }) {
-  const branchNames = (account.branches || []).map(b => b.name);
-  // Also include legacy branch names from users
-  const legacyNames = [...new Set(account.users.filter(u => u.role === "branch" && u.branch).map(u => u.branch))];
-  const allBranchNames = [...new Set([...branchNames, ...legacyNames])];
+  const allBranchNames = (account.branches || []).length > 0
+    ? (account.branches || []).map(b => b.name)
+    : [...new Set(account.users.filter(u => u.role === "branch" && u.branch).map(u => u.branch))];
   const alerts = [];
 
   // Inactive branches
@@ -2315,10 +2314,9 @@ function MasterApp({ account, user, onLogout, setAccount }) {
   const alertCount = (() => {
     let count = 0;
     const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const branchNames = [...new Set([
-      ...(account.branches || []).map(b => b.name),
-      ...account.users.filter(u => u.role === "branch" && u.branch).map(u => u.branch),
-    ])];
+    const branchNames = (account.branches || []).length > 0
+      ? (account.branches || []).map(b => b.name)
+      : [...new Set(account.users.filter(u => u.role === "branch" && u.branch).map(u => u.branch))];
     branchNames.forEach(b => {
       const bt = account.transactions.filter(t => t.branch === b);
       const lastDate = bt.length > 0 ? [...bt].sort((a, b2) => b2.date.localeCompare(a.date))[0].date : null;
