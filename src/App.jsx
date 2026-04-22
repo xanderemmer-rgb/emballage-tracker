@@ -2752,7 +2752,8 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
           <div className="flex items-center gap-2 md:gap-3">
             {(() => {
               const branchUser = account.users.find(u => u.id === user.id);
-              const logo = branchUser?.branchLogoUrl || account.logoUrl;
+              const branchRecord = (account.branches || []).find(b => b.id === branchUser?.branchId);
+              const logo = branchRecord?.logoUrl || branchUser?.branchLogoUrl || account.logoUrl;
               return logo ? (
                 <img src={logo} alt="logo" className="w-8 h-8 rounded-lg object-cover border border-gray-200" />
               ) : (
