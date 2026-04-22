@@ -1981,10 +1981,13 @@ function MasterLogboek({ account, setAccount }) {
 
 // ─── ABONNEMENT TAB ───────────────────────────────────────────────────────────
 const PRICE_EXTRA_USER = 5; // € per extra gebruiker per maand
+const PRICE_EXTRA_OUTLET = 10; // € per extra outlet per maand
 
 function AbonnementTab({ account, setAccount }) {
   const [toast, setToast] = useState(null);
-  const [loadingBranch, setLoadingBranch] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showUserPicker, setShowUserPicker] = useState(false);
+  const [showOutletConfirm, setShowOutletConfirm] = useState(false);
 
   const branches = account.branches || [];
   const basePerBranch = account.maxUsersPerBranch || 2;
@@ -1996,7 +1999,7 @@ function AbonnementTab({ account, setAccount }) {
   const handleAddExtraUser = async (branchId) => {
     const branch = branches.find(b => b.id === branchId);
     if (!branch) return;
-    setLoadingBranch(branchId);
+    setIsLoading(true);
     try {
       const newExtra = (branch.extraUsers || 0) + 1;
       const { error } = await supabase.from("branches").update({ extra_users: newExtra }).eq("id", branchId);
@@ -2005,9 +2008,10 @@ function AbonnementTab({ account, setAccount }) {
         ...account,
         branches: branches.map(b => b.id === branchId ? { ...b, extraUsers: newExtra } : b),
       });
+      setShowUserPicker(false);
       setToast({ type: "success", message: `Extra gebruiker toegevoegd aan ${branch.name} (+€${PRICE_EXTRA_USER}/maand)` });
     } catch (err) { setToast({ type: "error", message: err.message }); }
-    finally { setLoadingBranch(null); }
+    finally { setIsLoading(false); }
   };
 
   const handleRemoveExtraUser = async (branchId) => {
@@ -2019,7 +2023,7 @@ function AbonnementTab({ account, setAccount }) {
       setToast({ type: "error", message: `Kan niet verlagen: er zijn ${currentUsers} gebruikers in ${branch.name}. Verwijder eerst een gebruiker.` });
       return;
     }
-    setLoadingBranch(branchId);
+    setIsLoading(true);
     try {
       const newExtra = (branch.extraUsers || 0) - 1;
       const { error } = await supabase.from("branches").update({ extra_users: newExtra }).eq("id", branchId);
@@ -2030,7 +2034,23 @@ function AbonnementTab({ account, setAccount }) {
       });
       setToast({ type: "success", message: `Extra gebruiker verwijderd bij ${branch.name}` });
     } catch (err) { setToast({ type: "error", message: err.message }); }
-    finally { setLoadingBranch(null); }
+    finally { setIsLoading(false); }
+  };
+
+  const handleRequestOutlet = async () => {
+    setIsLoading(true);
+    try {
+      const newOutlets = (account.plan.outlets || 1) + 1;
+      const { error } = await supabase.from("accounts").update({ plan_outlets: newOutlets }).eq("id", account.id);
+      if (error) throw error;
+      setAccount({
+        ...account,
+        plan: { ...account.plan, outlets: newOutlets },
+      });
+      setShowOutletConfirm(false);
+      setToast({ type: "success", message: `Extra outlet toegevoegd! Je hebt nu ${newOutlets} outlets (+€${PRICE_EXTRA_OUTLET}/maand)` });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+    finally { setIsLoading(false); }
   };
 
   return (
@@ -2069,79 +2089,160 @@ function AbonnementTab({ account, setAccount }) {
         </div>
       </div>
 
-      {/* Extra users per branch */}
-      <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-        <div className="flex items-center gap-2 mb-1">
-          <Users size={18} className="text-purple-600" />
-          <h3 className="text-sm font-semibold text-gray-900">Extra gebruikers per filiaal</h3>
-        </div>
-        <p className="text-xs text-gray-500 mb-4">
-          Standaard {basePerBranch} gebruikers per filiaal. Voeg extra gebruikers toe voor €{PRICE_EXTRA_USER}/gebruiker/maand per filiaal.
-        </p>
-
-        {branches.length === 0 ? (
-          <div className="bg-gray-50 rounded-xl p-6 text-center">
-            <Building2 size={24} className="mx-auto text-gray-300 mb-2" />
-            <p className="text-xs text-gray-400">Maak eerst filialen aan onder "Filialen"</p>
+      {/* Upgrade actions */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Extra user card */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex flex-col">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center"><Users size={20} className="text-purple-600" /></div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Extra gebruiker</p>
+              <p className="text-xs text-gray-500">€{PRICE_EXTRA_USER}/gebruiker/maand</p>
+            </div>
           </div>
-        ) : (
-          <div className="space-y-3">
-            {branches.map(b => {
+          <p className="text-xs text-gray-500 mb-4 flex-1">Voeg een extra gebruikersplek toe aan een specifiek filiaal. Standaard heeft elk filiaal {basePerBranch} plekken.</p>
+          <button
+            onClick={() => setShowUserPicker(true)}
+            disabled={branches.length === 0}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 transition-all disabled:opacity-40"
+          >
+            <PlusCircle size={16} /> Extra gebruiker toevoegen
+          </button>
+        </div>
+
+        {/* Extra outlet card */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex flex-col">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Building2 size={20} className="text-blue-600" /></div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Extra outlet</p>
+              <p className="text-xs text-gray-500">€{PRICE_EXTRA_OUTLET}/outlet/maand</p>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mb-4 flex-1">Breid je abonnement uit met een extra filiaal. Je hebt nu {account.plan.outlets} outlet{account.plan.outlets !== 1 ? "s" : ""} ({branches.length} in gebruik).</p>
+          <button
+            onClick={() => setShowOutletConfirm(true)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all"
+          >
+            <PlusCircle size={16} /> Extra outlet aanvragen
+          </button>
+        </div>
+      </div>
+
+      {/* Active extras overview */}
+      {totalExtraUsers > 0 && (
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <p className="text-sm font-semibold text-gray-900 mb-3">Actieve extra's</p>
+          <div className="space-y-2">
+            {branches.filter(b => (b.extraUsers || 0) > 0).map(b => {
               const extra = b.extraUsers || 0;
               const maxForBranch = basePerBranch + extra;
               const currentUsers = account.users.filter(u => u.branchId === b.id).length;
-              const isLoading = loadingBranch === b.id;
               return (
-                <div key={b.id} className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                  <div className="flex items-center justify-between mb-3">
+                <div key={b.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-3 border border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <MapPin size={14} className="text-gray-400" />
                     <div>
-                      <p className="text-sm font-semibold text-gray-900">{b.name}</p>
-                      <p className="text-xs text-gray-500">{currentUsers}/{maxForBranch} gebruikers</p>
+                      <p className="text-sm font-medium text-gray-900">{b.name}</p>
+                      <p className="text-[10px] text-gray-500">{currentUsers}/{maxForBranch} gebruikers • +{extra} extra</p>
                     </div>
-                    {extra > 0 && (
-                      <span className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-full font-medium">
-                        +{extra} extra • {fmt(extra * PRICE_EXTRA_USER)}/mnd
-                      </span>
-                    )}
                   </div>
-                  {/* User slots visualization */}
-                  <div className="flex gap-1.5 mb-3">
-                    {Array.from({ length: maxForBranch }).map((_, i) => (
-                      <div key={i} className={`h-2 flex-1 rounded-full ${i < currentUsers ? "bg-blue-500" : i < basePerBranch ? "bg-gray-200" : "bg-purple-200"}`} />
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] text-gray-400 mb-3">
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Bezet ({currentUsers})</span>
-                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-200" /> Basis ({basePerBranch})</span>
-                    {extra > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-200" /> Extra ({extra})</span>}
-                  </div>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-purple-700">{fmt(extra * PRICE_EXTRA_USER)}/mnd</span>
                     <button
-                      onClick={() => handleAddExtraUser(b.id)}
+                      onClick={() => handleRemoveExtraUser(b.id)}
                       disabled={isLoading}
-                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-lg text-xs font-semibold hover:bg-purple-700 transition-all disabled:opacity-60"
+                      className="p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg transition-all disabled:opacity-40"
+                      title="Extra gebruiker verwijderen"
                     >
-                      {isLoading ? <Loader2 size={14} className="animate-spin" /> : <PlusCircle size={14} />}
-                      Extra gebruiker (+€{PRICE_EXTRA_USER}/mnd)
+                      <Trash2 size={14} />
                     </button>
-                    {extra > 0 && (
-                      <button
-                        onClick={() => handleRemoveExtraUser(b.id)}
-                        disabled={isLoading}
-                        className="px-3 py-2 bg-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:bg-gray-300 transition-all disabled:opacity-60"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
                   </div>
                 </div>
               );
             })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <p className="text-xs text-gray-500">Het basisabonnement kan alleen gewijzigd worden via de administrateur van uw bedrijf. Extra gebruikers kun je hierboven direct beheren.</p>
+      {/* Branch picker modal for extra user */}
+      {showUserPicker && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowUserPicker(false)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Kies een filiaal</h3>
+              <button onClick={() => setShowUserPicker(false)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400"><X size={18} /></button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">Aan welk filiaal wil je een extra gebruikersplek toevoegen? (+€{PRICE_EXTRA_USER}/maand)</p>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {branches.map(b => {
+                const extra = b.extraUsers || 0;
+                const maxForBranch = basePerBranch + extra;
+                const currentUsers = account.users.filter(u => u.branchId === b.id).length;
+                return (
+                  <button
+                    key={b.id}
+                    onClick={() => handleAddExtraUser(b.id)}
+                    disabled={isLoading}
+                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-all text-left disabled:opacity-60"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 text-xs font-bold">{b.name[0]}</div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{b.name}</p>
+                        <p className="text-[10px] text-gray-500">{currentUsers}/{maxForBranch} gebruikers{extra > 0 ? ` (${extra} extra)` : ""}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-purple-600">
+                      {isLoading ? <Loader2 size={14} className="animate-spin" /> : <PlusCircle size={14} />}
+                      <span className="text-xs font-semibold">+1</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Outlet confirm modal */}
+      {showOutletConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowOutletConfirm(false)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 animate-slide-up" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Extra outlet toevoegen</h3>
+              <button onClick={() => setShowOutletConfirm(false)} className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400"><X size={18} /></button>
+            </div>
+            <div className="bg-blue-50 rounded-xl p-4 mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-700">Huidige outlets</span>
+                <span className="font-bold text-gray-900">{account.plan.outlets}</span>
+              </div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-700">Na upgrade</span>
+                <span className="font-bold text-blue-700">{account.plan.outlets + 1}</span>
+              </div>
+              <div className="border-t border-blue-200 pt-2 mt-2 flex items-center justify-between">
+                <span className="text-sm text-gray-700">Extra kosten</span>
+                <span className="font-bold text-blue-700">+€{PRICE_EXTRA_OUTLET}/maand</span>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">Na de upgrade kun je onder "Filialen" een nieuw filiaal aanmaken.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowOutletConfirm(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold text-sm hover:bg-gray-50 transition-all">Annuleren</button>
+              <button
+                onClick={handleRequestOutlet}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Building2 size={14} />} Bevestigen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <p className="text-xs text-gray-500">Wijzigingen worden direct doorgevoerd en op de volgende factuur verrekend.</p>
     </div>
   );
 }
