@@ -1475,8 +1475,11 @@ function BranchManagement({ account, setAccount }) {
 
   const handleBranchLogo = async (branchId, base64) => {
     try {
-      const { error } = await supabase.from("branches").update({ logo_url: base64 }).eq("id", branchId);
+      const { data, error } = await supabase.from("branches").update({ logo_url: base64 }).eq("id", branchId).select();
       if (error) throw error;
+      if (!data || data.length === 0) throw new Error("Geen rijen bijgewerkt — controleer of de branches tabel correct is ingesteld");
+      // Verify logo_url was actually saved
+      if (data[0] && !data[0].logo_url) throw new Error("Logo werd niet opgeslagen in de database");
       setAccount({ ...account, branches: branches.map(b => b.id === branchId ? { ...b, logoUrl: base64 } : b) });
       setToast({ type: "success", message: "Logo bijgewerkt!" });
     } catch (err) {
