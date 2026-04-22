@@ -1339,13 +1339,37 @@ function MasterBeheer({ account, setAccount }) {
     setIsLoading(true);
     const displayName = `${newUser.firstName.trim()} ${newUser.lastName.trim()}`;
     try {
+      let userId = null;
+
+      // Try to sign up first
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: newUser.email,
         password: newUser.password,
         options: { data: { display_name: displayName, branch: branch.name } }
       });
-      if (authError) throw authError;
-      const userId = authData.user?.id;
+
+      if (authError) {
+        // If user already exists, try to sign in to get their ID and re-create profile
+        if (authError.message?.includes("already registered") || authError.message?.includes("already been registered")) {
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: newUser.email, password: newUser.password
+          });
+          if (signInError) throw new Error("Dit emailadres bestaat al. Controleer het wachtwoord om de gebruiker opnieuw te koppelen.");
+          userId = signInData.user?.id;
+          // Sign back out so master admin stays logged in — profile will be created below
+          // Note: we can't sign out here as it would log out the current session
+          // The profile upsert below will re-link this user
+        } else {
+          throw authError;
+        }
+      } else {
+        userId = authData.user?.id;
+        // Supabase may return a user with empty identities if email already exists
+        if (authData.user && authData.user.identities?.length === 0) {
+          throw new Error("Dit emailadres is al in gebruik bij een ander account.");
+        }
+      }
+
       if (!userId) throw new Error("Gebruiker kon niet aangemaakt worden");
 
       const { error: profileError } = await supabase.from("profiles").upsert({
@@ -1369,8 +1393,7 @@ function MasterBeheer({ account, setAccount }) {
       setShowForm(false);
       setToast({ type: "success", message: `${displayName} toegevoegd aan ${branch.name}!` });
     } catch (err) {
-      const msg = err.message?.includes("already registered") ? "Dit emailadres is al in gebruik" : err.message || "Er ging iets mis";
-      setToast({ type: "error", message: msg });
+      setToast({ type: "error", message: err.message || "Er ging iets mis" });
     } finally { setIsLoading(false); }
   };
 
