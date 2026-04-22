@@ -17,7 +17,8 @@ import { supabase } from "./lib/supabase";
 const DEMO_MODE = false; // Supabase backend is active
 
 // ─── DEFAULT EMBALLAGE CATALOGUS PER LEVERANCIER ─────────────────────────────
-const DEFAULT_SUPPLIER_EMBALLAGE = {
+// Hardcoded fallback — overridden by database defaults from default_supplier_emballage table (managed via Super Admin)
+const DEFAULT_SUPPLIER_EMBALLAGE_FALLBACK = {
   Hanos: [
     { name: "Bierkrat (24 flesjes)", value: 3.90 },
     { name: "Bierkrat (12 flesjes)", value: 3.90 },
@@ -503,11 +504,79 @@ function RegisterFlow({ accounts, setAccounts, onDone }) {
 function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
   const [newForm, setNewForm] = useState(false);
   const [newAccount, setNewAccount] = useState(null);
+  const [activeTab, setActiveTab] = useState("accounts");
+
+  // Default emballage catalog state
+  const [defaultCatalog, setDefaultCatalog] = useState([]);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+  const [catalogSupplier, setCatalogSupplier] = useState("");
+  const [newCatalogItem, setNewCatalogItem] = useState({ name: "", value: "" });
+  const [newSupplierName, setNewSupplierName] = useState("");
+  const [toast, setToast] = useState(null);
+
+  // Load default catalog
+  useEffect(() => {
+    if (activeTab === "catalog" && !catalogLoaded) {
+      (async () => {
+        const { data, error } = await supabase.from("default_supplier_emballage").select("*").order("supplier_name").order("emballage_name");
+        if (!error && data) {
+          setDefaultCatalog(data);
+          const suppliers = [...new Set(data.map(d => d.supplier_name))];
+          if (suppliers.length > 0 && !catalogSupplier) setCatalogSupplier(suppliers[0]);
+        }
+        setCatalogLoaded(true);
+      })();
+    }
+  }, [activeTab, catalogLoaded]);
+
+  const catalogSuppliers = [...new Set(defaultCatalog.map(d => d.supplier_name))];
+  const catalogItems = defaultCatalog.filter(d => d.supplier_name === catalogSupplier);
+
+  const handleAddCatalogItem = async () => {
+    if (!catalogSupplier || !newCatalogItem.name || !newCatalogItem.value) return;
+    try {
+      const { data, error } = await supabase.from("default_supplier_emballage").insert({
+        supplier_name: catalogSupplier, emballage_name: newCatalogItem.name.trim(), value: parseFloat(newCatalogItem.value)
+      }).select().single();
+      if (error) throw error;
+      setDefaultCatalog(prev => [...prev, data]);
+      setNewCatalogItem({ name: "", value: "" });
+      setToast({ type: "success", message: `${newCatalogItem.name} toegevoegd aan ${catalogSupplier}` });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+  };
+
+  const handleDeleteCatalogItem = async (id) => {
+    try {
+      const { error } = await supabase.from("default_supplier_emballage").delete().eq("id", id);
+      if (error) throw error;
+      setDefaultCatalog(prev => prev.filter(d => d.id !== id));
+      setToast({ type: "success", message: "Verwijderd" });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+  };
+
+  const handleAddSupplierCatalog = () => {
+    if (!newSupplierName.trim()) return;
+    setCatalogSupplier(newSupplierName.trim());
+    setNewSupplierName("");
+  };
+
+  const handleDeleteSupplierCatalog = async (supplierName) => {
+    if (!confirm(`Alle emballage van "${supplierName}" verwijderen?`)) return;
+    try {
+      const { error } = await supabase.from("default_supplier_emballage").delete().eq("supplier_name", supplierName);
+      if (error) throw error;
+      setDefaultCatalog(prev => prev.filter(d => d.supplier_name !== supplierName));
+      if (catalogSupplier === supplierName) {
+        const remaining = [...new Set(defaultCatalog.filter(d => d.supplier_name !== supplierName).map(d => d.supplier_name))];
+        setCatalogSupplier(remaining[0] || "");
+      }
+      setToast({ type: "success", message: `${supplierName} volledig verwijderd` });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+  };
 
   const handleDeleteAccount = async (id) => {
     if (confirm("Weet je zeker dat je dit account wilt verwijderen?")) {
       try {
-        // supabase is imported at the top of App.jsx
         const { error } = await supabase.from("accounts").delete().eq("id", id);
         if (error) throw error;
         setAccounts(accounts.filter(a => a.id !== id));
@@ -520,8 +589,9 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 p-6">
       {newForm && newAccount && <RegisterFlow accounts={accounts} setAccounts={setAccounts} onDone={() => setNewForm(false)} />}
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
             <BarcodeLogo size="sm" />
             <h1 className="text-3xl font-bold text-gray-900">Super Admin</h1>
@@ -529,27 +599,97 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
           <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
         </div>
 
-        <div className="grid gap-4 mb-8">
-          {accounts.map(acc => (
-            <div key={acc.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 p-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-bold text-gray-900">{acc.companyName}</h3>
-                  <p className="text-sm text-gray-600">{acc.email} • {acc.users.length} gebruikers</p>
-                </div>
-                <div className="text-right">
-                  <p className={`text-sm font-semibold ${acc.plan.status === "active" ? "text-green-600" : "text-red-600"}`}>{acc.plan.status.toUpperCase()}</p>
-                  <p className="text-xs text-gray-600">{acc.plan.outlets} outlet{acc.plan.outlets > 1 ? "s" : ""}</p>
-                </div>
-              </div>
-              <div className="mt-3 flex gap-2">
-                <button onClick={() => handleDeleteAccount(acc.id)} className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-semibold"><Trash2 size={16} /> Verwijderen</button>
-              </div>
-            </div>
-          ))}
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6">
+          <button onClick={() => setActiveTab("accounts")} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === "accounts" ? "bg-purple-600 text-white" : "bg-white text-gray-600 border border-gray-200"}`}><Users size={14} className="inline mr-1.5" />Accounts</button>
+          <button onClick={() => setActiveTab("catalog")} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === "catalog" ? "bg-purple-600 text-white" : "bg-white text-gray-600 border border-gray-200"}`}><Package size={14} className="inline mr-1.5" />Standaard Emballage</button>
         </div>
 
-        <button onClick={() => { setNewAccount(true); setNewForm(true); }} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Plus size={20} /> Nieuw account</button>
+        {/* Accounts tab */}
+        {activeTab === "accounts" && (
+          <>
+            <div className="grid gap-4 mb-8">
+              {accounts.map(acc => (
+                <div key={acc.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-bold text-gray-900">{acc.companyName}</h3>
+                      <p className="text-sm text-gray-600">{acc.email} • {acc.users.length} gebruikers</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-sm font-semibold ${acc.plan.status === "active" ? "text-green-600" : "text-red-600"}`}>{acc.plan.status.toUpperCase()}</p>
+                      <p className="text-xs text-gray-600">{acc.plan.outlets} outlet{acc.plan.outlets > 1 ? "s" : ""}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button onClick={() => handleDeleteAccount(acc.id)} className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-semibold"><Trash2 size={16} /> Verwijderen</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => { setNewAccount(true); setNewForm(true); }} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Plus size={20} /> Nieuw account</button>
+          </>
+        )}
+
+        {/* Default emballage catalog tab */}
+        {activeTab === "catalog" && (
+          <div className="space-y-4">
+            <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
+              <p className="text-sm text-purple-700">Beheer hier de standaard emballage per leverancier. Wanneer een klant een leverancier toevoegt, kan die de bijbehorende emballage-items met één klik importeren.</p>
+            </div>
+
+            {/* Supplier tabs */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {catalogSuppliers.map(s => (
+                <button key={s} onClick={() => setCatalogSupplier(s)} className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${catalogSupplier === s ? "bg-purple-600 text-white" : "bg-white text-gray-600 border border-gray-200 hover:border-purple-300"}`}>{s}</button>
+              ))}
+              <div className="flex gap-1.5 ml-auto">
+                <input type="text" value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} placeholder="Nieuwe leverancier..." className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm w-44 focus:ring-2 focus:ring-purple-500 outline-none" />
+                <button onClick={handleAddSupplierCatalog} disabled={!newSupplierName.trim()} className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={14} /></button>
+              </div>
+            </div>
+
+            {catalogSupplier && (
+              <>
+                {/* Supplier header with delete */}
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Truck size={18} className="text-purple-500" /> {catalogSupplier} <span className="text-sm font-normal text-gray-400">({catalogItems.length} items)</span></h3>
+                  <button onClick={() => handleDeleteSupplierCatalog(catalogSupplier)} className="text-xs text-red-500 hover:text-red-700 font-medium hover:underline">Leverancier verwijderen</button>
+                </div>
+
+                {/* Add item */}
+                <div className="flex gap-2">
+                  <input type="text" placeholder="Emballage naam" value={newCatalogItem.name} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, name: e.target.value })} className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+                  <input type="number" placeholder="€ waarde" value={newCatalogItem.value} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, value: e.target.value })} className="w-28 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" step="0.50" />
+                  <button onClick={handleAddCatalogItem} disabled={!newCatalogItem.name || !newCatalogItem.value} className="px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={16} /></button>
+                </div>
+
+                {/* Items list */}
+                <div className="space-y-1.5">
+                  {catalogItems.map(item => (
+                    <div key={item.id} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100">
+                      <div className="flex items-center gap-3">
+                        <Package size={16} className="text-purple-400" />
+                        <span className="text-sm font-medium text-gray-900">{item.emballage_name}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold text-purple-600">€{parseFloat(item.value).toFixed(2)}</span>
+                        <button onClick={() => handleDeleteCatalogItem(item.id)} className="p-1.5 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14} /></button>
+                      </div>
+                    </div>
+                  ))}
+                  {catalogItems.length === 0 && (
+                    <div className="bg-gray-50 rounded-xl p-6 text-center border border-gray-100">
+                      <Package size={24} className="mx-auto text-gray-300 mb-2" />
+                      <p className="text-sm text-gray-400">Nog geen emballage voor {catalogSupplier}</p>
+                      <p className="text-xs text-gray-300 mt-1">Voeg items toe hierboven</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1704,6 +1844,11 @@ function EmballageBeheer({ account, setAccount }) {
   const [showImportModal, setShowImportModal] = useState(null); // supplier name or null
   const [selectedImportItems, setSelectedImportItems] = useState([]);
   const [isImporting, setIsImporting] = useState(false);
+
+  // Use DB defaults if available, fall back to hardcoded
+  const DEFAULT_SUPPLIER_EMBALLAGE = Object.keys(account.defaultCatalog || {}).length > 0
+    ? account.defaultCatalog
+    : DEFAULT_SUPPLIER_EMBALLAGE_FALLBACK;
 
   const handleAddEmballage = async () => {
     if (!newEmb.name || !newEmb.value) return;

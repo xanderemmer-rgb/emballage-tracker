@@ -85,13 +85,14 @@ export function useSupabase() {
   const loadAccountData = async (accountId) => {
     try {
       // Fetch account, profiles, branches, transactions, emballage_types, suppliers in parallel
-      const [accountRes, profilesRes, branchesRes, transactionsRes, emballageRes, suppliersRes] = await Promise.all([
+      const [accountRes, profilesRes, branchesRes, transactionsRes, emballageRes, suppliersRes, defaultCatalogRes] = await Promise.all([
         supabase.from("accounts").select("*").eq("id", accountId).single(),
         supabase.from("profiles").select("*").eq("account_id", accountId).order("created_at"),
         supabase.from("branches").select("*").eq("account_id", accountId).order("name").then(r => r).catch(() => ({ data: [], error: null })),
         supabase.from("transactions").select("*").eq("account_id", accountId).order("created_at", { ascending: false }),
         supabase.from("emballage_types").select("*").eq("account_id", accountId).order("name"),
         supabase.from("suppliers").select("*").eq("account_id", accountId).order("name"),
+        supabase.from("default_supplier_emballage").select("*").order("supplier_name").order("emballage_name").then(r => r).catch(() => ({ data: [], error: null })),
       ]);
 
       if (accountRes.error) throw accountRes.error;
@@ -103,7 +104,8 @@ export function useSupabase() {
         branchesRes.data || [],
         transactionsRes.data || [],
         emballageRes.data || [],
-        suppliersRes.data || []
+        suppliersRes.data || [],
+        defaultCatalogRes.data || []
       );
 
       setAccountState(shaped);
@@ -158,7 +160,7 @@ export function useSupabase() {
   };
 
   // ─── SHAPE DATA ───────────────────────────────────────────────────────────
-  function shapeAccountData(acc, profiles, branches, transactions, emballageTypes, suppliers) {
+  function shapeAccountData(acc, profiles, branches, transactions, emballageTypes, suppliers, defaultCatalog) {
     return {
       id: acc.id,
       companyName: acc.company_name,
@@ -195,6 +197,11 @@ export function useSupabase() {
       })),
       suppliers: suppliers.map(s => s.name),
       _supplierRecords: suppliers, // Keep full records for CRUD
+      defaultCatalog: (defaultCatalog || []).reduce((acc, item) => {
+        if (!acc[item.supplier_name]) acc[item.supplier_name] = [];
+        acc[item.supplier_name].push({ name: item.emballage_name, value: parseFloat(item.value) });
+        return acc;
+      }, {}),
       transactions: transactions.map(t => ({
         id: t.id,
         date: t.date,
