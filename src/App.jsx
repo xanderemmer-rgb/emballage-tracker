@@ -1848,10 +1848,19 @@ function AuditLog({ account }) {
   const [search, setSearch] = useState("");
 
   // Build audit entries from transactions (since audit_log table may not have data yet)
+  const getUserName = (userId) => {
+    if (!userId) return null;
+    const u = account.users.find(u => u.id === userId);
+    if (!u) return null;
+    const full = [u.firstName, u.lastName].filter(Boolean).join(" ");
+    return full || u.name || null;
+  };
+
   const auditEntries = [...account.transactions].sort((a, b) => b.date.localeCompare(a.date)).map(t => ({
     id: t.id,
     date: t.date,
     user: t.branch,
+    userName: getUserName(t.userId),
     action: t.type === "IN" ? "Inkomende registratie" : "Uitgaande registratie",
     detail: `${t.emballage} (${t.qty}x) — ${t.supplier}`,
     type: t.type,
@@ -1860,7 +1869,8 @@ function AuditLog({ account }) {
   const filtered = auditEntries.filter(e =>
     !search || e.user.toLowerCase().includes(search.toLowerCase()) ||
     e.detail.toLowerCase().includes(search.toLowerCase()) ||
-    e.action.toLowerCase().includes(search.toLowerCase())
+    e.action.toLowerCase().includes(search.toLowerCase()) ||
+    (e.userName && e.userName.toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -1880,9 +1890,10 @@ function AuditLog({ account }) {
                 {e.type === "IN" ? <ArrowDownCircle size={14} className="text-emerald-600" /> : <ArrowUpCircle size={14} className="text-rose-600" />}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium text-gray-900">{e.action}</span>
                   <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">{e.user}</span>
+                  {e.userName && <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">door {e.userName}</span>}
                 </div>
                 <p className="text-xs text-gray-500 truncate">{e.detail}</p>
               </div>
@@ -2620,10 +2631,11 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
         qty: parseInt(t.qty),
         note: t.note || null,
         branch: t.branch || user.branch,
+        user_id: user.id,
       }));
       const { data, error } = await supabase.from("transactions").insert(inserts).select();
       if (error) throw error;
-      const newTrans = data.map(t => ({ id: t.id, date: t.date, type: t.type, supplier: t.supplier, emballage: t.emballage, qty: t.qty, note: t.note || "", attachment: t.attachment, branch: t.branch || "" }));
+      const newTrans = data.map(t => ({ id: t.id, date: t.date, type: t.type, supplier: t.supplier, emballage: t.emballage, qty: t.qty, note: t.note || "", attachment: t.attachment, branch: t.branch || "", userId: t.user_id || null }));
       setAccount({ ...account, transactions: [...newTrans, ...account.transactions] });
       setScanModal(false);
       setToast({ type: "success", message: items.length > 1 ? `${items.length} transacties geregistreerd!` : "Transactie geregistreerd!" });

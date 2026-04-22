@@ -205,6 +205,7 @@ export function useSupabase() {
         note: t.note || "",
         attachment: t.attachment,
         branch: t.branch || "",
+        userId: t.user_id || null,
       })),
     };
   }
