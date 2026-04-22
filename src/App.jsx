@@ -1378,11 +1378,27 @@ function MasterBeheer({ account, setAccount }) {
           </div>
         </div>
       )}
-      {!showForm && (
-        <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all duration-200">
-          <PlusCircle size={16} /> Gebruiker toevoegen
-        </button>
-      )}
+      {!showForm && (() => {
+        const allBranchesFull = branches.length > 0 && branches.every(b => usersInBranch(b.id) >= maxForBranch(b.id));
+        const noBranches = branches.length === 0;
+        return allBranchesFull ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
+            <Users size={20} className="mx-auto text-amber-500 mb-1" />
+            <p className="text-sm font-semibold text-amber-800">Alle filialen zitten vol</p>
+            <p className="text-xs text-amber-600 mt-1">Verwijder een gebruiker of koop extra gebruikersplekken onder "Abonnement".</p>
+          </div>
+        ) : noBranches ? (
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-center">
+            <Building2 size={20} className="mx-auto text-gray-400 mb-1" />
+            <p className="text-sm font-semibold text-gray-700">Maak eerst filialen aan</p>
+            <p className="text-xs text-gray-500 mt-1">Ga naar "Filialen" om je eerste filiaal te maken.</p>
+          </div>
+        ) : (
+          <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all duration-200">
+            <PlusCircle size={16} /> Gebruiker toevoegen
+          </button>
+        );
+      })()}
     </div>
   );
 }
