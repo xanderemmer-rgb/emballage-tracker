@@ -1480,8 +1480,8 @@ function BranchManagement({ account, setAccount }) {
       setAccount({ ...account, branches: branches.map(b => b.id === branchId ? { ...b, logoUrl: base64 } : b) });
       setToast({ type: "success", message: "Logo bijgewerkt!" });
     } catch (err) {
-      console.warn("Could not save branch logo:", err.message);
-      setAccount({ ...account, branches: branches.map(b => b.id === branchId ? { ...b, logoUrl: base64 } : b) });
+      console.error("Branch logo save error:", err);
+      setToast({ type: "error", message: "Logo kon niet opgeslagen worden: " + err.message });
     }
   };
 
