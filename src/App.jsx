@@ -1031,7 +1031,14 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
                 <div key={idx} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5 border border-gray-100">
                   <select value={line.emballage} onChange={(e) => updateLine(idx, "emballage", e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-0">
                     <option value="">Emballage...</option>
-                    {emballageTypes.map((e, i) => <option key={i} value={e.name}>{e.name} (€{e.value})</option>)}
+                    {(() => {
+                      const supplierItems = supplier ? emballageTypes.filter(e => e.supplierName === supplier) : [];
+                      const otherItems = supplier ? emballageTypes.filter(e => e.supplierName !== supplier) : emballageTypes;
+                      return (<>
+                        {supplierItems.length > 0 && <optgroup label={supplier}>{supplierItems.map((e, i) => <option key={`s${i}`} value={e.name}>{e.name} (€{e.value})</option>)}</optgroup>}
+                        {otherItems.length > 0 && <optgroup label={supplierItems.length > 0 ? "Overig" : "Alle emballage"}>{otherItems.map((e, i) => <option key={`o${i}`} value={e.name}>{e.name} (€{e.value})</option>)}</optgroup>}
+                      </>);
+                    })()}
                   </select>
                   <input type="number" value={line.qty} onChange={(e) => updateLine(idx, "qty", e.target.value)} className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm text-center bg-white focus:ring-2 focus:ring-blue-500 outline-none" min="1" placeholder="#" />
                   {lines.length > 1 && (
@@ -2058,45 +2065,53 @@ function CompanySupplierBalances({ account }) {
 
 // ─── EMBALLAGE & LEVERANCIER BEHEER ──────────────────────────────────────────
 function EmballageBeheer({ account, setAccount }) {
-  const [tab, setTab] = useState("emballage");
-  const [newEmb, setNewEmb] = useState({ name: "", value: "" });
   const [newSup, setNewSup] = useState("");
   const [toast, setToast] = useState(null);
   const [showImportModal, setShowImportModal] = useState(null); // supplier name or null
   const [selectedImportItems, setSelectedImportItems] = useState([]);
   const [isImporting, setIsImporting] = useState(false);
+  const [expandedSupplier, setExpandedSupplier] = useState(null); // which supplier card is expanded
+  const [newEmbForSupplier, setNewEmbForSupplier] = useState({}); // { supplierName: { name, value } }
 
   // Use DB defaults if available, fall back to hardcoded
   const DEFAULT_SUPPLIER_EMBALLAGE = Object.keys(account.defaultCatalog || {}).length > 0
     ? account.defaultCatalog
     : DEFAULT_SUPPLIER_EMBALLAGE_FALLBACK;
 
-  const handleAddEmballage = async () => {
-    if (!newEmb.name || !newEmb.value) return;
+  // Get emballage items for a specific supplier
+  const getSupplierEmballage = (supplierName) => account.emballageTypes.filter(e => e.supplierName === supplierName);
+  // Get emballage items not linked to any supplier (legacy / unlinked)
+  const unlinkedEmballage = account.emballageTypes.filter(e => !e.supplierName);
+
+  // Add emballage item linked to a supplier
+  const handleAddEmballageToSupplier = async (supplierName) => {
+    const embData = newEmbForSupplier[supplierName];
+    if (!embData?.name || !embData?.value) return;
     try {
-      const { data, error } = await supabase.from("emballage_types").insert({ account_id: account.id, name: newEmb.name, value: parseFloat(newEmb.value) }).select().single();
+      const { data, error } = await supabase.from("emballage_types").insert({
+        account_id: account.id, name: embData.name, value: parseFloat(embData.value), supplier_name: supplierName
+      }).select().single();
       if (error) throw error;
-      setAccount({ ...account, emballageTypes: [...account.emballageTypes, { name: newEmb.name, value: parseFloat(newEmb.value), id: data.id }] });
-      setNewEmb({ name: "", value: "" });
-      setToast({ type: "success", message: `${newEmb.name} toegevoegd` });
+      setAccount(prev => ({ ...prev, emballageTypes: [...prev.emballageTypes, { name: embData.name, value: parseFloat(embData.value), id: data.id, supplierName }] }));
+      setNewEmbForSupplier(prev => ({ ...prev, [supplierName]: { name: "", value: "" } }));
+      setToast({ type: "success", message: `${embData.name} toegevoegd aan ${supplierName}` });
     } catch (err) { setToast({ type: "error", message: err.message }); }
   };
 
-  const handleDeleteEmballage = async (name) => {
-    if (!confirm(`"${name}" verwijderen?`)) return;
+  const handleDeleteEmballage = async (embItem) => {
+    if (!confirm(`"${embItem.name}" verwijderen?`)) return;
     try {
-      const { error } = await supabase.from("emballage_types").delete().eq("account_id", account.id).eq("name", name);
+      const { error } = await supabase.from("emballage_types").delete().eq("id", embItem.id);
       if (error) throw error;
-      setAccount({ ...account, emballageTypes: account.emballageTypes.filter(e => e.name !== name) });
+      setAccount(prev => ({ ...prev, emballageTypes: prev.emballageTypes.filter(e => e.id !== embItem.id) }));
       setToast({ type: "success", message: "Verwijderd" });
     } catch (err) { setToast({ type: "error", message: err.message }); }
   };
 
-  // Open import modal when adding a supplier that has a default catalog
+  // Add supplier (with duplicate check)
   const handleAddSupplier = async (supplierName) => {
     const name = supplierName || newSup.trim();
     if (!name) return;
-    // Prevent duplicate suppliers (case-insensitive)
     const exists = account.suppliers.some(s => s.toLowerCase() === name.toLowerCase());
     if (exists) {
       setToast({ type: "error", message: `"${name}" bestaat al als leverancier` });
@@ -2108,42 +2123,42 @@ function EmballageBeheer({ account, setAccount }) {
       if (error) throw error;
       setAccount(prev => ({ ...prev, suppliers: [...prev.suppliers, name] }));
       setNewSup("");
+      setExpandedSupplier(name); // Auto-expand the new supplier
       // Check if this supplier has a default emballage catalog
       const catalog = DEFAULT_SUPPLIER_EMBALLAGE[name];
       if (catalog) {
-        // Filter out items that already exist
         const existingNames = account.emballageTypes.map(e => e.name.toLowerCase());
         const newItems = catalog.filter(item => !existingNames.includes(item.name.toLowerCase()));
         if (newItems.length > 0) {
           setSelectedImportItems(newItems.map(item => ({ ...item, selected: true })));
           setShowImportModal(name);
         } else {
-          setToast({ type: "success", message: `${name} toegevoegd (standaard emballage al aanwezig)` });
+          setToast({ type: "success", message: `${name} toegevoegd` });
         }
       } else {
-        setToast({ type: "success", message: `${name} toegevoegd` });
+        setToast({ type: "success", message: `${name} toegevoegd — voeg nu emballage items toe` });
       }
     } catch (err) { setToast({ type: "error", message: err.message }); }
   };
 
-  // Import selected default emballage items
+  // Import selected default emballage items (linked to supplier)
   const handleImportEmballage = async () => {
     const toImport = selectedImportItems.filter(i => i.selected);
     if (toImport.length === 0) { setShowImportModal(null); return; }
     setIsImporting(true);
     try {
-      const inserts = toImport.map(item => ({ account_id: account.id, name: item.name, value: item.value }));
+      const inserts = toImport.map(item => ({ account_id: account.id, name: item.name, value: item.value, supplier_name: showImportModal }));
       const { data, error } = await supabase.from("emballage_types").insert(inserts).select();
       if (error) throw error;
-      const newTypes = data.map(d => ({ id: d.id, name: d.name, value: d.value }));
+      const newTypes = data.map(d => ({ id: d.id, name: d.name, value: d.value, supplierName: d.supplier_name || showImportModal }));
       setAccount(prev => ({ ...prev, emballageTypes: [...prev.emballageTypes, ...newTypes] }));
       setShowImportModal(null);
-      setToast({ type: "success", message: `${toImport.length} emballage-type${toImport.length !== 1 ? "s" : ""} geïmporteerd van ${showImportModal}` });
+      setExpandedSupplier(showImportModal); // Keep expanded
+      setToast({ type: "success", message: `${toImport.length} emballage-type${toImport.length !== 1 ? "s" : ""} geïmporteerd` });
     } catch (err) { setToast({ type: "error", message: err.message }); }
     setIsImporting(false);
   };
 
-  // Show import button for existing suppliers with catalogs
   const handleShowCatalog = (supplierName) => {
     const catalog = DEFAULT_SUPPLIER_EMBALLAGE[supplierName];
     if (!catalog) return;
@@ -2158,11 +2173,25 @@ function EmballageBeheer({ account, setAccount }) {
   };
 
   const handleDeleteSupplier = async (name) => {
-    if (!confirm(`"${name}" verwijderen?`)) return;
+    const supplierEmb = getSupplierEmballage(name);
+    const msg = supplierEmb.length > 0
+      ? `"${name}" en ${supplierEmb.length} emballage-item${supplierEmb.length !== 1 ? "s" : ""} verwijderen?`
+      : `"${name}" verwijderen?`;
+    if (!confirm(msg)) return;
     try {
+      // Delete supplier's emballage items first
+      if (supplierEmb.length > 0) {
+        const { error: embErr } = await supabase.from("emballage_types").delete().eq("account_id", account.id).eq("supplier_name", name);
+        if (embErr) throw embErr;
+      }
       const { error } = await supabase.from("suppliers").delete().eq("account_id", account.id).eq("name", name);
       if (error) throw error;
-      setAccount({ ...account, suppliers: account.suppliers.filter(s => s !== name) });
+      setAccount(prev => ({
+        ...prev,
+        suppliers: prev.suppliers.filter(s => s !== name),
+        emballageTypes: prev.emballageTypes.filter(e => e.supplierName !== name),
+      }));
+      if (expandedSupplier === name) setExpandedSupplier(null);
       setToast({ type: "success", message: "Verwijderd" });
     } catch (err) { setToast({ type: "error", message: err.message }); }
   };
@@ -2170,77 +2199,123 @@ function EmballageBeheer({ account, setAccount }) {
   return (
     <div className="animate-fade-in space-y-6">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <div className="flex gap-2">
-        <button onClick={() => setTab("emballage")} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "emballage" ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600"}`}><Package size={14} className="inline mr-1" /> Emballage types</button>
-        <button onClick={() => setTab("suppliers")} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${tab === "suppliers" ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600"}`}><Truck size={14} className="inline mr-1" /> Leveranciers</button>
+
+      {/* Add new supplier */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">Leverancier toevoegen</label>
+        <div className="flex gap-2">
+          <input type="text" placeholder="Leveranciersnaam" value={newSup} onChange={(e) => setNewSup(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleAddSupplier()} className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+          <button onClick={() => handleAddSupplier()} disabled={!newSup.trim()} className="px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all flex items-center gap-1.5"><Plus size={16} /> Toevoegen</button>
+        </div>
       </div>
 
-      {tab === "emballage" && (
-        <div className="space-y-3">
-          <div className="flex gap-2">
-            <input type="text" placeholder="Naam (bijv. Biervat 50L)" value={newEmb.name} onChange={(e) => setNewEmb({ ...newEmb, name: e.target.value })} className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
-            <input type="number" placeholder="€ waarde" value={newEmb.value} onChange={(e) => setNewEmb({ ...newEmb, value: e.target.value })} className="w-24 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" step="0.50" />
-            <button onClick={handleAddEmballage} disabled={!newEmb.name || !newEmb.value} className="px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={16} /></button>
-          </div>
-          <div className="space-y-2">
-            {account.emballageTypes.map((e, i) => (
-              <div key={i} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100">
-                <div className="flex items-center gap-3">
-                  <Package size={16} className="text-purple-400" />
-                  <span className="text-sm font-medium text-gray-900">{e.name}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-purple-600">{fmt(e.value)}</span>
-                  <button onClick={() => handleDeleteEmballage(e.name)} className="p-1.5 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14} /></button>
-                </div>
-              </div>
+      {/* Suggest default suppliers with catalogs that haven't been added yet */}
+      {Object.keys(DEFAULT_SUPPLIER_EMBALLAGE).filter(s => !account.suppliers.some(as => as.toLowerCase() === s.toLowerCase())).length > 0 && (
+        <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+          <p className="text-xs font-semibold text-blue-700 mb-2 flex items-center gap-1.5"><Sparkles size={12} /> Snel toevoegen met standaard emballage:</p>
+          <div className="flex flex-wrap gap-2">
+            {Object.keys(DEFAULT_SUPPLIER_EMBALLAGE).filter(s => !account.suppliers.some(as => as.toLowerCase() === s.toLowerCase())).map(s => (
+              <button key={s} onClick={() => handleAddSupplier(s)} className="px-3 py-1.5 bg-white border border-blue-200 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-all flex items-center gap-1.5">
+                <Sparkles size={12} /> {s}
+              </button>
             ))}
           </div>
         </div>
       )}
 
-      {tab === "suppliers" && (
-        <div className="space-y-3">
-          <div className="flex gap-2">
-            <input type="text" placeholder="Leveranciersnaam" value={newSup} onChange={(e) => setNewSup(e.target.value)} className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
-            <button onClick={() => handleAddSupplier()} disabled={!newSup.trim()} className="px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={16} /></button>
-          </div>
+      {/* Empty state */}
+      {account.suppliers.length === 0 && (
+        <div className="bg-gray-50 rounded-2xl p-8 text-center border border-gray-100">
+          <Truck size={40} className="text-gray-300 mx-auto mb-3" />
+          <p className="text-gray-500 font-medium">Nog geen leveranciers</p>
+          <p className="text-gray-400 text-sm mt-1">Voeg een leverancier toe om emballage items te beheren</p>
+        </div>
+      )}
 
-          {/* Suggest default suppliers with catalogs that haven't been added yet */}
-          {Object.keys(DEFAULT_SUPPLIER_EMBALLAGE).filter(s => !account.suppliers.includes(s)).length > 0 && (
-            <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
-              <p className="text-xs font-semibold text-blue-700 mb-2">Snel toevoegen met standaard emballage:</p>
-              <div className="flex flex-wrap gap-2">
-                {Object.keys(DEFAULT_SUPPLIER_EMBALLAGE).filter(s => !account.suppliers.includes(s)).map(s => (
-                  <button key={s} onClick={() => handleAddSupplier(s)} className="px-3 py-1.5 bg-white border border-blue-200 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-all flex items-center gap-1.5">
-                    <Sparkles size={12} /> {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+      {/* Supplier cards with emballage items */}
+      <div className="space-y-3">
+        {account.suppliers.map((s, i) => {
+          const color = getSupplierColor(s, account.suppliers);
+          const supplierItems = getSupplierEmballage(s);
+          const isExpanded = expandedSupplier === s;
+          const hasCatalog = !!DEFAULT_SUPPLIER_EMBALLAGE[s];
+          const existingNames = account.emballageTypes.map(e => e.name.toLowerCase());
+          const catalogNewItems = hasCatalog ? DEFAULT_SUPPLIER_EMBALLAGE[s].filter(item => !existingNames.includes(item.name.toLowerCase())) : [];
+          const embInput = newEmbForSupplier[s] || { name: "", value: "" };
 
-          <div className="space-y-2">
-            {account.suppliers.map((s, i) => {
-              const color = getSupplierColor(s, account.suppliers);
-              const hasCatalog = !!DEFAULT_SUPPLIER_EMBALLAGE[s];
-              const existingNames = account.emballageTypes.map(e => e.name.toLowerCase());
-              const catalogNewItems = hasCatalog ? DEFAULT_SUPPLIER_EMBALLAGE[s].filter(item => !existingNames.includes(item.name.toLowerCase())) : [];
-              return (
-                <div key={i} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${color.dot}`} />
-                    <span className="text-sm font-medium text-gray-900">{s}</span>
-                    {hasCatalog && catalogNewItems.length > 0 && (
-                      <button onClick={() => handleShowCatalog(s)} className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-all flex items-center gap-1">
-                        <Download size={10} /> {catalogNewItems.length} emballage importeren
-                      </button>
-                    )}
-                  </div>
-                  <button onClick={() => handleDeleteSupplier(s)} className="p-1.5 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14} /></button>
+          return (
+            <div key={i} className={`bg-white rounded-xl shadow-sm border transition-all ${isExpanded ? "border-purple-200 ring-1 ring-purple-100" : "border-gray-100"}`}>
+              {/* Supplier header */}
+              <div className="flex items-center justify-between p-3 cursor-pointer" onClick={() => setExpandedSupplier(isExpanded ? null : s)}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full ${color.dot}`} />
+                  <span className="text-sm font-semibold text-gray-900">{s}</span>
+                  <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">{supplierItems.length} item{supplierItems.length !== 1 ? "s" : ""}</span>
+                  {hasCatalog && catalogNewItems.length > 0 && (
+                    <button onClick={(e) => { e.stopPropagation(); handleShowCatalog(s); }} className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-all flex items-center gap-1">
+                      <Download size={10} /> {catalogNewItems.length} importeren
+                    </button>
+                  )}
                 </div>
-              );
-            })}
+                <div className="flex items-center gap-2">
+                  <button onClick={(e) => { e.stopPropagation(); handleDeleteSupplier(s); }} className="p-1.5 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14} /></button>
+                  {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                </div>
+              </div>
+
+              {/* Expanded: emballage items + add form */}
+              {isExpanded && (
+                <div className="border-t border-gray-100 p-3 space-y-3">
+                  {/* Add emballage to this supplier */}
+                  <div className="flex gap-2">
+                    <input type="text" placeholder="Emballage naam" value={embInput.name} onChange={(e) => setNewEmbForSupplier(prev => ({ ...prev, [s]: { ...(prev[s] || {}), name: e.target.value } }))} onKeyDown={(e) => e.key === "Enter" && handleAddEmballageToSupplier(s)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+                    <input type="number" placeholder="€ waarde" value={embInput.value} onChange={(e) => setNewEmbForSupplier(prev => ({ ...prev, [s]: { ...(prev[s] || {}), value: e.target.value } }))} onKeyDown={(e) => e.key === "Enter" && handleAddEmballageToSupplier(s)} className="w-24 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none" step="0.50" />
+                    <button onClick={() => handleAddEmballageToSupplier(s)} disabled={!embInput.name || !embInput.value} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={16} /></button>
+                  </div>
+
+                  {/* Emballage items list */}
+                  {supplierItems.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-3">Nog geen emballage items — voeg er een toe hierboven{hasCatalog && catalogNewItems.length > 0 ? " of importeer standaard items" : ""}</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {supplierItems.map((e, j) => (
+                        <div key={j} className="bg-gray-50 rounded-lg px-3 py-2 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Package size={14} className="text-purple-400" />
+                            <span className="text-sm text-gray-800">{e.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-purple-600">{fmt(e.value)}</span>
+                            <button onClick={() => handleDeleteEmballage(e)} className="p-1 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded transition-all"><Trash2 size={12} /></button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Unlinked emballage items (legacy data) */}
+      {unlinkedEmballage.length > 0 && (
+        <div className="border-t border-gray-200 pt-4">
+          <p className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider flex items-center gap-1.5"><Package size={12} /> Overige emballage (niet aan leverancier gekoppeld)</p>
+          <div className="space-y-1.5">
+            {unlinkedEmballage.map((e, i) => (
+              <div key={i} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100">
+                <div className="flex items-center gap-3">
+                  <Package size={14} className="text-gray-400" />
+                  <span className="text-sm text-gray-700">{e.name}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-purple-600">{fmt(e.value)}</span>
+                  <button onClick={() => handleDeleteEmballage(e)} className="p-1.5 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={12} /></button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

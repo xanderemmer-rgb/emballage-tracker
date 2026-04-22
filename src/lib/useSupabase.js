@@ -194,6 +194,7 @@ export function useSupabase() {
         id: e.id,
         name: e.name,
         value: e.value,
+        supplierName: e.supplier_name || null,
       })),
       suppliers: suppliers.map(s => s.name),
       _supplierRecords: suppliers, // Keep full records for CRUD
@@ -332,10 +333,12 @@ export function useSupabase() {
   };
 
   // ─── EMBALLAGE TYPE CRUD ──────────────────────────────────────────────────
-  const addEmballageType = async (name, value) => {
+  const addEmballageType = async (name, value, supplierName = null) => {
+    const insertData = { account_id: account.id, name, value: parseFloat(value) };
+    if (supplierName) insertData.supplier_name = supplierName;
     const { data, error } = await supabase
       .from("emballage_types")
-      .insert({ account_id: account.id, name, value: parseFloat(value) })
+      .insert(insertData)
       .select()
       .single();
 
@@ -343,7 +346,7 @@ export function useSupabase() {
 
     setAccountState(prev => ({
       ...prev,
-      emballageTypes: [...prev.emballageTypes, { id: data.id, name: data.name, value: data.value }],
+      emballageTypes: [...prev.emballageTypes, { id: data.id, name: data.name, value: data.value, supplierName: data.supplier_name || null }],
     }));
   };
 
