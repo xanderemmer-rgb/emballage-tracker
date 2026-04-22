@@ -1108,20 +1108,69 @@ function MasterDashboard({ account, user }) {
     };
   });
 
-  // Recent activity (last 5)
-  const recentTrans = [...account.transactions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+  // Trend calculations (this week vs last week)
+  const thisWeekTrans = account.transactions.filter(t => { const d = new Date(t.date); const w = new Date(); w.setDate(w.getDate() - 7); return d >= w; });
+  const lastWeekTrans = account.transactions.filter(t => { const d = new Date(t.date); const w1 = new Date(); w1.setDate(w1.getDate() - 14); const w2 = new Date(); w2.setDate(w2.getDate() - 7); return d >= w1 && d < w2; });
+  const trendTrans = thisWeekTrans.length - lastWeekTrans.length;
+  const trendIn = thisWeekTrans.filter(t => t.type === "IN").length - lastWeekTrans.filter(t => t.type === "IN").length;
+  const trendOut = thisWeekTrans.filter(t => t.type === "OUT").length - lastWeekTrans.filter(t => t.type === "OUT").length;
+  const thisWeekValue = thisWeekTrans.reduce((s, t) => { const emb = account.emballageTypes.find(e => e.name === t.emballage); const v = (emb?.value || 0) * t.qty; return t.type === "IN" ? s + v : s - v; }, 0);
+  const lastWeekValue = lastWeekTrans.reduce((s, t) => { const emb = account.emballageTypes.find(e => e.name === t.emballage); const v = (emb?.value || 0) * t.qty; return t.type === "IN" ? s + v : s - v; }, 0);
+  const trendValue = thisWeekValue - lastWeekValue;
 
-  // Branch performance
+  const TrendBadge = ({ value, suffix = "" }) => {
+    if (value === 0) return null;
+    const up = value > 0;
+    return (
+      <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold ${up ? "text-emerald-600" : "text-rose-600"}`}>
+        {up ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+        {up ? "+" : ""}{value}{suffix}
+      </span>
+    );
+  };
+
+  // Recent activity (last 5)
+  const recentTrans = [...account.transactions].sort((a, b) => (b.createdAt || b.date).localeCompare(a.createdAt || a.date)).slice(0, 5);
+
+  // Branch performance (enhanced)
+  const branchRecords = account.branches || [];
   const branchStats = branches.map(b => {
     const bt = account.transactions.filter(t => t.branch === b);
+    const branchRec = branchRecords.find(br => br.name === b);
+    const branchValue = bt.reduce((sum, t) => {
+      const emb = account.emballageTypes.find(e => e.name === t.emballage);
+      const val = (emb?.value || 0) * t.qty;
+      return t.type === "IN" ? sum + val : sum - val;
+    }, 0);
+    const userCount = account.users.filter(u => u.branchId === branchRec?.id).length;
+    const thisWeekBt = bt.filter(t => { const d = new Date(t.date); const w = new Date(); w.setDate(w.getDate() - 7); return d >= w; });
+    const lastWeekBt = bt.filter(t => { const d = new Date(t.date); const w1 = new Date(); w1.setDate(w1.getDate() - 14); const w2 = new Date(); w2.setDate(w2.getDate() - 7); return d >= w1 && d < w2; });
     return {
       name: b,
+      id: branchRec?.id,
+      logoUrl: branchRec?.logoUrl,
       total: bt.length,
       in: bt.filter(t => t.type === "IN").reduce((s, t) => s + t.qty, 0),
       out: bt.filter(t => t.type === "OUT").reduce((s, t) => s + t.qty, 0),
-      lastActivity: bt.length > 0 ? [...bt].sort((a, b2) => b2.date.localeCompare(a.date))[0].date : null,
+      value: branchValue,
+      userCount,
+      lastActivity: bt.length > 0 ? [...bt].sort((a2, b2) => b2.date.localeCompare(a2.date))[0].date : null,
+      trendTotal: thisWeekBt.length - lastWeekBt.length,
     };
   });
+
+  // Saldo per leverancier
+  const saldo = buildSaldoData(account.transactions, account.emballageTypes, account.suppliers);
+
+  // Top emballage items
+  const emballageCounts = {};
+  account.transactions.forEach(t => {
+    if (!emballageCounts[t.emballage]) emballageCounts[t.emballage] = { in: 0, out: 0, total: 0 };
+    emballageCounts[t.emballage].total += t.qty;
+    if (t.type === "IN") emballageCounts[t.emballage].in += t.qty;
+    else emballageCounts[t.emballage].out += t.qty;
+  });
+  const topEmballage = Object.entries(emballageCounts).sort((a, b) => b[1].total - a[1].total).slice(0, 5);
 
   // Alerts
   const alerts = [];
@@ -1131,7 +1180,6 @@ function MasterDashboard({ account, user }) {
       alerts.push({ type: "warning", message: `${bs.name} heeft al meer dan een week niets geregistreerd` });
     }
   });
-  const saldo = buildSaldoData(account.transactions, account.emballageTypes, account.suppliers);
   Object.entries(saldo).forEach(([sup, data]) => {
     if (data.value > 500) {
       alerts.push({ type: "info", message: `Hoog saldo bij ${sup}: ${fmt(data.value)} uitstaand` });
@@ -1152,14 +1200,17 @@ function MasterDashboard({ account, user }) {
         <p className="text-sm text-gray-500 mt-0.5">Hier is je overzicht van {account.companyName}</p>
       </div>
 
-      {/* KPI cards */}
+      {/* KPI cards with trends */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-medium text-gray-500">Transacties</p>
             <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center"><Hash size={16} className="text-blue-500" /></div>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{totalTrans}</p>
+          <div className="flex items-baseline gap-2">
+            <p className="text-2xl font-bold text-gray-900">{totalTrans}</p>
+            <TrendBadge value={trendTrans} />
+          </div>
           <p className="text-[10px] text-gray-400 mt-1">{branches.length} filialen actief</p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -1167,7 +1218,10 @@ function MasterDashboard({ account, user }) {
             <p className="text-xs font-medium text-gray-500">Inkomend</p>
             <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center"><ArrowDownCircle size={16} className="text-emerald-500" /></div>
           </div>
-          <p className="text-2xl font-bold text-emerald-600">{inCount}</p>
+          <div className="flex items-baseline gap-2">
+            <p className="text-2xl font-bold text-emerald-600">{inCount}</p>
+            <TrendBadge value={trendIn} />
+          </div>
           <p className="text-[10px] text-gray-400 mt-1">{totalTrans > 0 ? Math.round(inCount / totalTrans * 100) : 0}% van totaal</p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -1175,7 +1229,10 @@ function MasterDashboard({ account, user }) {
             <p className="text-xs font-medium text-gray-500">Uitgaand</p>
             <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center"><ArrowUpCircle size={16} className="text-rose-500" /></div>
           </div>
-          <p className="text-2xl font-bold text-rose-600">{outCount}</p>
+          <div className="flex items-baseline gap-2">
+            <p className="text-2xl font-bold text-rose-600">{outCount}</p>
+            <TrendBadge value={trendOut} />
+          </div>
           <p className="text-[10px] text-gray-400 mt-1">{totalTrans > 0 ? Math.round(outCount / totalTrans * 100) : 0}% van totaal</p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
@@ -1183,7 +1240,10 @@ function MasterDashboard({ account, user }) {
             <p className="text-xs font-medium text-gray-500">Inventariswaarde</p>
             <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center"><DollarSign size={16} className="text-purple-500" /></div>
           </div>
-          <p className="text-2xl font-bold text-purple-700">{fmt(totalValue)}</p>
+          <div className="flex items-baseline gap-2">
+            <p className="text-2xl font-bold text-purple-700">{fmt(totalValue)}</p>
+            <TrendBadge value={Math.round(trendValue)} suffix="€" />
+          </div>
           <p className="text-[10px] text-gray-400 mt-1">Geschatte waarde</p>
         </div>
       </div>
@@ -1197,6 +1257,54 @@ function MasterDashboard({ account, user }) {
               <span>{a.message}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Per-branch KPI cards */}
+      {branchStats.length > 0 && (
+        <div>
+          <p className="text-sm font-semibold text-gray-900 mb-3">Prestaties per filiaal</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {branchStats.map(bs => (
+              <div key={bs.name} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:border-blue-200 transition-colors">
+                <div className="flex items-center gap-3 mb-3">
+                  {bs.logoUrl ? (
+                    <img src={bs.logoUrl} alt={bs.name} className="w-10 h-10 rounded-lg object-contain bg-gray-50 border border-gray-100" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+                      <Building2 size={18} className="text-blue-500" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{bs.name}</p>
+                    <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                      <span className="flex items-center gap-0.5"><Users size={10} /> {bs.userCount} gebruiker{bs.userCount !== 1 ? "s" : ""}</span>
+                      {bs.lastActivity && <span>• {bs.lastActivity}</span>}
+                    </div>
+                  </div>
+                  <TrendBadge value={bs.trendTotal} />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="text-center p-2 rounded-lg bg-gray-50">
+                    <p className="text-lg font-bold text-gray-900">{bs.total}</p>
+                    <p className="text-[9px] text-gray-400 uppercase tracking-wider">Totaal</p>
+                  </div>
+                  <div className="text-center p-2 rounded-lg bg-emerald-50">
+                    <p className="text-lg font-bold text-emerald-600">+{bs.in}</p>
+                    <p className="text-[9px] text-emerald-500 uppercase tracking-wider">In</p>
+                  </div>
+                  <div className="text-center p-2 rounded-lg bg-rose-50">
+                    <p className="text-lg font-bold text-rose-600">−{bs.out}</p>
+                    <p className="text-[9px] text-rose-500 uppercase tracking-wider">Uit</p>
+                  </div>
+                </div>
+                <div className="mt-2 pt-2 border-t border-gray-50 flex items-center justify-between">
+                  <span className="text-[10px] text-gray-400">Waarde</span>
+                  <span className={`text-xs font-bold ${bs.value >= 0 ? "text-purple-700" : "text-rose-600"}`}>{fmt(bs.value)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1231,6 +1339,82 @@ function MasterDashboard({ account, user }) {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Saldo per leverancier + Top emballage */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Saldo per leverancier */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-2 mb-3">
+            <Truck size={16} className="text-gray-400" />
+            <p className="text-sm font-semibold text-gray-900">Saldo per leverancier</p>
+          </div>
+          {Object.keys(saldo).length === 0 ? (
+            <div className="text-center py-6"><Truck size={24} className="mx-auto text-gray-300 mb-2" /><p className="text-xs text-gray-400">Nog geen leveranciersdata</p></div>
+          ) : (
+            <div className="space-y-2">
+              {Object.entries(saldo).sort((a, b) => Math.abs(b[1].value) - Math.abs(a[1].value)).map(([sup, data]) => (
+                <div key={sup} className="flex items-center gap-3 p-3 rounded-lg bg-gray-50">
+                  <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <Truck size={14} className="text-blue-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{sup}</p>
+                    <div className="flex items-center gap-3 text-[10px] text-gray-500 mt-0.5">
+                      <span className="text-emerald-600">↓ {data.in} in</span>
+                      <span className="text-rose-600">↑ {data.out} uit</span>
+                      <span>netto {data.in - data.out}</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-sm font-bold ${data.value >= 0 ? "text-purple-700" : "text-rose-600"}`}>{fmt(data.value)}</p>
+                    {data.value > 200 && <p className="text-[9px] text-amber-500 flex items-center gap-0.5 justify-end"><AlertTriangle size={8} /> Hoog saldo</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Top emballage items */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+          <div className="flex items-center gap-2 mb-3">
+            <Package size={16} className="text-gray-400" />
+            <p className="text-sm font-semibold text-gray-900">Top emballage</p>
+          </div>
+          {topEmballage.length === 0 ? (
+            <div className="text-center py-6"><Package size={24} className="mx-auto text-gray-300 mb-2" /><p className="text-xs text-gray-400">Nog geen emballagedata</p></div>
+          ) : (
+            <div className="space-y-2">
+              {topEmballage.map(([name, counts], i) => {
+                const maxTotal = topEmballage[0]?.[1]?.total || 1;
+                const pct = Math.round((counts.total / maxTotal) * 100);
+                return (
+                  <div key={name} className="relative">
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-50 relative z-10">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${i === 0 ? "bg-amber-100 text-amber-700" : i === 1 ? "bg-gray-200 text-gray-600" : i === 2 ? "bg-orange-100 text-orange-600" : "bg-gray-100 text-gray-500"}`}>
+                        {i + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{name}</p>
+                        <div className="w-full bg-gray-200 rounded-full h-1 mt-1.5">
+                          <div className="bg-blue-400 h-1 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <p className="text-sm font-bold text-gray-900">{counts.total}</p>
+                        <div className="flex items-center gap-1.5 text-[9px]">
+                          <span className="text-emerald-600">↓{counts.in}</span>
+                          <span className="text-rose-600">↑{counts.out}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1280,9 +1464,9 @@ function MasterDashboard({ account, user }) {
         </div>
       </div>
 
-      {/* Branch overview */}
+      {/* Branch comparison table */}
       <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-        <p className="text-sm font-semibold text-gray-900 mb-3">Filiaaloverzicht</p>
+        <p className="text-sm font-semibold text-gray-900 mb-3">Filiaalvergelijking</p>
         {branchStats.length === 0 ? (
           <div className="text-center py-6"><Building2 size={24} className="mx-auto text-gray-300 mb-2" /><p className="text-xs text-gray-400">Geen filialen ingesteld</p></div>
         ) : (
@@ -1293,15 +1477,28 @@ function MasterDashboard({ account, user }) {
                 <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">Transacties</th>
                 <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">In</th>
                 <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">Uit</th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">Waarde</th>
+                <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">Trend</th>
                 <th className="text-right py-2 px-3 text-xs font-semibold text-gray-500">Laatste activiteit</th>
               </tr></thead>
               <tbody>
-                {branchStats.map(bs => (
+                {branchStats.sort((a, b) => b.total - a.total).map(bs => (
                   <tr key={bs.name} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="py-2.5 px-3 font-medium text-gray-900 flex items-center gap-2"><MapPin size={14} className="text-gray-400" /> {bs.name}</td>
+                    <td className="py-2.5 px-3 font-medium text-gray-900">
+                      <div className="flex items-center gap-2">
+                        {bs.logoUrl ? (
+                          <img src={bs.logoUrl} alt="" className="w-6 h-6 rounded object-contain bg-gray-50" />
+                        ) : (
+                          <MapPin size={14} className="text-gray-400" />
+                        )}
+                        {bs.name}
+                      </div>
+                    </td>
                     <td className="py-2.5 px-3 text-right text-gray-700">{bs.total}</td>
                     <td className="py-2.5 px-3 text-right text-emerald-600 font-medium">+{bs.in}</td>
                     <td className="py-2.5 px-3 text-right text-rose-600 font-medium">−{bs.out}</td>
+                    <td className="py-2.5 px-3 text-right font-medium text-purple-700">{fmt(bs.value)}</td>
+                    <td className="py-2.5 px-3 text-right"><TrendBadge value={bs.trendTotal} /></td>
                     <td className="py-2.5 px-3 text-right text-gray-400 text-xs">{bs.lastActivity || "—"}</td>
                   </tr>
                 ))}
