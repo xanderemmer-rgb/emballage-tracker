@@ -9,6 +9,16 @@
         }
       ],
       "destination": "/landing.html"
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.reggy.io"
+        }
+      ],
+      "destination": "/landing.html"
     }
   ]
 }
