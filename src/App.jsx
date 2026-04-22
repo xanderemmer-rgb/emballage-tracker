@@ -956,46 +956,53 @@ function ExportModal({ account, onClose }) {
 
 // ─── BON SCAN MODAL ───────────────────────────────────────────────────────────
 function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, isEdit = false, initialData = null }) {
-  // Edit mode: single item
   const [type, setType] = useState(initialData?.type || "IN");
   const [supplier, setSupplier] = useState(initialData?.supplier || "");
   const [note, setNote] = useState(initialData?.note || "");
 
-  // Multi-line mode (new registrations): array of {emballage, qty} rows
-  const [lines, setLines] = useState(
-    isEdit
-      ? [{ emballage: initialData?.emballage || "", qty: initialData?.qty || 1 }]
-      : [{ emballage: "", qty: 1 }]
-  );
+  // For edit mode: single item with old-style line
+  const [editEmballage, setEditEmballage] = useState(initialData?.emballage || "");
+  const [editQty, setEditQty] = useState(initialData?.qty || 1);
 
-  const updateLine = (idx, field, value) => {
-    setLines(lines.map((l, i) => i === idx ? { ...l, [field]: value } : l));
+  // For new registrations: qty map keyed by emballage name, auto-populated when supplier changes
+  const [qtyMap, setQtyMap] = useState({});
+
+  // When supplier changes in non-edit mode, populate qtyMap with all supplier's items at qty 0
+  const supplierItems = supplier ? emballageTypes.filter(e => e.supplierName === supplier) : [];
+
+  const prevSupplierRef = React.useRef(supplier);
+  React.useEffect(() => {
+    if (!isEdit && supplier && supplier !== prevSupplierRef.current) {
+      const newMap = {};
+      emballageTypes.filter(e => e.supplierName === supplier).forEach(e => { newMap[e.name] = 0; });
+      setQtyMap(newMap);
+    }
+    prevSupplierRef.current = supplier;
+  }, [supplier, isEdit, emballageTypes]);
+
+  const updateQty = (name, value) => {
+    const num = value === "" ? 0 : parseInt(value) || 0;
+    setQtyMap(prev => ({ ...prev, [name]: num }));
   };
 
-  const addLine = () => {
-    setLines([...lines, { emballage: "", qty: 1 }]);
-  };
-
-  const removeLine = (idx) => {
-    if (lines.length <= 1) return;
-    setLines(lines.filter((_, i) => i !== idx));
-  };
-
-  const validLines = lines.filter(l => l.emballage && parseInt(l.qty) > 0);
+  // Count items with qty > 0
+  const filledItems = Object.entries(qtyMap).filter(([, qty]) => qty > 0);
 
   const handleImport = () => {
-    if (!supplier || validLines.length === 0) return;
+    if (!supplier) return;
     if (isEdit) {
-      const l = lines[0];
-      onImport({ ...initialData, type, supplier, emballage: l.emballage, qty: parseInt(l.qty), note });
+      if (!editEmballage || editQty < 1) return;
+      onImport({ ...initialData, type, supplier, emballage: editEmballage, qty: parseInt(editQty), note });
     } else {
-      // Send array of transactions
-      const items = validLines.map(l => ({
-        type, supplier, emballage: l.emballage, qty: parseInt(l.qty), note, branch, date: new Date().toISOString().split("T")[0]
+      if (filledItems.length === 0) return;
+      const items = filledItems.map(([name, qty]) => ({
+        type, supplier, emballage: name, qty, note, branch, date: new Date().toISOString().split("T")[0]
       }));
       onImport(items);
     }
   };
+
+  const canSubmit = isEdit ? (supplier && editEmballage && editQty > 0) : (supplier && filledItems.length > 0);
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-stretch md:items-center md:justify-center z-50">
@@ -1004,7 +1011,7 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
           <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">{isEdit ? <Pencil size={24} /> : <ScanLine size={24} />} {isEdit ? "Transactie bewerken" : "Registratie"}</h2>
         </div>
         <div className="space-y-4 overflow-y-auto flex-1 px-5 md:px-6 pb-2">
-          {/* Shared fields: type + supplier */}
+          {/* Type + Supplier */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1.5">Type</label>
@@ -1022,38 +1029,69 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
             </div>
           </div>
 
-          {/* Line items */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-gray-500">Artikelen</label>
-              {!isEdit && <span className="text-xs text-gray-400">{validLines.length} regel{validLines.length !== 1 ? "s" : ""}</span>}
+          {/* Emballage items */}
+          {isEdit ? (
+            /* Edit mode: single item selector */
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1.5">Artikel</label>
+              <div className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5 border border-gray-100">
+                <select value={editEmballage} onChange={(e) => setEditEmballage(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-0">
+                  <option value="">Emballage...</option>
+                  {(supplier ? emballageTypes.filter(e => e.supplierName === supplier) : emballageTypes).map((e, i) => (
+                    <option key={i} value={e.name}>{e.name} (€{e.value})</option>
+                  ))}
+                </select>
+                <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)} className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm text-center bg-white focus:ring-2 focus:ring-blue-500 outline-none" min="1" />
+              </div>
             </div>
-            <div className="space-y-2">
-              {lines.map((line, idx) => (
-                <div key={idx} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5 border border-gray-100">
-                  <select value={line.emballage} onChange={(e) => updateLine(idx, "emballage", e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-0">
-                    <option value="">Emballage...</option>
-                    {(() => {
-                      // Show only this supplier's emballage items
-                      const items = supplier ? emballageTypes.filter(e => e.supplierName === supplier) : emballageTypes;
-                      return items.length > 0
-                        ? items.map((e, i) => <option key={i} value={e.name}>{e.name} (€{e.value})</option>)
-                        : <option value="" disabled>{supplier ? `Geen emballage voor ${supplier}` : "Selecteer eerst een leverancier"}</option>;
-                    })()}
-                  </select>
-                  <input type="number" value={line.qty} onChange={(e) => updateLine(idx, "qty", e.target.value)} className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm text-center bg-white focus:ring-2 focus:ring-blue-500 outline-none" min="1" placeholder="#" />
-                  {lines.length > 1 && (
-                    <button onClick={() => removeLine(idx)} className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-200 flex-shrink-0"><X size={16} /></button>
-                  )}
+          ) : (
+            /* New registration: auto-show all supplier items */
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-gray-500">Artikelen</label>
+                {filledItems.length > 0 && <span className="text-xs font-semibold text-green-600">{filledItems.length} artikel{filledItems.length !== 1 ? "en" : ""}</span>}
+              </div>
+              {!supplier ? (
+                <div className="text-center py-8 text-gray-400 text-sm">
+                  <ScanLine size={32} className="mx-auto mb-2 opacity-40" />
+                  Selecteer een leverancier om emballage te zien
                 </div>
-              ))}
+              ) : supplierItems.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-sm">
+                  <Package size={32} className="mx-auto mb-2 opacity-40" />
+                  Geen emballage gekoppeld aan {supplier}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {supplierItems.map((item) => (
+                    <div key={item.name} className={`flex items-center gap-3 rounded-xl p-3 border transition-all duration-200 ${(qtyMap[item.name] || 0) > 0 ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-100"}`}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                        <p className="text-xs text-gray-400">€{Number(item.value).toFixed(2)} per stuk</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button
+                          onClick={() => updateQty(item.name, Math.max(0, (qtyMap[item.name] || 0) - 1))}
+                          className="w-8 h-8 rounded-lg bg-white border border-gray-200 text-gray-500 flex items-center justify-center text-lg font-bold hover:bg-gray-100 transition-colors active:bg-gray-200"
+                        >−</button>
+                        <input
+                          type="number"
+                          value={qtyMap[item.name] || 0}
+                          onChange={(e) => updateQty(item.name, e.target.value)}
+                          className="w-14 px-1 py-1.5 border border-gray-200 rounded-lg text-sm text-center bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                          min="0"
+                        />
+                        <button
+                          onClick={() => updateQty(item.name, (qtyMap[item.name] || 0) + 1)}
+                          className="w-8 h-8 rounded-lg bg-white border border-gray-200 text-gray-500 flex items-center justify-center text-lg font-bold hover:bg-gray-100 transition-colors active:bg-gray-200"
+                        >+</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            {!isEdit && (
-              <button onClick={addLine} className="mt-2 w-full py-2 border-2 border-dashed border-gray-200 rounded-xl text-sm text-gray-400 font-semibold hover:border-blue-300 hover:text-blue-500 hover:bg-blue-50 transition-all duration-200 flex items-center justify-center gap-1.5">
-                <PlusCircle size={16} /> Regel toevoegen
-              </button>
-            )}
-          </div>
+          )}
 
           {/* Note */}
           <div>
@@ -1063,8 +1101,8 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
         </div>
         <div className="flex gap-3 p-5 md:p-6 pt-4 flex-shrink-0 border-t border-gray-100">
           <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200">Annuleren</button>
-          <button onClick={handleImport} disabled={!supplier || validLines.length === 0} className={`flex-1 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${isEdit ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}>
-            {isEdit ? <><Check size={20} /> Opslaan</> : <><Check size={20} /> {validLines.length > 1 ? `${validLines.length} regels registreren` : "Registreren"}</>}
+          <button onClick={handleImport} disabled={!canSubmit} className={`flex-1 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${isEdit ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}>
+            {isEdit ? <><Check size={20} /> Opslaan</> : <><Check size={20} /> {filledItems.length > 1 ? `${filledItems.length} artikelen registreren` : "Registreren"}</>}
           </button>
         </div>
       </div>
