@@ -8,13 +8,81 @@ import {
   LayoutDashboard, ChevronRight, Bell, Shield, FileText, MapPin,
   Activity, Eye, AlertTriangle, ChevronDown, ChevronUp, Menu, XCircle,
   DollarSign, Hash, Percent, Clock, TrendingDown, MoreHorizontal,
-  Upload, Image, Save
+  Upload, Image, Save, Moon, Sun, WifiOff, Wifi
 } from "lucide-react";
 import { useSupabase, setSkipProfileLoad } from "./lib/useSupabase";
 import { supabase } from "./lib/supabase";
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 const DEMO_MODE = false; // Supabase backend is active
+
+// ─── DARK MODE HOOK ──────────────────────────────────────────────────────────
+function useDarkMode() {
+  const [dark, setDark] = useState(() => {
+    try { return localStorage.getItem("reggy_dark") === "true"; } catch { return false; }
+  });
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dark);
+    try { localStorage.setItem("reggy_dark", dark); } catch {}
+  }, [dark]);
+  return [dark, setDark];
+}
+
+// ─── DARK MODE TOGGLE BUTTON ─────────────────────────────────────────────────
+function DarkModeToggle({ dark, setDark, className = "" }) {
+  return (
+    <button
+      onClick={() => setDark(!dark)}
+      className={`p-2 md:p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200 ${className}`}
+      title={dark ? "Licht modus" : "Donker modus"}
+    >
+      {dark ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} className="text-gray-500" />}
+    </button>
+  );
+}
+
+// ─── OFFLINE QUEUE ───────────────────────────────────────────────────────────
+function useOfflineQueue() {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [queue, setQueue] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("reggy_offline_queue") || "[]"); } catch { return []; }
+  });
+
+  // Listen for online/offline events
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+
+  // Persist queue to localStorage
+  useEffect(() => {
+    try { localStorage.setItem("reggy_offline_queue", JSON.stringify(queue)); } catch {}
+  }, [queue]);
+
+  const addToQueue = (items) => {
+    setQueue(prev => [...prev, ...items.map(item => ({ ...item, _offlineId: Date.now() + Math.random() }))]);
+  };
+
+  const clearQueue = () => setQueue([]);
+
+  return { isOnline, queue, addToQueue, clearQueue };
+}
+
+// ─── OFFLINE BANNER ──────────────────────────────────────────────────────────
+function OfflineBanner({ queueCount }) {
+  return (
+    <div className="offline-bar flex items-center justify-center gap-2">
+      <WifiOff size={14} />
+      <span>Offline modus{queueCount > 0 ? ` • ${queueCount} registratie${queueCount !== 1 ? "s" : ""} wacht${queueCount !== 1 ? "en" : ""} op sync` : ""}</span>
+    </div>
+  );
+}
 
 // ─── DEFAULT EMBALLAGE CATALOGUS PER LEVERANCIER ─────────────────────────────
 // Hardcoded fallback — overridden by database defaults from default_supplier_emballage table (managed via Super Admin)
@@ -3099,6 +3167,7 @@ function BranchLogoCard({ user: u, account, setAccount }) {
 function MasterApp({ account, user, onLogout, setAccount }) {
   const [masterScreen, setMasterScreen] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [dark, setDark] = useDarkMode();
 
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
@@ -3174,8 +3243,12 @@ function MasterApp({ account, user, onLogout, setAccount }) {
           ))}
         </nav>
 
-        {/* Logout */}
-        <div className="px-3 py-3 border-t border-gray-100">
+        {/* Dark mode + Logout */}
+        <div className="px-3 py-3 border-t border-gray-100 space-y-0.5">
+          <button onClick={() => setDark(!dark)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-all duration-200">
+            {dark ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} className="text-gray-400" />}
+            {dark ? "Licht modus" : "Donker modus"}
+          </button>
           <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-all duration-200"><LogOut size={18} /> Afmelden</button>
         </div>
       </aside>
@@ -3284,13 +3357,67 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
   const [logDateTo, setLogDateTo] = useState("");
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [dark, setDark] = useDarkMode();
+  const { isOnline, queue, addToQueue, clearQueue } = useOfflineQueue();
 
   const branchTransactions = account.transactions.filter(t => t.branch === user.branch);
 
+  // Sync offline queue when coming back online
+  useEffect(() => {
+    if (isOnline && queue.length > 0) {
+      (async () => {
+        try {
+          const inserts = queue.map(t => ({
+            account_id: account.id,
+            date: t.date,
+            type: t.type,
+            supplier: t.supplier,
+            emballage: t.emballage,
+            qty: parseInt(t.qty),
+            note: t.note || null,
+            branch: t.branch || user.branch,
+            user_id: user.id,
+          }));
+          const { data, error } = await supabase.from("transactions").insert(inserts).select();
+          if (error) throw error;
+          const newTrans = data.map(t => ({ id: t.id, date: t.date, type: t.type, supplier: t.supplier, emballage: t.emballage, qty: t.qty, note: t.note || "", attachment: t.attachment, branch: t.branch || "", userId: t.user_id || null, createdAt: t.created_at || null }));
+          setAccount({ ...account, transactions: [...newTrans, ...account.transactions] });
+          clearQueue();
+          setToast({ type: "success", message: `${data.length} offline registratie${data.length !== 1 ? "s" : ""} gesynchroniseerd!` });
+        } catch (err) {
+          console.error("Error syncing offline queue:", err);
+          setToast({ type: "error", message: "Fout bij synchroniseren: " + err.message });
+        }
+      })();
+    }
+  }, [isOnline]);
+
   const handleImportTransaction = async (transOrArray) => {
     const items = Array.isArray(transOrArray) ? transOrArray : [transOrArray];
+
+    // If offline, queue the transactions locally
+    if (!isOnline) {
+      addToQueue(items);
+      // Add to local state immediately so user sees them
+      const localTrans = items.map((t, i) => ({
+        id: `offline-${Date.now()}-${i}`,
+        date: t.date,
+        type: t.type,
+        supplier: t.supplier,
+        emballage: t.emballage,
+        qty: parseInt(t.qty),
+        note: t.note || "",
+        branch: t.branch || user.branch,
+        userId: user.id,
+        _offline: true,
+      }));
+      setAccount({ ...account, transactions: [...localTrans, ...account.transactions] });
+      setScanModal(false);
+      setToast({ type: "success", message: `${items.length > 1 ? items.length + " registraties" : "Registratie"} opgeslagen (offline — wordt gesynchroniseerd)` });
+      return;
+    }
+
     try {
-      // supabase is imported at the top of App.jsx
       const inserts = items.map(t => ({
         account_id: account.id,
         date: t.date,
@@ -3408,6 +3535,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
+      {!isOnline && <OfflineBanner queueCount={queue.length} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       {showOnboarding && <OnboardingOverlay onDone={() => setShowOnboarding(false)} />}
       {barcodeScanner && <BarcodeScannerModal onScan={(barcode) => { setBarcodeScanner(false); setScanModal(true); }} onClose={() => setBarcodeScanner(false)} />}
@@ -3446,11 +3574,12 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
               <p className="text-[10px] md:text-xs text-gray-500">{account.companyName}</p>
             </div>
           </div>
-          <div className="flex gap-1 md:gap-1.5">
+          <div className="flex gap-1 md:gap-1.5 items-center">
             <select value={language} onChange={(e) => setLanguage(e.target.value)} className="text-xs border border-gray-200 rounded-lg px-1.5 md:px-2 py-1.5 bg-white hover:bg-gray-50 transition-all duration-200">
               <option value="nl">NL</option>
               <option value="en">EN</option>
             </select>
+            <DarkModeToggle dark={dark} setDark={setDark} />
             <button onClick={() => setExportModal(true)} className="p-2 md:p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><Download size={18} className="text-gray-500" /></button>
             <button onClick={onLogout} className="p-2 md:p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><LogOut size={18} className="text-gray-500" /></button>
           </div>
