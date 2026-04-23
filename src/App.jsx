@@ -16,23 +16,36 @@ import { supabase } from "./lib/supabase";
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 const DEMO_MODE = false; // Supabase backend is active
 
-// ─── DARK MODE HOOK ──────────────────────────────────────────────────────────
+// ─── DARK MODE ───────────────────────────────────────────────────────────────
+// Initialize dark mode from localStorage on load
+(function initDarkMode() {
+  try {
+    if (localStorage.getItem("reggy_dark") === "true") {
+      document.documentElement.classList.add("dark");
+    }
+  } catch {}
+})();
+
+function toggleDarkMode() {
+  const isDark = document.documentElement.classList.toggle("dark");
+  try { localStorage.setItem("reggy_dark", String(isDark)); } catch {}
+  return isDark;
+}
+
 function useDarkMode() {
-  const [dark, setDark] = useState(() => {
-    try { return localStorage.getItem("reggy_dark") === "true"; } catch { return false; }
-  });
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", dark);
-    try { localStorage.setItem("reggy_dark", dark); } catch {}
-  }, [dark]);
-  return [dark, setDark];
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
+  const toggle = useCallback(() => {
+    const newVal = toggleDarkMode();
+    setDark(newVal);
+  }, []);
+  return [dark, toggle];
 }
 
 // ─── DARK MODE TOGGLE BUTTON ─────────────────────────────────────────────────
-function DarkModeToggle({ dark, setDark, className = "" }) {
+function DarkModeToggle({ dark, onToggle, className = "" }) {
   return (
     <button
-      onClick={() => setDark(!dark)}
+      onClick={onToggle}
       className={`p-2 md:p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200 ${className}`}
       title={dark ? "Licht modus" : "Donker modus"}
     >
@@ -3167,7 +3180,7 @@ function BranchLogoCard({ user: u, account, setAccount }) {
 function MasterApp({ account, user, onLogout, setAccount }) {
   const [masterScreen, setMasterScreen] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [dark, setDark] = useDarkMode();
+  const [dark, toggleDark] = useDarkMode();
 
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
@@ -3245,7 +3258,7 @@ function MasterApp({ account, user, onLogout, setAccount }) {
 
         {/* Dark mode + Logout */}
         <div className="px-3 py-3 border-t border-gray-100 space-y-0.5">
-          <button onClick={() => setDark(!dark)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-all duration-200">
+          <button onClick={toggleDark} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-all duration-200">
             {dark ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} className="text-gray-400" />}
             {dark ? "Licht modus" : "Donker modus"}
           </button>
@@ -3357,7 +3370,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
   const [logDateTo, setLogDateTo] = useState("");
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [dark, setDark] = useDarkMode();
+  const [dark, toggleDark] = useDarkMode();
   const { isOnline, queue, addToQueue, clearQueue } = useOfflineQueue();
 
   const branchTransactions = account.transactions.filter(t => t.branch === user.branch);
@@ -3579,7 +3592,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
               <option value="nl">NL</option>
               <option value="en">EN</option>
             </select>
-            <DarkModeToggle dark={dark} setDark={setDark} />
+            <DarkModeToggle dark={dark} onToggle={toggleDark} />
             <button onClick={() => setExportModal(true)} className="p-2 md:p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><Download size={18} className="text-gray-500" /></button>
             <button onClick={onLogout} className="p-2 md:p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><LogOut size={18} className="text-gray-500" /></button>
           </div>
