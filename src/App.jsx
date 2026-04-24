@@ -8,7 +8,8 @@ import {
   LayoutDashboard, ChevronRight, Bell, Shield, FileText, MapPin,
   Activity, Eye, AlertTriangle, ChevronDown, ChevronUp, Menu, XCircle,
   DollarSign, Hash, Percent, Clock, TrendingDown, MoreHorizontal,
-  Upload, Image, Save, Moon, Sun, WifiOff, Wifi
+  Upload, Image, Save, Moon, Sun, WifiOff, Wifi,
+  RefreshCw, Filter, ExternalLink, Copy, ArrowRight
 } from "lucide-react";
 import { useSupabase, setSkipProfileLoad } from "./lib/useSupabase";
 import { supabase } from "./lib/supabase";
@@ -574,15 +575,62 @@ function RegisterFlow({ accounts, setAccounts, onDone }) {
 function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
   const [newForm, setNewForm] = useState(false);
   const [newAccount, setNewAccount] = useState(null);
-  const [activeTab, setActiveTab] = useState("accounts");
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [toast, setToast] = useState(null);
 
-  // Default emballage catalog state
+  // ── Search & filter (accounts) ──
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  // ── Account detail / edit ──
+  const [selectedAccount, setSelectedAccount] = useState(null);
+  const [editingPlan, setEditingPlan] = useState(null);
+
+  // ── Dashboard KPIs ──
+  const [stats, setStats] = useState({ totalTransactions: 0, monthTransactions: 0, loadingStats: true });
+  useEffect(() => {
+    (async () => {
+      try {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const [totalRes, monthRes] = await Promise.all([
+          supabase.from("transactions").select("id", { count: "exact", head: true }),
+          supabase.from("transactions").select("id", { count: "exact", head: true }).gte("created_at", monthStart),
+        ]);
+        setStats({ totalTransactions: totalRes.count || 0, monthTransactions: monthRes.count || 0, loadingStats: false });
+      } catch { setStats(prev => ({ ...prev, loadingStats: false })); }
+    })();
+  }, []);
+
+  // ── Activity log ──
+  const [activityLog, setActivityLog] = useState([]);
+  const [activityLoaded, setActivityLoaded] = useState(false);
+  useEffect(() => {
+    if (activeTab === "activity" && !activityLoaded) {
+      (async () => {
+        try {
+          const { data } = await supabase.from("transactions").select("*, profiles!transactions_user_id_fkey(display_name), accounts!transactions_account_id_fkey(company_name)").order("created_at", { ascending: false }).limit(100);
+          setActivityLog(data || []);
+        } catch {
+          // Fallback: simple query without joins
+          try {
+            const { data } = await supabase.from("transactions").select("*").order("created_at", { ascending: false }).limit(100);
+            setActivityLog(data || []);
+          } catch {}
+        }
+        setActivityLoaded(true);
+      })();
+    }
+  }, [activeTab, activityLoaded]);
+
+  // ── Default emballage catalog state ──
   const [defaultCatalog, setDefaultCatalog] = useState([]);
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogSupplier, setCatalogSupplier] = useState("");
   const [newCatalogItem, setNewCatalogItem] = useState({ name: "", value: "" });
   const [newSupplierName, setNewSupplierName] = useState("");
-  const [toast, setToast] = useState(null);
+  const [bulkImportText, setBulkImportText] = useState("");
+  const [showBulkImport, setShowBulkImport] = useState(false);
 
   // Load default catalog
   useEffect(() => {
@@ -602,6 +650,20 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
   const catalogSuppliers = [...new Set(defaultCatalog.map(d => d.supplier_name))];
   const catalogItems = defaultCatalog.filter(d => d.supplier_name === catalogSupplier);
 
+  // ── Derived stats ──
+  const totalAccounts = accounts.length;
+  const activeAccounts = accounts.filter(a => a.plan.status === "active").length;
+  const inactiveAccounts = totalAccounts - activeAccounts;
+  const totalUsers = accounts.reduce((sum, a) => sum + a.users.length, 0);
+
+  // ── Filtered accounts ──
+  const filteredAccounts = accounts.filter(acc => {
+    const matchesSearch = !searchQuery || acc.companyName.toLowerCase().includes(searchQuery.toLowerCase()) || acc.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === "all" || acc.plan.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  // ── Catalog handlers ──
   const handleAddCatalogItem = async () => {
     if (!catalogSupplier || !newCatalogItem.name || !newCatalogItem.value) return;
     try {
@@ -611,7 +673,7 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
       if (error) throw error;
       setDefaultCatalog(prev => [...prev, data]);
       setNewCatalogItem({ name: "", value: "" });
-      setToast({ type: "success", message: `${newCatalogItem.name} toegevoegd aan ${catalogSupplier}` });
+      setToast({ type: "success", message: `${newCatalogItem.name} toegevoegd` });
     } catch (err) { setToast({ type: "error", message: err.message }); }
   };
 
@@ -644,69 +706,322 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
     } catch (err) { setToast({ type: "error", message: err.message }); }
   };
 
+  // ── Bulk import handler ──
+  const handleBulkImport = async () => {
+    if (!catalogSupplier || !bulkImportText.trim()) return;
+    try {
+      const lines = bulkImportText.trim().split("\n").filter(l => l.trim());
+      const items = lines.map(line => {
+        const parts = line.split(/[,;\t]+/).map(p => p.trim());
+        if (parts.length < 2) return null;
+        const val = parseFloat(parts[1].replace("€", "").replace(",", ".").trim());
+        if (isNaN(val)) return null;
+        return { supplier_name: catalogSupplier, emballage_name: parts[0], value: val };
+      }).filter(Boolean);
+      if (items.length === 0) { setToast({ type: "error", message: "Geen geldige items gevonden. Gebruik formaat: naam, waarde" }); return; }
+      const { data, error } = await supabase.from("default_supplier_emballage").insert(items).select();
+      if (error) throw error;
+      setDefaultCatalog(prev => [...prev, ...data]);
+      setBulkImportText("");
+      setShowBulkImport(false);
+      setToast({ type: "success", message: `${data.length} items geïmporteerd` });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+  };
+
+  // ── Account actions ──
   const handleDeleteAccount = async (id) => {
     if (confirm("Weet je zeker dat je dit account wilt verwijderen?")) {
       try {
         const { error } = await supabase.from("accounts").delete().eq("id", id);
         if (error) throw error;
         setAccounts(accounts.filter(a => a.id !== id));
-      } catch (err) {
-        alert("Fout bij verwijderen: " + err.message);
-      }
+        if (selectedAccount?.id === id) setSelectedAccount(null);
+        setToast({ type: "success", message: "Account verwijderd" });
+      } catch (err) { setToast({ type: "error", message: err.message }); }
     }
   };
 
+  const handleUpdateAccountPlan = async (accId, updates) => {
+    try {
+      const updateData = {};
+      if (updates.status !== undefined) updateData.plan_status = updates.status;
+      if (updates.outlets !== undefined) updateData.plan_outlets = updates.outlets;
+      const { error } = await supabase.from("accounts").update(updateData).eq("id", accId);
+      if (error) throw error;
+      // Update local state
+      setAccounts(accounts.map(a => a.id === accId ? { ...a, plan: { ...a.plan, ...updates } } : a));
+      if (selectedAccount?.id === accId) setSelectedAccount(prev => ({ ...prev, plan: { ...prev.plan, ...updates } }));
+      setEditingPlan(null);
+      setToast({ type: "success", message: "Account bijgewerkt" });
+    } catch (err) { setToast({ type: "error", message: err.message }); }
+  };
+
+  // ── Login-als handler ──
+  const handleLoginAs = async (acc) => {
+    // Find master user for this account
+    const master = acc.users.find(u => u.role === "master");
+    if (!master) { setToast({ type: "error", message: "Geen master user gevonden voor dit account" }); return; }
+    // Get master's email from profiles
+    try {
+      const { data: profileData, error } = await supabase.from("profiles").select("id").eq("account_id", acc.id).eq("role", "master").single();
+      if (error) throw error;
+      // Get auth user email
+      const { data: authData } = await supabase.auth.admin?.getUserById?.(profileData.id) || {};
+      // Since we can't easily impersonate via Supabase Auth, we open in new window with account context
+      // Store the impersonation target
+      localStorage.setItem("reggy_impersonate", JSON.stringify({ accountId: acc.id, accountName: acc.companyName }));
+      setToast({ type: "success", message: `Bekijk-modus voor ${acc.companyName} — log in als master user in een nieuw venster` });
+    } catch {
+      setToast({ type: "info", message: `Login als ${acc.companyName}: gebruik het master-account email om in te loggen in een incognito venster` });
+    }
+  };
+
+  // ── Tab config ──
+  const tabs = [
+    { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { id: "accounts", label: "Accounts", icon: Users },
+    { id: "catalog", label: "Emballage", icon: Package },
+    { id: "activity", label: "Activiteit", icon: Activity },
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
       {newForm && newAccount && <RegisterFlow accounts={accounts} setAccounts={setAccounts} onDone={() => setNewForm(false)} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      <div className="max-w-md lg:max-w-2xl xl:max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <BarcodeLogo size="sm" />
-            <h1 className="text-3xl font-bold text-gray-900">Super Admin</h1>
+
+      {/* ── Account Detail Overlay ── */}
+      {selectedAccount && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center pt-12 px-4" onClick={() => { setSelectedAccount(null); setEditingPlan(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{selectedAccount.companyName}</h2>
+                <p className="text-sm text-gray-500">{selectedAccount.email}</p>
+              </div>
+              <button onClick={() => { setSelectedAccount(null); setEditingPlan(null); }} className="p-2 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
+            </div>
+
+            {/* Plan section */}
+            <div className="p-5 border-b border-gray-100">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Abonnement</h3>
+                {!editingPlan ? (
+                  <button onClick={() => setEditingPlan({ status: selectedAccount.plan.status, outlets: selectedAccount.plan.outlets })} className="text-xs text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1"><Pencil size={12} /> Bewerken</button>
+                ) : (
+                  <div className="flex gap-2">
+                    <button onClick={() => handleUpdateAccountPlan(selectedAccount.id, editingPlan)} className="text-xs bg-purple-600 text-white px-3 py-1 rounded-lg hover:bg-purple-700 font-medium">Opslaan</button>
+                    <button onClick={() => setEditingPlan(null)} className="text-xs text-gray-500 hover:text-gray-700 font-medium">Annuleer</button>
+                  </div>
+                )}
+              </div>
+              {!editingPlan ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <p className="text-xs text-gray-400 mb-1">Status</p>
+                    <p className={`text-sm font-bold ${selectedAccount.plan.status === "active" ? "text-green-600" : "text-red-500"}`}>{selectedAccount.plan.status === "active" ? "Actief" : selectedAccount.plan.status === "expired" ? "Verlopen" : "Inactief"}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <p className="text-xs text-gray-400 mb-1">Outlets</p>
+                    <p className="text-sm font-bold text-gray-900">{selectedAccount.plan.outlets}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <p className="text-xs text-gray-400 mb-1">Startdatum</p>
+                    <p className="text-sm font-medium text-gray-700">{selectedAccount.plan.startDate || "—"}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <p className="text-xs text-gray-400 mb-1">Volgende facturatie</p>
+                    <p className="text-sm font-medium text-gray-700">{selectedAccount.plan.nextBilling || "—"}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">Status</label>
+                    <select value={editingPlan.status} onChange={e => setEditingPlan({ ...editingPlan, status: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                      <option value="active">Actief</option>
+                      <option value="inactive">Inactief</option>
+                      <option value="expired">Verlopen</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block">Outlets</label>
+                    <input type="number" min="1" max="99" value={editingPlan.outlets} onChange={e => setEditingPlan({ ...editingPlan, outlets: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Users section */}
+            <div className="p-5 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Gebruikers ({selectedAccount.users.length})</h3>
+              <div className="space-y-2">
+                {selectedAccount.users.map(u => (
+                  <div key={u.id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${u.role === "master" ? "bg-purple-500" : "bg-blue-400"}`}>{u.name?.[0]?.toUpperCase() || "?"}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
+                      <p className="text-xs text-gray-400">{u.role === "master" ? "Master admin" : `Filiaal: ${u.branch || "—"}`}</p>
+                    </div>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${u.role === "master" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{u.role}</span>
+                  </div>
+                ))}
+                {selectedAccount.users.length === 0 && <p className="text-sm text-gray-400 text-center py-4">Geen gebruikers</p>}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="p-5 flex gap-3">
+              <button onClick={() => handleLoginAs(selectedAccount)} className="flex-1 px-4 py-2.5 bg-purple-50 text-purple-700 rounded-xl hover:bg-purple-100 transition-all text-sm font-semibold flex items-center justify-center gap-2"><Eye size={16} /> Bekijk als</button>
+              <button onClick={() => { handleDeleteAccount(selectedAccount.id); }} className="px-4 py-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all text-sm font-semibold flex items-center justify-center gap-2"><Trash2 size={16} /></button>
+            </div>
           </div>
-          <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200"><LogOut size={20} /> Afmelden</button>
+        </div>
+      )}
+
+      <div className="max-w-5xl mx-auto p-4 md:p-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <BarcodeLogo size="sm" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Super Admin</h1>
+              <p className="text-xs text-gray-400">Platform beheer</p>
+            </div>
+          </div>
+          <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200 text-sm font-medium"><LogOut size={16} /> Afmelden</button>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6">
-          <button onClick={() => setActiveTab("accounts")} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === "accounts" ? "bg-purple-600 text-white" : "bg-white text-gray-600 border border-gray-200"}`}><Users size={14} className="inline mr-1.5" />Accounts</button>
-          <button onClick={() => setActiveTab("catalog")} className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === "catalog" ? "bg-purple-600 text-white" : "bg-white text-gray-600 border border-gray-200"}`}><Package size={14} className="inline mr-1.5" />Standaard Emballage</button>
+        <div className="flex gap-1.5 mb-6 bg-white/60 backdrop-blur rounded-xl p-1 border border-gray-100">
+          {tabs.map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all ${activeTab === tab.id ? "bg-purple-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"}`}>
+              <tab.icon size={14} /><span className="hidden sm:inline">{tab.label}</span>
+            </button>
+          ))}
         </div>
 
-        {/* Accounts tab */}
-        {activeTab === "accounts" && (
-          <>
-            <div className="grid gap-4 mb-8">
-              {accounts.map(acc => (
-                <div key={acc.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-bold text-gray-900">{acc.companyName}</h3>
-                      <p className="text-sm text-gray-600">{acc.email} • {acc.users.length} gebruikers</p>
-                    </div>
-                    <div className="text-right">
-                      <p className={`text-sm font-semibold ${acc.plan.status === "active" ? "text-green-600" : "text-red-600"}`}>{acc.plan.status.toUpperCase()}</p>
-                      <p className="text-xs text-gray-600">{acc.plan.outlets} outlet{acc.plan.outlets > 1 ? "s" : ""}</p>
-                    </div>
+        {/* ═══════════════ DASHBOARD TAB ═══════════════ */}
+        {activeTab === "dashboard" && (
+          <div className="space-y-6">
+            {/* KPI tiles */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-2 mb-2"><Building2 size={16} className="text-purple-500" /><span className="text-xs text-gray-400 font-medium uppercase">Accounts</span></div>
+                <p className="text-2xl font-bold text-gray-900">{totalAccounts}</p>
+                <p className="text-xs text-gray-400 mt-1">{activeAccounts} actief, {inactiveAccounts} inactief</p>
+              </div>
+              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-2 mb-2"><Users size={16} className="text-blue-500" /><span className="text-xs text-gray-400 font-medium uppercase">Gebruikers</span></div>
+                <p className="text-2xl font-bold text-gray-900">{totalUsers}</p>
+                <p className="text-xs text-gray-400 mt-1">over alle accounts</p>
+              </div>
+              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-2 mb-2"><ClipboardList size={16} className="text-green-500" /><span className="text-xs text-gray-400 font-medium uppercase">Registraties</span></div>
+                <p className="text-2xl font-bold text-gray-900">{stats.loadingStats ? "..." : stats.totalTransactions}</p>
+                <p className="text-xs text-gray-400 mt-1">totaal platform</p>
+              </div>
+              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-2 mb-2"><TrendingUp size={16} className="text-orange-500" /><span className="text-xs text-gray-400 font-medium uppercase">Deze maand</span></div>
+                <p className="text-2xl font-bold text-gray-900">{stats.loadingStats ? "..." : stats.monthTransactions}</p>
+                <p className="text-xs text-gray-400 mt-1">registraties</p>
+              </div>
+            </div>
+
+            {/* Account status breakdown */}
+            <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Account overzicht</h3>
+              <div className="space-y-2">
+                {accounts.slice(0, 8).map(acc => (
+                  <div key={acc.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 rounded-lg px-2 -mx-2 transition-all" onClick={() => { setSelectedAccount(acc); setActiveTab("accounts"); }}>
+                    <div className={`w-2 h-2 rounded-full ${acc.plan.status === "active" ? "bg-green-500" : "bg-red-400"}`} />
+                    <span className="text-sm font-medium text-gray-900 flex-1">{acc.companyName}</span>
+                    <span className="text-xs text-gray-400">{acc.users.length} users</span>
+                    <span className="text-xs text-gray-400">{acc.plan.outlets} outlets</span>
+                    <ChevronRight size={14} className="text-gray-300" />
                   </div>
-                  <div className="mt-3 flex gap-2">
-                    <button onClick={() => handleDeleteAccount(acc.id)} className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-semibold"><Trash2 size={16} /> Verwijderen</button>
+                ))}
+              </div>
+              {accounts.length > 8 && <button onClick={() => setActiveTab("accounts")} className="mt-3 text-xs text-purple-600 hover:text-purple-800 font-medium">Bekijk alle {accounts.length} accounts →</button>}
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════ ACCOUNTS TAB ═══════════════ */}
+        {activeTab === "accounts" && (
+          <div className="space-y-4">
+            {/* Search & filter bar */}
+            <div className="flex gap-2 flex-col sm:flex-row">
+              <div className="relative flex-1">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input type="text" placeholder="Zoek op naam of email..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+              </div>
+              <div className="flex gap-1.5">
+                {["all", "active", "expired", "inactive"].map(s => (
+                  <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-2 rounded-xl text-xs font-semibold transition-all ${statusFilter === s ? "bg-purple-600 text-white" : "bg-white text-gray-500 border border-gray-200 hover:border-purple-300"}`}>
+                    {s === "all" ? "Alle" : s === "active" ? "Actief" : s === "expired" ? "Verlopen" : "Inactief"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Results count */}
+            <p className="text-xs text-gray-400">{filteredAccounts.length} van {accounts.length} accounts</p>
+
+            {/* Account cards */}
+            <div className="grid gap-3">
+              {filteredAccounts.map(acc => (
+                <div key={acc.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 p-4 cursor-pointer border border-gray-100 hover:border-purple-200" onClick={() => setSelectedAccount(acc)}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center text-purple-600 font-bold text-sm shrink-0">{acc.companyName?.[0]?.toUpperCase()}</div>
+                      <div className="min-w-0">
+                        <h3 className="font-bold text-gray-900 text-sm truncate">{acc.companyName}</h3>
+                        <p className="text-xs text-gray-400 truncate">{acc.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right hidden sm:block">
+                        <p className="text-xs text-gray-400">{acc.users.length} gebruikers • {acc.plan.outlets} outlet{acc.plan.outlets > 1 ? "s" : ""}</p>
+                      </div>
+                      <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${acc.plan.status === "active" ? "bg-green-50 text-green-700" : acc.plan.status === "expired" ? "bg-orange-50 text-orange-600" : "bg-red-50 text-red-600"}`}>{acc.plan.status === "active" ? "ACTIEF" : acc.plan.status === "expired" ? "VERLOPEN" : "INACTIEF"}</span>
+                      <ChevronRight size={16} className="text-gray-300" />
+                    </div>
                   </div>
                 </div>
               ))}
+              {filteredAccounts.length === 0 && (
+                <div className="bg-white rounded-xl p-8 text-center border border-gray-100">
+                  <Search size={24} className="mx-auto text-gray-300 mb-2" />
+                  <p className="text-sm text-gray-400">Geen accounts gevonden</p>
+                </div>
+              )}
             </div>
-            <button onClick={() => { setNewAccount(true); setNewForm(true); }} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Plus size={20} /> Nieuw account</button>
-          </>
+
+            {/* Add account button */}
+            <button onClick={() => { setNewAccount(true); setNewForm(true); }} className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 transition-all duration-200 flex items-center justify-center gap-2 text-sm"><Plus size={18} /> Nieuw account</button>
+          </div>
         )}
 
-        {/* Default emballage catalog tab */}
+        {/* ═══════════════ CATALOG TAB ═══════════════ */}
         {activeTab === "catalog" && (
           <div className="space-y-4">
-            <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
-              <p className="text-sm text-purple-700">Beheer hier de standaard emballage per leverancier. Wanneer een klant een leverancier toevoegt, kan die de bijbehorende emballage-items met één klik importeren.</p>
+            <div className="bg-purple-50 rounded-xl p-4 border border-purple-100 flex items-start justify-between">
+              <p className="text-sm text-purple-700">Beheer hier de standaard emballage per leverancier. Klanten kunnen bij het toevoegen van een leverancier de items met één klik importeren.</p>
+              <button onClick={() => setShowBulkImport(!showBulkImport)} className={`ml-3 shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${showBulkImport ? "bg-purple-600 text-white" : "bg-white text-purple-600 border border-purple-200 hover:border-purple-400"}`}><Upload size={12} /> Bulk import</button>
             </div>
+
+            {/* Bulk import panel */}
+            {showBulkImport && catalogSupplier && (
+              <div className="bg-white rounded-xl p-4 border border-purple-200 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-semibold text-gray-700">Bulk import voor {catalogSupplier}</h4>
+                  <button onClick={() => setShowBulkImport(false)} className="p-1 hover:bg-gray-100 rounded"><X size={14} /></button>
+                </div>
+                <p className="text-xs text-gray-400">Eén item per regel. Formaat: <span className="font-mono bg-gray-100 px-1 rounded">naam, waarde</span> of <span className="font-mono bg-gray-100 px-1 rounded">naam; waarde</span></p>
+                <textarea value={bulkImportText} onChange={e => setBulkImportText(e.target.value)} placeholder={"Krat Bier, 3.50\nFust 20L, 30.00\nKratten Fris, 2.50"} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none font-mono h-32 resize-none" />
+                <button onClick={handleBulkImport} disabled={!bulkImportText.trim()} className="w-full py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all flex items-center justify-center gap-2"><Upload size={14} /> Importeer items</button>
+              </div>
+            )}
 
             {/* Supplier tabs */}
             <div className="flex items-center gap-2 flex-wrap">
@@ -714,27 +1029,22 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
                 <button key={s} onClick={() => setCatalogSupplier(s)} className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${catalogSupplier === s ? "bg-purple-600 text-white" : "bg-white text-gray-600 border border-gray-200 hover:border-purple-300"}`}>{s}</button>
               ))}
               <div className="flex gap-1.5 ml-auto">
-                <input type="text" value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} placeholder="Nieuwe leverancier..." className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm w-44 focus:ring-2 focus:ring-purple-500 outline-none" />
+                <input type="text" value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} placeholder="Nieuwe leverancier..." className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm w-40 focus:ring-2 focus:ring-purple-500 outline-none" onKeyDown={e => e.key === "Enter" && handleAddSupplierCatalog()} />
                 <button onClick={handleAddSupplierCatalog} disabled={!newSupplierName.trim()} className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={14} /></button>
               </div>
             </div>
 
             {catalogSupplier && (
               <>
-                {/* Supplier header with delete */}
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Truck size={18} className="text-purple-500" /> {catalogSupplier} <span className="text-sm font-normal text-gray-400">({catalogItems.length} items)</span></h3>
                   <button onClick={() => handleDeleteSupplierCatalog(catalogSupplier)} className="text-xs text-red-500 hover:text-red-700 font-medium hover:underline">Leverancier verwijderen</button>
                 </div>
-
-                {/* Add item */}
                 <div className="flex gap-2">
-                  <input type="text" placeholder="Emballage naam" value={newCatalogItem.name} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, name: e.target.value })} className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
-                  <input type="number" placeholder="€ waarde" value={newCatalogItem.value} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, value: e.target.value })} className="w-28 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" step="0.50" />
+                  <input type="text" placeholder="Emballage naam" value={newCatalogItem.name} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, name: e.target.value })} className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" onKeyDown={e => e.key === "Enter" && handleAddCatalogItem()} />
+                  <input type="number" placeholder="€ waarde" value={newCatalogItem.value} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, value: e.target.value })} className="w-28 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" step="0.50" onKeyDown={e => e.key === "Enter" && handleAddCatalogItem()} />
                   <button onClick={handleAddCatalogItem} disabled={!newCatalogItem.name || !newCatalogItem.value} className="px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={16} /></button>
                 </div>
-
-                {/* Items list */}
                 <div className="space-y-1.5">
                   {catalogItems.map(item => (
                     <div key={item.id} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100">
@@ -752,11 +1062,53 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
                     <div className="bg-gray-50 rounded-xl p-6 text-center border border-gray-100">
                       <Package size={24} className="mx-auto text-gray-300 mb-2" />
                       <p className="text-sm text-gray-400">Nog geen emballage voor {catalogSupplier}</p>
-                      <p className="text-xs text-gray-300 mt-1">Voeg items toe hierboven</p>
+                      <p className="text-xs text-gray-300 mt-1">Voeg items toe hierboven of gebruik bulk import</p>
                     </div>
                   )}
                 </div>
               </>
+            )}
+          </div>
+        )}
+
+        {/* ═══════════════ ACTIVITY TAB ═══════════════ */}
+        {activeTab === "activity" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900">Recente activiteit</h3>
+              <button onClick={() => { setActivityLoaded(false); setActivityLog([]); }} className="text-xs text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1"><RefreshCw size={12} /> Vernieuwen</button>
+            </div>
+
+            {!activityLoaded ? (
+              <div className="bg-white rounded-xl p-8 text-center border border-gray-100">
+                <Loader2 size={24} className="animate-spin mx-auto text-purple-400 mb-2" />
+                <p className="text-sm text-gray-400">Activiteit laden...</p>
+              </div>
+            ) : activityLog.length === 0 ? (
+              <div className="bg-white rounded-xl p-8 text-center border border-gray-100">
+                <Activity size={24} className="mx-auto text-gray-300 mb-2" />
+                <p className="text-sm text-gray-400">Nog geen activiteit geregistreerd</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-50">
+                {activityLog.map(t => {
+                  const accName = t.accounts?.company_name || accounts.find(a => a.id === t.account_id)?.companyName || "Onbekend";
+                  const userName = t.profiles?.display_name || "—";
+                  const date = t.created_at ? new Date(t.created_at).toLocaleString("nl-NL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : t.date || "—";
+                  return (
+                    <div key={t.id} className="flex items-center gap-3 px-4 py-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${t.type === "IN" ? "bg-green-100" : "bg-red-100"}`}>
+                        {t.type === "IN" ? <ArrowDownCircle size={14} className="text-green-600" /> : <ArrowUpCircle size={14} className="text-red-600" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-900 truncate"><span className="font-semibold">{t.qty}× {t.emballage}</span> — {t.supplier}</p>
+                        <p className="text-xs text-gray-400 truncate">{accName} • {userName} {t.branch ? `• ${t.branch}` : ""}</p>
+                      </div>
+                      <span className="text-xs text-gray-400 shrink-0">{date}</span>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
