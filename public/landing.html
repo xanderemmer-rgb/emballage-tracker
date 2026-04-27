@@ -266,14 +266,16 @@
   .suppliers-strip { padding: 40px 24px; background: #fff; border-bottom: 1px solid var(--gray-100); }
   .suppliers-strip-inner { max-width: 1120px; margin: 0 auto; text-align: center; }
   .suppliers-strip p { font-size: 13px; font-weight: 500; color: var(--gray-400); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 0.06em; }
-  .supplier-logos { display: flex; align-items: center; justify-content: center; gap: 32px; flex-wrap: wrap; }
-  .supplier-logo {
-    display: flex; align-items: center; transition: all 0.3s;
-    filter: grayscale(100%); opacity: 0.5;
+  .supplier-logos { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: wrap; }
+  .supplier-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 20px; border-radius: 12px; border: 1px solid var(--gray-100);
+    background: var(--gray-50); transition: all 0.3s; cursor: default;
   }
-  .supplier-logo:hover { filter: grayscale(0%); opacity: 1; }
-  .supplier-logo img { height: 36px; width: auto; object-fit: contain; }
-  @media (max-width: 640px) { .supplier-logo img { height: 28px; } }
+  .supplier-badge:hover { border-color: var(--purple-200); background: var(--purple-50); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(124,58,237,0.06); }
+  .supplier-badge .s-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .supplier-badge .s-name { font-size: 14px; font-weight: 700; color: var(--gray-700); letter-spacing: -0.01em; }
+  @media (max-width: 640px) { .supplier-badge { padding: 8px 14px; } .supplier-badge .s-name { font-size: 12px; } }
 
   /* ── SOCIAL PROOF ── */
   .social-proof { padding: 80px 24px; background: var(--gray-50); }
@@ -451,12 +453,13 @@
   <div class="suppliers-strip-inner">
     <p data-i18n="suppliers_label">Reggy works with all your suppliers, including</p>
     <div class="supplier-logos">
-      <div class="supplier-logo"><img src="https://logo.clearbit.com/hanos.nl" alt="Hanos" loading="lazy"></div>
-      <div class="supplier-logo"><img src="https://logo.clearbit.com/bidfood.nl" alt="Bidfood" loading="lazy"></div>
-      <div class="supplier-logo"><img src="https://logo.clearbit.com/sligro.nl" alt="Sligro" loading="lazy"></div>
-      <div class="supplier-logo"><img src="https://logo.clearbit.com/vangeldernederland.nl" alt="Van Gelder" loading="lazy"></div>
-      <div class="supplier-logo"><img src="https://logo.clearbit.com/heineken.nl" alt="Heineken" loading="lazy"></div>
-      <div class="supplier-logo"><img src="https://logo.clearbit.com/cocacolaep.com" alt="Coca-Cola" loading="lazy"></div>
+      <div class="supplier-badge"><div class="s-dot" style="background:#e11d48"></div><span class="s-name">Hanos</span></div>
+      <div class="supplier-badge"><div class="s-dot" style="background:#2563eb"></div><span class="s-name">Bidfood</span></div>
+      <div class="supplier-badge"><div class="s-dot" style="background:#16a34a"></div><span class="s-name">Sligro</span></div>
+      <div class="supplier-badge"><div class="s-dot" style="background:#f59e0b"></div><span class="s-name">Van Gelder</span></div>
+      <div class="supplier-badge"><div class="s-dot" style="background:#059669"></div><span class="s-name">Heineken</span></div>
+      <div class="supplier-badge"><div class="s-dot" style="background:#7c3aed"></div><span class="s-name">AB InBev</span></div>
+      <div class="supplier-badge"><div class="s-dot" style="background:#0ea5e9"></div><span class="s-name">Vrumona</span></div>
     </div>
   </div>
 </section>
