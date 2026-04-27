@@ -443,8 +443,14 @@ function PricingCalc({ outlets, onChange }) {
 
 // ─── REGISTRATION FLOW ────────────────────────────────────────────────────────
 function RegisterFlow({ accounts, setAccounts, onDone }) {
+  // Read plan from URL params (e.g. ?plan=business&outlets=2)
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlPlan = urlParams.get("plan");
+  const urlOutlets = parseInt(urlParams.get("outlets")) || 0;
+  const initialOutlets = urlOutlets > 0 ? urlOutlets : urlPlan === "business" ? 2 : 1;
+
   const [step, setStep] = useState(1); // 1: plan, 2: bedrijf, 3: aanmeldgegevens
-  const [outlets, setOutlets] = useState(1);
+  const [outlets, setOutlets] = useState(initialOutlets);
   const [company, setCompany] = useState({ name: "", phone: "" });
   const [credentials, setCredentials] = useState({ email: "", password: "", passwordConfirm: "" });
   const [toast, setToast] = useState(null);
@@ -4471,7 +4477,9 @@ function App() {
     setAccountState,
   } = useSupabase();
 
-  const [screen, setScreen] = useState("login");
+  // Auto-detect if user came from landing page with plan param
+  const hasRegisterParams = new URLSearchParams(window.location.search).has("plan");
+  const [screen, setScreen] = useState(hasRegisterParams ? "register" : "login");
   const [language, setLanguage] = useState("nl");
 
   // Sync screen with auth state
@@ -4480,7 +4488,9 @@ function App() {
     if (session && profile) {
       if (profile.role === "superadmin") setScreen("superadmin");
       else setScreen("app");
-    } else {
+      // Clean up URL params after login
+      if (window.location.search) window.history.replaceState({}, "", window.location.pathname);
+    } else if (!hasRegisterParams) {
       setScreen("login");
     }
   }, [session, profile, loading]);
