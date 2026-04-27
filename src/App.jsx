@@ -577,6 +577,8 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
   const [newAccount, setNewAccount] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [toast, setToast] = useState(null);
+  const [dark, toggleDark] = useDarkMode();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // ── Search & filter (accounts) ──
   const [searchQuery, setSearchQuery] = useState("");
@@ -612,7 +614,6 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
           const { data } = await supabase.from("transactions").select("*, profiles!transactions_user_id_fkey(display_name), accounts!transactions_account_id_fkey(company_name)").order("created_at", { ascending: false }).limit(100);
           setActivityLog(data || []);
         } catch {
-          // Fallback: simple query without joins
           try {
             const { data } = await supabase.from("transactions").select("*").order("created_at", { ascending: false }).limit(100);
             setActivityLog(data || []);
@@ -631,6 +632,19 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
   const [newSupplierName, setNewSupplierName] = useState("");
   const [bulkImportText, setBulkImportText] = useState("");
   const [showBulkImport, setShowBulkImport] = useState(false);
+
+  // ── Platform settings ──
+  const [platformSettings, setPlatformSettings] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("reggy_platform_settings") || "{}"); } catch { return {}; }
+  });
+  const defaultSettings = { platformName: "Reggy", trialDays: 14, maxUsersPerBranch: 2, defaultOutlets: 1, supportEmail: "support@reggy.io" };
+  const settings = { ...defaultSettings, ...platformSettings };
+  const savePlatformSettings = (updates) => {
+    const newSettings = { ...platformSettings, ...updates };
+    setPlatformSettings(newSettings);
+    try { localStorage.setItem("reggy_platform_settings", JSON.stringify(newSettings)); } catch {}
+    setToast({ type: "success", message: "Instellingen opgeslagen" });
+  };
 
   // Load default catalog
   useEffect(() => {
@@ -655,6 +669,29 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
   const activeAccounts = accounts.filter(a => a.plan.status === "active").length;
   const inactiveAccounts = totalAccounts - activeAccounts;
   const totalUsers = accounts.reduce((sum, a) => sum + a.users.length, 0);
+
+  // ── Revenue calculations ──
+  const accountPricing = accounts.map(acc => {
+    const p = calcPrice(acc.plan.outlets || 1);
+    return { ...acc, monthlyPrice: acc.plan.status === "active" ? p.total : 0, priceBreakdown: p };
+  });
+  const mrr = accountPricing.reduce((sum, a) => sum + a.monthlyPrice, 0);
+  const arr = mrr * 12;
+
+  // ── Growth chart data (accounts by start month) ──
+  const growthData = (() => {
+    const months = {};
+    accounts.forEach(acc => {
+      const d = acc.plan.startDate;
+      if (d) {
+        const key = d.slice(0, 7); // YYYY-MM
+        months[key] = (months[key] || 0) + 1;
+      }
+    });
+    const sorted = Object.entries(months).sort((a, b) => a[0].localeCompare(b[0]));
+    const maxVal = Math.max(...sorted.map(s => s[1]), 1);
+    return { sorted, maxVal };
+  })();
 
   // ── Filtered accounts ──
   const filteredAccounts = accounts.filter(acc => {
@@ -706,7 +743,6 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
     } catch (err) { setToast({ type: "error", message: err.message }); }
   };
 
-  // ── Bulk import handler ──
   const handleBulkImport = async () => {
     if (!catalogSupplier || !bulkImportText.trim()) return;
     try {
@@ -718,7 +754,7 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
         if (isNaN(val)) return null;
         return { supplier_name: catalogSupplier, emballage_name: parts[0], value: val };
       }).filter(Boolean);
-      if (items.length === 0) { setToast({ type: "error", message: "Geen geldige items gevonden. Gebruik formaat: naam, waarde" }); return; }
+      if (items.length === 0) { setToast({ type: "error", message: "Geen geldige items gevonden" }); return; }
       const { data, error } = await supabase.from("default_supplier_emballage").insert(items).select();
       if (error) throw error;
       setDefaultCatalog(prev => [...prev, ...data]);
@@ -748,7 +784,6 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
       if (updates.outlets !== undefined) updateData.plan_outlets = updates.outlets;
       const { error } = await supabase.from("accounts").update(updateData).eq("id", accId);
       if (error) throw error;
-      // Update local state
       setAccounts(accounts.map(a => a.id === accId ? { ...a, plan: { ...a.plan, ...updates } } : a));
       if (selectedAccount?.id === accId) setSelectedAccount(prev => ({ ...prev, plan: { ...prev.plan, ...updates } }));
       setEditingPlan(null);
@@ -756,38 +791,87 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
     } catch (err) { setToast({ type: "error", message: err.message }); }
   };
 
-  // ── Login-als handler ──
   const handleLoginAs = async (acc) => {
-    // Find master user for this account
     const master = acc.users.find(u => u.role === "master");
-    if (!master) { setToast({ type: "error", message: "Geen master user gevonden voor dit account" }); return; }
-    // Get master's email from profiles
+    if (!master) { setToast({ type: "error", message: "Geen master user gevonden" }); return; }
     try {
       const { data: profileData, error } = await supabase.from("profiles").select("id").eq("account_id", acc.id).eq("role", "master").single();
       if (error) throw error;
-      // Get auth user email
-      const { data: authData } = await supabase.auth.admin?.getUserById?.(profileData.id) || {};
-      // Since we can't easily impersonate via Supabase Auth, we open in new window with account context
-      // Store the impersonation target
       localStorage.setItem("reggy_impersonate", JSON.stringify({ accountId: acc.id, accountName: acc.companyName }));
-      setToast({ type: "success", message: `Bekijk-modus voor ${acc.companyName} — log in als master user in een nieuw venster` });
+      setToast({ type: "success", message: `Bekijk-modus voor ${acc.companyName}` });
     } catch {
-      setToast({ type: "info", message: `Login als ${acc.companyName}: gebruik het master-account email om in te loggen in een incognito venster` });
+      setToast({ type: "info", message: `Login als ${acc.companyName}: gebruik het master-account in incognito` });
     }
   };
 
-  // ── Tab config ──
-  const tabs = [
+  // ── Sidebar nav items ──
+  const navItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "accounts", label: "Accounts", icon: Users },
+    { id: "revenue", label: "Revenue", icon: DollarSign },
     { id: "catalog", label: "Emballage", icon: Package },
     { id: "activity", label: "Activiteit", icon: Activity },
+    { id: "settings", label: "Instellingen", icon: Settings },
   ];
 
+  const mainClass = "min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 flex";
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
+    <div className={mainClass}>
       {newForm && newAccount && <RegisterFlow accounts={accounts} setAccounts={setAccounts} onDone={() => setNewForm(false)} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* ── Mobile sidebar overlay ── */}
+      {sidebarOpen && <div className="fixed inset-0 bg-black/30 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />}
+
+      {/* ── Sidebar ── */}
+      <aside className={`fixed md:sticky top-0 left-0 z-50 md:z-auto h-screen w-64 bg-white border-r border-gray-100 flex flex-col transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
+        {/* Logo */}
+        <div className="p-5 border-b border-gray-100 flex items-center gap-3">
+          <BarcodeLogo size="sm" />
+          <div>
+            <h1 className="text-lg font-bold text-gray-900">Reggy</h1>
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest">Super Admin</p>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {navItems.map(item => (
+            <button key={item.id} onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === item.id ? "bg-purple-50 text-purple-700 font-semibold" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}>
+              <item.icon size={18} className={activeTab === item.id ? "text-purple-600" : "text-gray-400"} />
+              {item.label}
+              {item.id === "accounts" && <span className="ml-auto text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{totalAccounts}</span>}
+            </button>
+          ))}
+        </nav>
+
+        {/* Sidebar footer */}
+        <div className="p-3 border-t border-gray-100 space-y-2">
+          <div className="flex items-center justify-between px-3 py-1">
+            <DarkModeToggle dark={dark} onToggle={toggleDark} />
+            <button onClick={onLogout} className="flex items-center gap-2 px-3 py-2 text-red-500 hover:bg-red-50 rounded-xl text-sm font-medium transition-all"><LogOut size={16} /> Afmelden</button>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── Main content ── */}
+      <main className="flex-1 min-h-screen overflow-y-auto">
+        {/* Mobile header */}
+        <div className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+          <button onClick={() => setSidebarOpen(true)} className="p-2 hover:bg-gray-100 rounded-lg"><Menu size={20} /></button>
+          <div className="flex items-center gap-2"><BarcodeLogo size="sm" /><span className="font-bold text-gray-900 text-sm">Super Admin</span></div>
+          <DarkModeToggle dark={dark} onToggle={toggleDark} />
+        </div>
+
+        <div className="max-w-5xl mx-auto p-4 md:p-8">
+          {/* ── Welkomstbanner ── */}
+          {activeTab === "dashboard" && (
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Welkom terug, Xander</h2>
+              <p className="text-sm text-gray-400">{new Date().toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+            </div>
+          )}
 
       {/* ── Account Detail Overlay ── */}
       {selectedAccount && (
@@ -799,6 +883,18 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
                 <p className="text-sm text-gray-500">{selectedAccount.email}</p>
               </div>
               <button onClick={() => { setSelectedAccount(null); setEditingPlan(null); }} className="p-2 hover:bg-gray-100 rounded-lg"><X size={20} /></button>
+            </div>
+
+            {/* Pricing summary */}
+            <div className="px-5 pt-4 pb-2">
+              <div className="bg-purple-50 rounded-xl p-3 flex items-center justify-between">
+                <span className="text-sm text-purple-700 font-medium">Maandelijkse kosten</span>
+                <span className="text-lg font-bold text-purple-700">€{calcPrice(selectedAccount.plan.outlets || 1).total.toFixed(2)}/mo</span>
+              </div>
+              <div className="flex gap-4 mt-2 px-1">
+                <span className="text-xs text-gray-400">{selectedAccount.plan.outlets} outlet{selectedAccount.plan.outlets > 1 ? "s" : ""} × €{PRICE_OUTLET} = €{(selectedAccount.plan.outlets * PRICE_OUTLET).toFixed(2)}</span>
+                {selectedAccount.plan.outlets >= MASTER_REQUIRED_FROM && <span className="text-xs text-gray-400">+ Master €{PRICE_MASTER.toFixed(2)}</span>}
+              </div>
             </div>
 
             {/* Plan section */}
@@ -816,37 +912,15 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
               </div>
               {!editingPlan ? (
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gray-50 rounded-xl p-3">
-                    <p className="text-xs text-gray-400 mb-1">Status</p>
-                    <p className={`text-sm font-bold ${selectedAccount.plan.status === "active" ? "text-green-600" : "text-red-500"}`}>{selectedAccount.plan.status === "active" ? "Actief" : selectedAccount.plan.status === "expired" ? "Verlopen" : "Inactief"}</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-xl p-3">
-                    <p className="text-xs text-gray-400 mb-1">Outlets</p>
-                    <p className="text-sm font-bold text-gray-900">{selectedAccount.plan.outlets}</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-xl p-3">
-                    <p className="text-xs text-gray-400 mb-1">Startdatum</p>
-                    <p className="text-sm font-medium text-gray-700">{selectedAccount.plan.startDate || "—"}</p>
-                  </div>
-                  <div className="bg-gray-50 rounded-xl p-3">
-                    <p className="text-xs text-gray-400 mb-1">Volgende facturatie</p>
-                    <p className="text-sm font-medium text-gray-700">{selectedAccount.plan.nextBilling || "—"}</p>
-                  </div>
+                  <div className="bg-gray-50 rounded-xl p-3"><p className="text-xs text-gray-400 mb-1">Status</p><p className={`text-sm font-bold ${selectedAccount.plan.status === "active" ? "text-green-600" : "text-red-500"}`}>{selectedAccount.plan.status === "active" ? "Actief" : selectedAccount.plan.status === "expired" ? "Verlopen" : "Inactief"}</p></div>
+                  <div className="bg-gray-50 rounded-xl p-3"><p className="text-xs text-gray-400 mb-1">Outlets</p><p className="text-sm font-bold text-gray-900">{selectedAccount.plan.outlets}</p></div>
+                  <div className="bg-gray-50 rounded-xl p-3"><p className="text-xs text-gray-400 mb-1">Startdatum</p><p className="text-sm font-medium text-gray-700">{selectedAccount.plan.startDate || "—"}</p></div>
+                  <div className="bg-gray-50 rounded-xl p-3"><p className="text-xs text-gray-400 mb-1">Volgende facturatie</p><p className="text-sm font-medium text-gray-700">{selectedAccount.plan.nextBilling || "—"}</p></div>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1 block">Status</label>
-                    <select value={editingPlan.status} onChange={e => setEditingPlan({ ...editingPlan, status: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
-                      <option value="active">Actief</option>
-                      <option value="inactive">Inactief</option>
-                      <option value="expired">Verlopen</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1 block">Outlets</label>
-                    <input type="number" min="1" max="99" value={editingPlan.outlets} onChange={e => setEditingPlan({ ...editingPlan, outlets: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                  </div>
+                  <div><label className="text-xs text-gray-500 mb-1 block">Status</label><select value={editingPlan.status} onChange={e => setEditingPlan({ ...editingPlan, status: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"><option value="active">Actief</option><option value="inactive">Inactief</option><option value="expired">Verlopen</option></select></div>
+                  <div><label className="text-xs text-gray-500 mb-1 block">Outlets</label><input type="number" min="1" max="99" value={editingPlan.outlets} onChange={e => setEditingPlan({ ...editingPlan, outlets: parseInt(e.target.value) || 1 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" /></div>
                 </div>
               )}
             </div>
@@ -858,10 +932,7 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
                 {selectedAccount.users.map(u => (
                   <div key={u.id} className="flex items-center gap-3 bg-gray-50 rounded-xl p-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${u.role === "master" ? "bg-purple-500" : "bg-blue-400"}`}>{u.name?.[0]?.toUpperCase() || "?"}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
-                      <p className="text-xs text-gray-400">{u.role === "master" ? "Master admin" : `Filiaal: ${u.branch || "—"}`}</p>
-                    </div>
+                    <div className="flex-1 min-w-0"><p className="text-sm font-medium text-gray-900 truncate">{u.name}</p><p className="text-xs text-gray-400">{u.role === "master" ? "Master admin" : `Filiaal: ${u.branch || "—"}`}</p></div>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${u.role === "master" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>{u.role}</span>
                   </div>
                 ))}
@@ -872,38 +943,15 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
             {/* Actions */}
             <div className="p-5 flex gap-3">
               <button onClick={() => handleLoginAs(selectedAccount)} className="flex-1 px-4 py-2.5 bg-purple-50 text-purple-700 rounded-xl hover:bg-purple-100 transition-all text-sm font-semibold flex items-center justify-center gap-2"><Eye size={16} /> Bekijk als</button>
-              <button onClick={() => { handleDeleteAccount(selectedAccount.id); }} className="px-4 py-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all text-sm font-semibold flex items-center justify-center gap-2"><Trash2 size={16} /></button>
+              <button onClick={() => handleDeleteAccount(selectedAccount.id)} className="px-4 py-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all text-sm font-semibold flex items-center justify-center gap-2"><Trash2 size={16} /></button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="max-w-5xl mx-auto p-4 md:p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <BarcodeLogo size="sm" />
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Super Admin</h1>
-              <p className="text-xs text-gray-400">Platform beheer</p>
-            </div>
-          </div>
-          <button onClick={onLogout} className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all duration-200 text-sm font-medium"><LogOut size={16} /> Afmelden</button>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-1.5 mb-6 bg-white/60 backdrop-blur rounded-xl p-1 border border-gray-100">
-          {tabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-semibold transition-all ${activeTab === tab.id ? "bg-purple-600 text-white shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"}`}>
-              <tab.icon size={14} /><span className="hidden sm:inline">{tab.label}</span>
-            </button>
-          ))}
-        </div>
-
         {/* ═══════════════ DASHBOARD TAB ═══════════════ */}
         {activeTab === "dashboard" && (
           <div className="space-y-6">
-            {/* KPI tiles */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
                 <div className="flex items-center gap-2 mb-2"><Building2 size={16} className="text-purple-500" /><span className="text-xs text-gray-400 font-medium uppercase">Accounts</span></div>
@@ -911,14 +959,14 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
                 <p className="text-xs text-gray-400 mt-1">{activeAccounts} actief, {inactiveAccounts} inactief</p>
               </div>
               <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                <div className="flex items-center gap-2 mb-2"><DollarSign size={16} className="text-green-500" /><span className="text-xs text-gray-400 font-medium uppercase">MRR</span></div>
+                <p className="text-2xl font-bold text-gray-900">€{mrr.toFixed(0)}</p>
+                <p className="text-xs text-gray-400 mt-1">ARR €{arr.toFixed(0)}</p>
+              </div>
+              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
                 <div className="flex items-center gap-2 mb-2"><Users size={16} className="text-blue-500" /><span className="text-xs text-gray-400 font-medium uppercase">Gebruikers</span></div>
                 <p className="text-2xl font-bold text-gray-900">{totalUsers}</p>
                 <p className="text-xs text-gray-400 mt-1">over alle accounts</p>
-              </div>
-              <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                <div className="flex items-center gap-2 mb-2"><ClipboardList size={16} className="text-green-500" /><span className="text-xs text-gray-400 font-medium uppercase">Registraties</span></div>
-                <p className="text-2xl font-bold text-gray-900">{stats.loadingStats ? "..." : stats.totalTransactions}</p>
-                <p className="text-xs text-gray-400 mt-1">totaal platform</p>
               </div>
               <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
                 <div className="flex items-center gap-2 mb-2"><TrendingUp size={16} className="text-orange-500" /><span className="text-xs text-gray-400 font-medium uppercase">Deze maand</span></div>
@@ -927,19 +975,38 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
               </div>
             </div>
 
-            {/* Account status breakdown */}
+            {/* Growth chart */}
+            {growthData.sorted.length > 0 && (
+              <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">Groei per maand</h3>
+                <div className="flex items-end gap-1.5 h-32">
+                  {growthData.sorted.map(([month, count]) => (
+                    <div key={month} className="flex-1 flex flex-col items-center gap-1">
+                      <span className="text-[10px] font-bold text-purple-600">{count}</span>
+                      <div className="w-full bg-purple-400 rounded-t-md transition-all" style={{ height: `${(count / growthData.maxVal) * 100}%`, minHeight: "4px" }} />
+                      <span className="text-[9px] text-gray-400 truncate w-full text-center">{month.slice(5)}/{month.slice(2, 4)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Quick account list */}
             <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Account overzicht</h3>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Accounts</h3>
               <div className="space-y-2">
-                {accounts.slice(0, 8).map(acc => (
-                  <div key={acc.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 rounded-lg px-2 -mx-2 transition-all" onClick={() => { setSelectedAccount(acc); setActiveTab("accounts"); }}>
-                    <div className={`w-2 h-2 rounded-full ${acc.plan.status === "active" ? "bg-green-500" : "bg-red-400"}`} />
-                    <span className="text-sm font-medium text-gray-900 flex-1">{acc.companyName}</span>
-                    <span className="text-xs text-gray-400">{acc.users.length} users</span>
-                    <span className="text-xs text-gray-400">{acc.plan.outlets} outlets</span>
-                    <ChevronRight size={14} className="text-gray-300" />
-                  </div>
-                ))}
+                {accounts.slice(0, 8).map(acc => {
+                  const price = calcPrice(acc.plan.outlets || 1);
+                  return (
+                    <div key={acc.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 rounded-lg px-2 -mx-2 transition-all" onClick={() => { setSelectedAccount(acc); }}>
+                      <div className={`w-2 h-2 rounded-full ${acc.plan.status === "active" ? "bg-green-500" : "bg-red-400"}`} />
+                      <span className="text-sm font-medium text-gray-900 flex-1">{acc.companyName}</span>
+                      <span className="text-xs text-gray-400">{acc.plan.outlets} outlets</span>
+                      <span className={`text-xs font-semibold ${acc.plan.status === "active" ? "text-green-600" : "text-gray-400"}`}>{acc.plan.status === "active" ? `€${price.total}/mo` : "—"}</span>
+                      <ChevronRight size={14} className="text-gray-300" />
+                    </div>
+                  );
+                })}
               </div>
               {accounts.length > 8 && <button onClick={() => setActiveTab("accounts")} className="mt-3 text-xs text-purple-600 hover:text-purple-800 font-medium">Bekijk alle {accounts.length} accounts →</button>}
             </div>
@@ -949,7 +1016,6 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
         {/* ═══════════════ ACCOUNTS TAB ═══════════════ */}
         {activeTab === "accounts" && (
           <div className="space-y-4">
-            {/* Search & filter bar */}
             <div className="flex gap-2 flex-col sm:flex-row">
               <div className="relative flex-1">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -963,42 +1029,83 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
                 ))}
               </div>
             </div>
-
-            {/* Results count */}
             <p className="text-xs text-gray-400">{filteredAccounts.length} van {accounts.length} accounts</p>
-
-            {/* Account cards */}
             <div className="grid gap-3">
-              {filteredAccounts.map(acc => (
-                <div key={acc.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 p-4 cursor-pointer border border-gray-100 hover:border-purple-200" onClick={() => setSelectedAccount(acc)}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center text-purple-600 font-bold text-sm shrink-0">{acc.companyName?.[0]?.toUpperCase()}</div>
-                      <div className="min-w-0">
-                        <h3 className="font-bold text-gray-900 text-sm truncate">{acc.companyName}</h3>
-                        <p className="text-xs text-gray-400 truncate">{acc.email}</p>
+              {filteredAccounts.map(acc => {
+                const price = calcPrice(acc.plan.outlets || 1);
+                return (
+                  <div key={acc.id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 p-4 cursor-pointer border border-gray-100 hover:border-purple-200" onClick={() => setSelectedAccount(acc)}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center text-purple-600 font-bold text-sm shrink-0">{acc.companyName?.[0]?.toUpperCase()}</div>
+                        <div className="min-w-0">
+                          <h3 className="font-bold text-gray-900 text-sm truncate">{acc.companyName}</h3>
+                          <p className="text-xs text-gray-400 truncate">{acc.email}</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right hidden sm:block">
-                        <p className="text-xs text-gray-400">{acc.users.length} gebruikers • {acc.plan.outlets} outlet{acc.plan.outlets > 1 ? "s" : ""}</p>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right hidden sm:block">
+                          <p className="text-xs font-semibold text-gray-700">{acc.plan.status === "active" ? `€${price.total}/mo` : "—"}</p>
+                          <p className="text-[10px] text-gray-400">{acc.users.length} users • {acc.plan.outlets} outlets</p>
+                        </div>
+                        <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${acc.plan.status === "active" ? "bg-green-50 text-green-700" : acc.plan.status === "expired" ? "bg-orange-50 text-orange-600" : "bg-red-50 text-red-600"}`}>{acc.plan.status === "active" ? "ACTIEF" : acc.plan.status === "expired" ? "VERLOPEN" : "INACTIEF"}</span>
+                        <ChevronRight size={16} className="text-gray-300" />
                       </div>
-                      <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${acc.plan.status === "active" ? "bg-green-50 text-green-700" : acc.plan.status === "expired" ? "bg-orange-50 text-orange-600" : "bg-red-50 text-red-600"}`}>{acc.plan.status === "active" ? "ACTIEF" : acc.plan.status === "expired" ? "VERLOPEN" : "INACTIEF"}</span>
-                      <ChevronRight size={16} className="text-gray-300" />
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {filteredAccounts.length === 0 && (
-                <div className="bg-white rounded-xl p-8 text-center border border-gray-100">
-                  <Search size={24} className="mx-auto text-gray-300 mb-2" />
-                  <p className="text-sm text-gray-400">Geen accounts gevonden</p>
-                </div>
+                <div className="bg-white rounded-xl p-8 text-center border border-gray-100"><Search size={24} className="mx-auto text-gray-300 mb-2" /><p className="text-sm text-gray-400">Geen accounts gevonden</p></div>
               )}
             </div>
-
-            {/* Add account button */}
             <button onClick={() => { setNewAccount(true); setNewForm(true); }} className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 transition-all duration-200 flex items-center justify-center gap-2 text-sm"><Plus size={18} /> Nieuw account</button>
+          </div>
+        )}
+
+        {/* ═══════════════ REVENUE TAB ═══════════════ */}
+        {activeTab === "revenue" && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold text-gray-900">Revenue overzicht</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
+                <p className="text-xs text-gray-400 uppercase font-medium mb-1">MRR</p>
+                <p className="text-3xl font-bold text-green-600">€{mrr.toFixed(2)}</p>
+                <p className="text-xs text-gray-400 mt-1">maandelijks</p>
+              </div>
+              <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
+                <p className="text-xs text-gray-400 uppercase font-medium mb-1">ARR</p>
+                <p className="text-3xl font-bold text-blue-600">€{arr.toFixed(2)}</p>
+                <p className="text-xs text-gray-400 mt-1">jaarlijks</p>
+              </div>
+              <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
+                <p className="text-xs text-gray-400 uppercase font-medium mb-1">Gem. per account</p>
+                <p className="text-3xl font-bold text-purple-600">€{activeAccounts > 0 ? (mrr / activeAccounts).toFixed(2) : "0"}</p>
+                <p className="text-xs text-gray-400 mt-1">{activeAccounts} actieve accounts</p>
+              </div>
+            </div>
+            {/* Revenue per account table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-700">Kosten per account</h3>
+                <span className="text-xs text-gray-400">Gesorteerd op omzet</span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {accountPricing.sort((a, b) => b.monthlyPrice - a.monthlyPrice).map(acc => (
+                  <div key={acc.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 cursor-pointer transition-all" onClick={() => setSelectedAccount(acc)}>
+                    <div className={`w-2 h-2 rounded-full ${acc.plan.status === "active" ? "bg-green-500" : "bg-gray-300"}`} />
+                    <span className="text-sm font-medium text-gray-900 flex-1">{acc.companyName}</span>
+                    <span className="text-xs text-gray-400">{acc.plan.outlets} outlet{acc.plan.outlets > 1 ? "s" : ""}</span>
+                    <span className="text-xs text-gray-400">{acc.users.length} users</span>
+                    <span className={`text-sm font-bold min-w-[80px] text-right ${acc.monthlyPrice > 0 ? "text-green-600" : "text-gray-300"}`}>{acc.monthlyPrice > 0 ? `€${acc.monthlyPrice.toFixed(2)}` : "—"}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+                <span className="text-sm font-semibold text-gray-700">Totaal MRR</span>
+                <span className="text-sm font-bold text-green-600">€{mrr.toFixed(2)}/mo</span>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1006,65 +1113,35 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
         {activeTab === "catalog" && (
           <div className="space-y-4">
             <div className="bg-purple-50 rounded-xl p-4 border border-purple-100 flex items-start justify-between">
-              <p className="text-sm text-purple-700">Beheer hier de standaard emballage per leverancier. Klanten kunnen bij het toevoegen van een leverancier de items met één klik importeren.</p>
+              <p className="text-sm text-purple-700">Beheer de standaard emballage per leverancier. Klanten importeren deze met één klik.</p>
               <button onClick={() => setShowBulkImport(!showBulkImport)} className={`ml-3 shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${showBulkImport ? "bg-purple-600 text-white" : "bg-white text-purple-600 border border-purple-200 hover:border-purple-400"}`}><Upload size={12} /> Bulk import</button>
             </div>
-
-            {/* Bulk import panel */}
             {showBulkImport && catalogSupplier && (
               <div className="bg-white rounded-xl p-4 border border-purple-200 shadow-sm space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-gray-700">Bulk import voor {catalogSupplier}</h4>
-                  <button onClick={() => setShowBulkImport(false)} className="p-1 hover:bg-gray-100 rounded"><X size={14} /></button>
-                </div>
-                <p className="text-xs text-gray-400">Eén item per regel. Formaat: <span className="font-mono bg-gray-100 px-1 rounded">naam, waarde</span> of <span className="font-mono bg-gray-100 px-1 rounded">naam; waarde</span></p>
-                <textarea value={bulkImportText} onChange={e => setBulkImportText(e.target.value)} placeholder={"Krat Bier, 3.50\nFust 20L, 30.00\nKratten Fris, 2.50"} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none font-mono h-32 resize-none" />
-                <button onClick={handleBulkImport} disabled={!bulkImportText.trim()} className="w-full py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all flex items-center justify-center gap-2"><Upload size={14} /> Importeer items</button>
+                <div className="flex items-center justify-between"><h4 className="text-sm font-semibold text-gray-700">Bulk import voor {catalogSupplier}</h4><button onClick={() => setShowBulkImport(false)} className="p-1 hover:bg-gray-100 rounded"><X size={14} /></button></div>
+                <p className="text-xs text-gray-400">Eén item per regel: <span className="font-mono bg-gray-100 px-1 rounded">naam, waarde</span></p>
+                <textarea value={bulkImportText} onChange={e => setBulkImportText(e.target.value)} placeholder={"Krat Bier, 3.50\nFust 20L, 30.00"} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none font-mono h-32 resize-none" />
+                <button onClick={handleBulkImport} disabled={!bulkImportText.trim()} className="w-full py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all flex items-center justify-center gap-2"><Upload size={14} /> Importeer</button>
               </div>
             )}
-
-            {/* Supplier tabs */}
             <div className="flex items-center gap-2 flex-wrap">
-              {catalogSuppliers.map(s => (
-                <button key={s} onClick={() => setCatalogSupplier(s)} className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${catalogSupplier === s ? "bg-purple-600 text-white" : "bg-white text-gray-600 border border-gray-200 hover:border-purple-300"}`}>{s}</button>
-              ))}
+              {catalogSuppliers.map(s => (<button key={s} onClick={() => setCatalogSupplier(s)} className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${catalogSupplier === s ? "bg-purple-600 text-white" : "bg-white text-gray-600 border border-gray-200 hover:border-purple-300"}`}>{s}</button>))}
               <div className="flex gap-1.5 ml-auto">
                 <input type="text" value={newSupplierName} onChange={(e) => setNewSupplierName(e.target.value)} placeholder="Nieuwe leverancier..." className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm w-40 focus:ring-2 focus:ring-purple-500 outline-none" onKeyDown={e => e.key === "Enter" && handleAddSupplierCatalog()} />
                 <button onClick={handleAddSupplierCatalog} disabled={!newSupplierName.trim()} className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={14} /></button>
               </div>
             </div>
-
             {catalogSupplier && (
               <>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Truck size={18} className="text-purple-500" /> {catalogSupplier} <span className="text-sm font-normal text-gray-400">({catalogItems.length} items)</span></h3>
-                  <button onClick={() => handleDeleteSupplierCatalog(catalogSupplier)} className="text-xs text-red-500 hover:text-red-700 font-medium hover:underline">Leverancier verwijderen</button>
-                </div>
+                <div className="flex items-center justify-between"><h3 className="text-lg font-bold text-gray-900 flex items-center gap-2"><Truck size={18} className="text-purple-500" /> {catalogSupplier} <span className="text-sm font-normal text-gray-400">({catalogItems.length})</span></h3><button onClick={() => handleDeleteSupplierCatalog(catalogSupplier)} className="text-xs text-red-500 hover:text-red-700 font-medium hover:underline">Verwijderen</button></div>
                 <div className="flex gap-2">
                   <input type="text" placeholder="Emballage naam" value={newCatalogItem.name} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, name: e.target.value })} className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" onKeyDown={e => e.key === "Enter" && handleAddCatalogItem()} />
-                  <input type="number" placeholder="€ waarde" value={newCatalogItem.value} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, value: e.target.value })} className="w-28 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" step="0.50" onKeyDown={e => e.key === "Enter" && handleAddCatalogItem()} />
+                  <input type="number" placeholder="€" value={newCatalogItem.value} onChange={(e) => setNewCatalogItem({ ...newCatalogItem, value: e.target.value })} className="w-24 px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" step="0.50" onKeyDown={e => e.key === "Enter" && handleAddCatalogItem()} />
                   <button onClick={handleAddCatalogItem} disabled={!newCatalogItem.name || !newCatalogItem.value} className="px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-purple-700 transition-all"><Plus size={16} /></button>
                 </div>
                 <div className="space-y-1.5">
-                  {catalogItems.map(item => (
-                    <div key={item.id} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100">
-                      <div className="flex items-center gap-3">
-                        <Package size={16} className="text-purple-400" />
-                        <span className="text-sm font-medium text-gray-900">{item.emballage_name}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-purple-600">€{parseFloat(item.value).toFixed(2)}</span>
-                        <button onClick={() => handleDeleteCatalogItem(item.id)} className="p-1.5 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14} /></button>
-                      </div>
-                    </div>
-                  ))}
-                  {catalogItems.length === 0 && (
-                    <div className="bg-gray-50 rounded-xl p-6 text-center border border-gray-100">
-                      <Package size={24} className="mx-auto text-gray-300 mb-2" />
-                      <p className="text-sm text-gray-400">Nog geen emballage voor {catalogSupplier}</p>
-                      <p className="text-xs text-gray-300 mt-1">Voeg items toe hierboven of gebruik bulk import</p>
-                    </div>
-                  )}
+                  {catalogItems.map(item => (<div key={item.id} className="bg-white rounded-xl p-3 flex items-center justify-between shadow-sm border border-gray-100"><div className="flex items-center gap-3"><Package size={16} className="text-purple-400" /><span className="text-sm font-medium text-gray-900">{item.emballage_name}</span></div><div className="flex items-center gap-3"><span className="text-sm font-semibold text-purple-600">€{parseFloat(item.value).toFixed(2)}</span><button onClick={() => handleDeleteCatalogItem(item.id)} className="p-1.5 hover:bg-red-50 text-gray-300 hover:text-red-500 rounded-lg transition-all"><Trash2 size={14} /></button></div></div>))}
+                  {catalogItems.length === 0 && (<div className="bg-gray-50 rounded-xl p-6 text-center border border-gray-100"><Package size={24} className="mx-auto text-gray-300 mb-2" /><p className="text-sm text-gray-400">Nog geen emballage voor {catalogSupplier}</p></div>)}
                 </div>
               </>
             )}
@@ -1074,45 +1151,56 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
         {/* ═══════════════ ACTIVITY TAB ═══════════════ */}
         {activeTab === "activity" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900">Recente activiteit</h3>
-              <button onClick={() => { setActivityLoaded(false); setActivityLog([]); }} className="text-xs text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1"><RefreshCw size={12} /> Vernieuwen</button>
-            </div>
-
-            {!activityLoaded ? (
-              <div className="bg-white rounded-xl p-8 text-center border border-gray-100">
-                <Loader2 size={24} className="animate-spin mx-auto text-purple-400 mb-2" />
-                <p className="text-sm text-gray-400">Activiteit laden...</p>
-              </div>
-            ) : activityLog.length === 0 ? (
-              <div className="bg-white rounded-xl p-8 text-center border border-gray-100">
-                <Activity size={24} className="mx-auto text-gray-300 mb-2" />
-                <p className="text-sm text-gray-400">Nog geen activiteit geregistreerd</p>
-              </div>
+            <div className="flex items-center justify-between"><h3 className="text-lg font-bold text-gray-900">Recente activiteit</h3><button onClick={() => { setActivityLoaded(false); setActivityLog([]); }} className="text-xs text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1"><RefreshCw size={12} /> Vernieuwen</button></div>
+            {!activityLoaded ? (<div className="bg-white rounded-xl p-8 text-center border border-gray-100"><Loader2 size={24} className="animate-spin mx-auto text-purple-400 mb-2" /><p className="text-sm text-gray-400">Laden...</p></div>
+            ) : activityLog.length === 0 ? (<div className="bg-white rounded-xl p-8 text-center border border-gray-100"><Activity size={24} className="mx-auto text-gray-300 mb-2" /><p className="text-sm text-gray-400">Nog geen activiteit</p></div>
             ) : (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-50">
                 {activityLog.map(t => {
                   const accName = t.accounts?.company_name || accounts.find(a => a.id === t.account_id)?.companyName || "Onbekend";
                   const userName = t.profiles?.display_name || "—";
                   const date = t.created_at ? new Date(t.created_at).toLocaleString("nl-NL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : t.date || "—";
-                  return (
-                    <div key={t.id} className="flex items-center gap-3 px-4 py-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${t.type === "IN" ? "bg-green-100" : "bg-red-100"}`}>
-                        {t.type === "IN" ? <ArrowDownCircle size={14} className="text-green-600" /> : <ArrowUpCircle size={14} className="text-red-600" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-900 truncate"><span className="font-semibold">{t.qty}× {t.emballage}</span> — {t.supplier}</p>
-                        <p className="text-xs text-gray-400 truncate">{accName} • {userName} {t.branch ? `• ${t.branch}` : ""}</p>
-                      </div>
-                      <span className="text-xs text-gray-400 shrink-0">{date}</span>
-                    </div>
-                  );
+                  return (<div key={t.id} className="flex items-center gap-3 px-4 py-3"><div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${t.type === "IN" ? "bg-green-100" : "bg-red-100"}`}>{t.type === "IN" ? <ArrowDownCircle size={14} className="text-green-600" /> : <ArrowUpCircle size={14} className="text-red-600" />}</div><div className="flex-1 min-w-0"><p className="text-sm text-gray-900 truncate"><span className="font-semibold">{t.qty}× {t.emballage}</span> — {t.supplier}</p><p className="text-xs text-gray-400 truncate">{accName} • {userName} {t.branch ? `• ${t.branch}` : ""}</p></div><span className="text-xs text-gray-400 shrink-0">{date}</span></div>);
                 })}
               </div>
             )}
           </div>
         )}
-      </div>
+
+        {/* ═══════════════ SETTINGS TAB ═══════════════ */}
+        {activeTab === "settings" && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-bold text-gray-900">Platform instellingen</h2>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-50">
+              {[
+                { key: "platformName", label: "Platform naam", type: "text", desc: "De naam die overal in de app wordt getoond" },
+                { key: "supportEmail", label: "Support email", type: "email", desc: "Contactadres voor klantsupport" },
+                { key: "trialDays", label: "Trial periode (dagen)", type: "number", desc: "Hoelang een gratis trial duurt" },
+                { key: "maxUsersPerBranch", label: "Max gebruikers per filiaal", type: "number", desc: "Standaard limiet per filiaal" },
+                { key: "defaultOutlets", label: "Standaard outlets bij registratie", type: "number", desc: "Aantal outlets in het startplan" },
+              ].map(field => (
+                <div key={field.key} className="flex items-center gap-4 px-5 py-4">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">{field.label}</p>
+                    <p className="text-xs text-gray-400">{field.desc}</p>
+                  </div>
+                  <input type={field.type} value={settings[field.key]} onChange={e => savePlatformSettings({ [field.key]: field.type === "number" ? parseInt(e.target.value) || 0 : e.target.value })} className="w-48 px-3 py-2 border border-gray-200 rounded-lg text-sm text-right focus:ring-2 focus:ring-purple-500 outline-none" />
+                </div>
+              ))}
+            </div>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Pricing configuratie</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-gray-50 rounded-xl p-4"><p className="text-xs text-gray-400 mb-1">Prijs per outlet</p><p className="text-lg font-bold text-gray-900">€{PRICE_OUTLET}/mo</p></div>
+                <div className="bg-gray-50 rounded-xl p-4"><p className="text-xs text-gray-400 mb-1">Master admin toeslag</p><p className="text-lg font-bold text-gray-900">€{PRICE_MASTER}/mo</p><p className="text-[10px] text-gray-400">Vanaf {MASTER_REQUIRED_FROM} outlets</p></div>
+              </div>
+              <p className="text-xs text-gray-400 mt-3">Pricing is geconfigureerd in de code (PRICE_OUTLET, PRICE_MASTER). Wijzig deze in App.jsx.</p>
+            </div>
+          </div>
+        )}
+
+        </div>
+      </main>
     </div>
   );
 }
