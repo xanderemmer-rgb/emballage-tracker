@@ -202,6 +202,7 @@
   .pricing-card {
     background: #fff; border-radius: 20px; padding: 32px; border: 1px solid var(--gray-200);
     text-align: left; transition: all 0.3s; position: relative;
+    display: flex; flex-direction: column;
   }
   .pricing-card.featured {
     border-color: var(--purple-500); box-shadow: 0 8px 32px rgba(124,58,237,0.12);
@@ -216,7 +217,7 @@
   .pricing-card .price { font-size: 40px; font-weight: 900; letter-spacing: -0.03em; margin-bottom: 4px; }
   .pricing-card .price span { font-size: 16px; font-weight: 500; color: var(--gray-400); }
   .pricing-card .per { font-size: 13px; color: var(--gray-400); margin-bottom: 24px; }
-  .pricing-card ul { list-style: none; margin-bottom: 24px; }
+  .pricing-card ul { list-style: none; margin-bottom: 24px; flex: 1; }
   .pricing-card ul li {
     font-size: 14px; color: var(--gray-600); padding: 8px 0;
     border-bottom: 1px solid var(--gray-100); display: flex; align-items: center; gap: 8px;
