@@ -561,12 +561,13 @@
     <div class="section-label" data-i18n="pricing_label">Pricing</div>
     <h2 class="section-title" data-i18n="pricing_title">Simple, transparent pricing</h2>
     <p class="section-desc" style="margin:0 auto 0" data-i18n="pricing_desc">No setup fees. Scale as you grow. Cancel anytime.</p>
+    <p class="section-desc" style="margin:8px auto 0; font-size:14px; color:var(--gray-400)" data-i18n="pricing_calc">€10 per outlet/mo + €15 master admin (from 2+ outlets)</p>
     <div class="pricing-cards">
       <div class="pricing-card">
         <h3 data-i18n="plan1_name">Starter</h3>
         <p class="desc" data-i18n="plan1_desc">Perfect for a single location</p>
         <div class="price">€10 <span data-i18n="plan_month">/mo</span></div>
-        <p class="per" data-i18n="plan1_per">1 outlet included</p>
+        <p class="per" data-i18n="plan1_per">1 outlet, no master admin needed</p>
         <ul>
           <li data-i18n="plan1_f1">Unlimited transactions</li>
           <li data-i18n="plan1_f2">Supplier balance tracking</li>
@@ -578,13 +579,14 @@
       <div class="pricing-card featured" data-badge="Most popular">
         <h3 data-i18n="plan2_name">Business</h3>
         <p class="desc" data-i18n="plan2_desc">For hospitality groups with multiple outlets</p>
-        <div class="price">€35 <span data-i18n="plan_month">/mo</span></div>
-        <p class="per" data-i18n="plan2_per">2 outlets + master admin</p>
+        <div class="price" data-i18n="plan2_price_html"><span style="font-size:20px;font-weight:500;color:var(--gray-400)">from </span>€35 <span data-i18n="plan_month">/mo</span></div>
+        <p class="per" data-i18n="plan2_per">2 outlets + master admin • €10 per extra outlet</p>
         <ul>
           <li data-i18n="plan2_f1">Everything in Starter</li>
           <li data-i18n="plan2_f2">Master admin dashboard</li>
           <li data-i18n="plan2_f3">Multi-location overview</li>
           <li data-i18n="plan2_f4">User management</li>
+          <li data-i18n="plan2_f5">Scale to unlimited outlets</li>
         </ul>
         <a href="https://app.reggy.io" class="btn-plan primary" data-i18n="plan_cta_start">Get started</a>
       </div>
@@ -592,7 +594,7 @@
         <h3 data-i18n="plan3_name">Enterprise</h3>
         <p class="desc" data-i18n="plan3_desc">Large chains & custom integrations</p>
         <div class="price" data-i18n="plan3_price">Custom</div>
-        <p class="per" data-i18n="plan3_per">Unlimited outlets</p>
+        <p class="per" data-i18n="plan3_per">Unlimited outlets, custom pricing</p>
         <ul>
           <li data-i18n="plan3_f1">Everything in Business</li>
           <li data-i18n="plan3_f2">API access</li>
@@ -709,11 +711,12 @@ const translations = {
     f4_title: "Export & Reports", f4_desc: "Export to CSV or PDF anytime. Perfect for your accountant, supplier negotiations, or internal audits.",
     pricing_label: "Pricing", pricing_title: "Simple, transparent pricing",
     pricing_desc: "No setup fees. Scale as you grow. Cancel anytime.",
-    plan1_name: "Starter", plan1_desc: "Perfect for a single location", plan1_per: "1 outlet included",
+    pricing_calc: "€10 per outlet/mo + €15 master admin (from 2+ outlets)",
+    plan1_name: "Starter", plan1_desc: "Perfect for a single location", plan1_per: "1 outlet, no master admin needed",
     plan1_f1: "Unlimited transactions", plan1_f2: "Supplier balance tracking", plan1_f3: "CSV & PDF exports", plan1_f4: "Mobile-optimized app",
-    plan2_name: "Business", plan2_desc: "For hospitality groups with multiple outlets", plan2_per: "2 outlets + master admin",
+    plan2_name: "Business", plan2_desc: "For hospitality groups with multiple outlets", plan2_per: "2 outlets + master admin \u2022 \u20ac10 per extra outlet", plan2_price_html: '<span style="font-size:20px;font-weight:500;color:var(--gray-400)">from </span>\u20ac35 <span>/mo</span>', plan2_f5: "Scale to unlimited outlets",
     plan2_f1: "Everything in Starter", plan2_f2: "Master admin dashboard", plan2_f3: "Multi-location overview", plan2_f4: "User management",
-    plan3_name: "Enterprise", plan3_desc: "Large chains & custom integrations", plan3_price: "Custom", plan3_per: "Unlimited outlets",
+    plan3_name: "Enterprise", plan3_desc: "Large chains & custom integrations", plan3_price: "Custom", plan3_per: "Unlimited outlets, custom pricing",
     plan3_f1: "Everything in Business", plan3_f2: "API access", plan3_f3: "Custom integrations", plan3_f4: "Dedicated support",
     plan_month: "/mo", plan_cta_start: "Get started", plan_cta_contact: "Contact us",
     cta_title: "Stop losing money on<br>untracked packaging",
@@ -760,11 +763,12 @@ const translations = {
     f4_title: "Export & Rapporten", f4_desc: "Exporteer naar CSV of PDF wanneer je wilt. Perfect voor je boekhouder, leveranciersonderhandelingen of interne audits.",
     pricing_label: "Prijzen", pricing_title: "Eenvoudige, transparante prijzen",
     pricing_desc: "Geen opstartkosten. Schaal mee als je groeit. Altijd opzegbaar.",
-    plan1_name: "Starter", plan1_desc: "Perfect voor één locatie", plan1_per: "1 outlet inbegrepen",
+    pricing_calc: "€10 per outlet/mnd + €15 master admin (vanaf 2+ outlets)",
+    plan1_name: "Starter", plan1_desc: "Perfect voor één locatie", plan1_per: "1 outlet, geen master admin nodig",
     plan1_f1: "Onbeperkte transacties", plan1_f2: "Saldo per leverancier", plan1_f3: "CSV & PDF exports", plan1_f4: "Mobiel-geoptimaliseerde app",
-    plan2_name: "Business", plan2_desc: "Voor horecagroepen met meerdere locaties", plan2_per: "2 outlets + master admin",
+    plan2_name: "Business", plan2_desc: "Voor horecagroepen met meerdere locaties", plan2_per: "2 outlets + master admin \u2022 \u20ac10 per extra outlet", plan2_price_html: '<span style="font-size:20px;font-weight:500;color:var(--gray-400)">vanaf </span>\u20ac35 <span>/mnd</span>', plan2_f5: "Schaal naar onbeperkte outlets",
     plan2_f1: "Alles in Starter", plan2_f2: "Master admin dashboard", plan2_f3: "Multi-locatie overzicht", plan2_f4: "Gebruikersbeheer",
-    plan3_name: "Enterprise", plan3_desc: "Grote ketens & custom integraties", plan3_price: "Op maat", plan3_per: "Onbeperkte outlets",
+    plan3_name: "Enterprise", plan3_desc: "Grote ketens & custom integraties", plan3_price: "Op maat", plan3_per: "Onbeperkte outlets, maatwerk prijzen",
     plan3_f1: "Alles in Business", plan3_f2: "API-toegang", plan3_f3: "Custom integraties", plan3_f4: "Toegewijd support",
     plan_month: "/mnd", plan_cta_start: "Aan de slag", plan_cta_contact: "Neem contact op",
     cta_title: "Stop met geld verliezen aan<br>ongeregistreerde emballage",
