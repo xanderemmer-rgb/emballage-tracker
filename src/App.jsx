@@ -519,11 +519,19 @@ function RegisterFlow({ accounts, setAccounts, onDone }) {
       //    Default supplier suggestions (from default_supplier_emballage table)
       //    are shown in the "Snel toevoegen" section of Emballage & Leveranciers.
 
-      // 5. Sign out so user can log in fresh (avoids stale profile state)
-      await supabase.auth.signOut();
+      // 5. Auto-login: re-enable profile loading and sign in fresh so the app loads the new account
+      setSkipProfileLoad(false);
 
-      setToast({ type: "success", message: "Account aangemaakt! Log nu in met je email en wachtwoord." });
-      setTimeout(() => onDone(), 2000);
+      // Sign out first to clear any stale state, then sign back in
+      await supabase.auth.signOut();
+      await supabase.auth.signInWithPassword({
+        email: credentials.email,
+        password: credentials.password,
+      });
+
+      setToast({ type: "success", message: "Welkom bij Reggy! Je account is aangemaakt." });
+      // Small delay so user sees the success message, then redirect to app
+      setTimeout(() => onDone(), 1500);
     } catch (err) {
       console.error("Registration error:", err);
       setToast({ type: "error", message: err.message || "Er ging iets mis bij het aanmaken" });
@@ -4327,7 +4335,11 @@ function LoginPage({ onLogin, onRegister }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
 
   const handleLogin = async () => {
     setError("");
@@ -4347,6 +4359,24 @@ function LoginPage({ onLogin, onRegister }) {
     }
   };
 
+  const handleResetPassword = async () => {
+    if (!resetEmail) { setError("Vul je email in"); return; }
+    setResetLoading(true);
+    setError("");
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      setSuccess("Er is een reset-link verstuurd naar " + resetEmail + ". Check je inbox (en spam-map).");
+      setShowReset(false);
+    } catch (err) {
+      setError(err.message || "Er ging iets mis");
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-400 to-purple-500 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md lg:max-w-2xl xl:max-w-4xl w-full p-8">
@@ -4354,20 +4384,45 @@ function LoginPage({ onLogin, onRegister }) {
           <BarcodeLogo size="lg" />
         </div>
 
-        <div className="space-y-4 mb-6">
-          <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-          <input type="password" placeholder="Wachtwoord" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-        </div>
+        {!showReset ? (
+          <>
+            <div className="space-y-4 mb-6">
+              <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+              <input type="password" placeholder="Wachtwoord" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+            </div>
 
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm flex items-center gap-2"><AlertCircle size={18} /> {error}</div>}
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm flex items-center gap-2"><AlertCircle size={18} /> {error}</div>}
+            {success && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm flex items-center gap-2"><CheckCircle size={18} /> {success}</div>}
 
-        <button onClick={handleLogin} disabled={isLoading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 mb-4 disabled:opacity-60 flex items-center justify-center gap-2">
-          {isLoading ? <><Loader2 size={20} className="animate-spin" /> Inloggen...</> : "Inloggen"}
-        </button>
+            <button onClick={handleLogin} disabled={isLoading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 mb-4 disabled:opacity-60 flex items-center justify-center gap-2">
+              {isLoading ? <><Loader2 size={20} className="animate-spin" /> Inloggen...</> : "Inloggen"}
+            </button>
 
-        <div className="mt-6 text-center">
-          <button onClick={onRegister} className="text-blue-600 hover:text-blue-700 font-semibold text-sm">Nog geen account? Registreren</button>
-        </div>
+            <div className="text-center space-y-3">
+              <button onClick={() => { setShowReset(true); setResetEmail(email); setError(""); setSuccess(""); }} className="text-gray-400 hover:text-gray-600 text-sm">Wachtwoord vergeten?</button>
+              <div><button onClick={onRegister} className="text-blue-600 hover:text-blue-700 font-semibold text-sm">Nog geen account? Registreren</button></div>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 className="text-xl font-bold text-gray-900 mb-2 text-center">Wachtwoord resetten</h2>
+            <p className="text-sm text-gray-500 text-center mb-6">Voer je email in en we sturen je een link om je wachtwoord te resetten.</p>
+
+            <div className="space-y-4 mb-6">
+              <input type="email" placeholder="Email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleResetPassword()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
+            </div>
+
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm flex items-center gap-2"><AlertCircle size={18} /> {error}</div>}
+
+            <button onClick={handleResetPassword} disabled={resetLoading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 mb-4 disabled:opacity-60 flex items-center justify-center gap-2">
+              {resetLoading ? <><Loader2 size={20} className="animate-spin" /> Versturen...</> : "Reset-link versturen"}
+            </button>
+
+            <div className="text-center">
+              <button onClick={() => { setShowReset(false); setError(""); }} className="text-gray-400 hover:text-gray-600 text-sm">Terug naar inloggen</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
