@@ -614,7 +614,7 @@
           <li data-i18n="plan3_f3">Custom integrations</li>
           <li data-i18n="plan3_f4">Dedicated support</li>
         </ul>
-        <a href="mailto:hello@reggy.io" class="btn-plan outline" data-i18n="plan_cta_contact">Contact us</a>
+        <a href="#contact" onclick="setTimeout(()=>{const s=document.getElementById('contact-subject');if(s)s.value='enterprise';},300)" class="btn-plan outline" data-i18n="plan_cta_contact">Contact us</a>
       </div>
     </div>
   </div>
@@ -664,33 +664,84 @@
     <div class="section-label" data-i18n="contact_label">Contact</div>
     <h2 class="section-title" data-i18n="contact_title">Get in touch</h2>
     <p class="section-desc" style="margin:0 auto" data-i18n="contact_desc">Questions, feedback, or partnership inquiries? We'd love to hear from you.</p>
-    <form class="contact-form" onsubmit="event.preventDefault();this.querySelector('.btn-submit').textContent='Sent! ✓';this.querySelector('.btn-submit').style.background='#059669'">
+    <form class="contact-form" id="contact-form" onsubmit="handleContactSubmit(event)">
       <div class="contact-row">
         <div>
           <label data-i18n="contact_name">Name</label>
-          <input type="text" placeholder="Your name" data-i18n="contact_ph_name" required>
+          <input type="text" id="contact-name" placeholder="Your name" data-i18n="contact_ph_name" required>
         </div>
         <div>
           <label data-i18n="contact_email">Email</label>
-          <input type="email" placeholder="you@company.com" data-i18n="contact_ph_email" required>
+          <input type="email" id="contact-email" placeholder="you@company.com" data-i18n="contact_ph_email" required>
+        </div>
+      </div>
+      <div class="contact-row">
+        <div>
+          <label data-i18n="contact_subject">Subject</label>
+          <select id="contact-subject">
+            <option value="general" data-i18n="contact_opt1">General question</option>
+            <option value="pricing" data-i18n="contact_opt2">Pricing & plans</option>
+            <option value="enterprise" data-i18n="contact_opt3">Enterprise inquiry</option>
+            <option value="partnership" data-i18n="contact_opt4">Partnership</option>
+            <option value="bug" data-i18n="contact_opt5">Bug report</option>
+          </select>
+        </div>
+        <div id="outlets-field" style="display:none">
+          <label data-i18n="contact_outlets">Number of outlets</label>
+          <input type="number" id="contact-outlets" placeholder="e.g. 10" min="1" max="999">
         </div>
       </div>
       <div>
-        <label data-i18n="contact_subject">Subject</label>
-        <select>
-          <option data-i18n="contact_opt1">General question</option>
-          <option data-i18n="contact_opt2">Pricing & plans</option>
-          <option data-i18n="contact_opt3">Enterprise inquiry</option>
-          <option data-i18n="contact_opt4">Partnership</option>
-          <option data-i18n="contact_opt5">Bug report</option>
-        </select>
-      </div>
-      <div>
         <label data-i18n="contact_message">Message</label>
-        <textarea placeholder="Tell us how we can help..." data-i18n="contact_ph_message" required></textarea>
+        <textarea id="contact-message" placeholder="Tell us how we can help..." data-i18n="contact_ph_message" required></textarea>
       </div>
-      <button type="submit" class="btn-submit" data-i18n="contact_send">Send message</button>
+      <button type="submit" class="btn-submit" id="contact-submit-btn" data-i18n="contact_send">Send message</button>
     </form>
+    <script>
+    // Show outlets field for enterprise/pricing subjects
+    document.getElementById('contact-subject').addEventListener('change', function() {
+      document.getElementById('outlets-field').style.display = (this.value === 'enterprise' || this.value === 'pricing') ? '' : 'none';
+    });
+
+    function handleContactSubmit(e) {
+      e.preventDefault();
+      const name = document.getElementById('contact-name').value;
+      const email = document.getElementById('contact-email').value;
+      const subject = document.getElementById('contact-subject');
+      const subjectText = subject.options[subject.selectedIndex].textContent;
+      const outlets = document.getElementById('contact-outlets').value;
+      const message = document.getElementById('contact-message').value;
+
+      const body = `Name: ${name}\nEmail: ${email}\nSubject: ${subjectText}${outlets ? '\nOutlets: ' + outlets : ''}\n\n${message}`;
+      const mailtoLink = `mailto:hello@reggy.io?subject=${encodeURIComponent('Reggy: ' + subjectText)}&body=${encodeURIComponent(body)}`;
+
+      // Open mailto as fallback
+      window.location.href = mailtoLink;
+
+      // Show success state
+      const btn = document.getElementById('contact-submit-btn');
+      btn.textContent = 'Opening email client...';
+      btn.style.background = '#059669';
+
+      // Also show a confirmation with option to copy
+      setTimeout(() => {
+        btn.innerHTML = '✓ Email client opened &mdash; <span style="text-decoration:underline;cursor:pointer" onclick="copyContactInfo()">or copy to clipboard</span>';
+      }, 1500);
+    }
+
+    function copyContactInfo() {
+      const name = document.getElementById('contact-name').value;
+      const email = document.getElementById('contact-email').value;
+      const subject = document.getElementById('contact-subject');
+      const subjectText = subject.options[subject.selectedIndex].textContent;
+      const outlets = document.getElementById('contact-outlets').value;
+      const message = document.getElementById('contact-message').value;
+      const text = `To: hello@reggy.io\nFrom: ${name} (${email})\nSubject: ${subjectText}${outlets ? '\nOutlets: ' + outlets : ''}\n\n${message}`;
+      navigator.clipboard.writeText(text).then(() => {
+        document.getElementById('contact-submit-btn').textContent = '✓ Copied to clipboard!';
+      });
+    }
+    </script>
   </div>
 </section>
 
@@ -765,6 +816,7 @@ const translations = {
     contact_label: "Contact", contact_title: "Get in touch", contact_desc: "Questions, feedback, or partnership inquiries? We'd love to hear from you.",
     contact_name: "Name", contact_email: "Email", contact_subject: "Subject", contact_message: "Message", contact_send: "Send message",
     contact_opt1: "General question", contact_opt2: "Pricing & plans", contact_opt3: "Enterprise inquiry", contact_opt4: "Partnership", contact_opt5: "Bug report",
+    contact_outlets: "Number of outlets",
     contact_ph_name: "Your name", contact_ph_email: "you@company.com", contact_ph_message: "Tell us how we can help...",
     prev_total: "Total", prev_in: "↓ In", prev_out: "↑ Out",
     prev_overview: "Overview", prev_balance: "Balance", prev_new: "New", prev_log: "Log",
@@ -821,6 +873,7 @@ const translations = {
     contact_label: "Contact", contact_title: "Neem contact op", contact_desc: "Vragen, feedback of samenwerkingsverzoeken? We horen graag van je.",
     contact_name: "Naam", contact_email: "E-mail", contact_subject: "Onderwerp", contact_message: "Bericht", contact_send: "Verstuur bericht",
     contact_opt1: "Algemene vraag", contact_opt2: "Prijzen & abonnementen", contact_opt3: "Enterprise aanvraag", contact_opt4: "Samenwerking", contact_opt5: "Bug melden",
+    contact_outlets: "Aantal outlets",
     contact_ph_name: "Je naam", contact_ph_email: "jij@bedrijf.com", contact_ph_message: "Vertel ons hoe we kunnen helpen...",
     prev_total: "Totaal", prev_in: "↓ In", prev_out: "↑ Uit",
     prev_overview: "Overzicht", prev_balance: "Saldo", prev_new: "Nieuw", prev_log: "Log",
