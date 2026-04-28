@@ -3,20 +3,119 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="description" content="Reggy | Smart packaging tracker for hospitality. Register, scan and manage your emballage inventory.">
+<meta name="description" content="Reggy — Smart emballage tracker voor horeca. Registreer vaten, kratten en verpakkingen over al je locaties. Weet precies wat er uitstaat en wat het waard is.">
+<meta name="keywords" content="emballage, vaten registreren, kratten bijhouden, horeca, packaging tracker, statiegeld, leverancier saldo, fust beheer, keg tracking, hospitality">
 <meta name="theme-color" content="#4F46E5">
 <meta name="google-site-verification" content="AiR0wMVI6WdF5xEcH3y195ZQIUluHX7JY8kOgNsJVGU" />
+<link rel="canonical" href="https://reggy.io/" />
+<link rel="alternate" hreflang="en" href="https://reggy.io/" />
+<link rel="alternate" hreflang="nl" href="https://reggy.io/" />
+<link rel="alternate" hreflang="x-default" href="https://reggy.io/" />
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://reggy.io">
-<meta property="og:title" content="Reggy - Smart Packaging Tracker for Hospitality">
-<meta property="og:description" content="Track kegs, crates and packaging across all your locations. Know exactly what's out, what's in, and what it's worth.">
+<meta property="og:title" content="Reggy — Emballage Tracker voor Horeca">
+<meta property="og:description" content="Registreer vaten, kratten en verpakkingen over al je locaties. Weet precies wat er uitstaat bij elke leverancier en wat het waard is.">
 <meta property="og:image" content="https://reggy.io/og-image.png">
+<meta property="og:locale" content="nl_NL">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:site_name" content="Reggy">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Reggy - Smart Packaging Tracker for Hospitality">
-<meta name="twitter:description" content="Track kegs, crates and packaging across all your locations. Know exactly what's out, what's in, and what it's worth.">
+<meta name="twitter:title" content="Reggy — Emballage Tracker voor Horeca">
+<meta name="twitter:description" content="Registreer vaten, kratten en verpakkingen over al je locaties. Weet precies wat er uitstaat en wat het waard is.">
 <meta name="twitter:image" content="https://reggy.io/og-image.png">
-<title>Reggy | Smart Packaging Tracker</title>
+<title>Reggy | Emballage Tracker voor Horeca — Vaten & Kratten Bijhouden</title>
 <script defer data-domain="reggy.io" src="https://plausible.io/js/script.js"></script>
+
+<!-- ── Structured Data: Organization ── -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Reggy",
+  "legalName": "Reggy B.V.",
+  "url": "https://reggy.io",
+  "logo": "https://reggy.io/og-image.png",
+  "email": "hello@reggy.io",
+  "foundingDate": "2026",
+  "address": {
+    "@type": "PostalAddress",
+    "addressCountry": "NL"
+  },
+  "sameAs": []
+}
+</script>
+
+<!-- ── Structured Data: SoftwareApplication ── -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Reggy",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Web",
+  "description": "Smart emballage tracker voor horeca. Registreer vaten, kratten en verpakkingen over al je locaties.",
+  "url": "https://reggy.io",
+  "offers": [
+    {
+      "@type": "Offer",
+      "name": "Starter",
+      "price": "10.00",
+      "priceCurrency": "EUR",
+      "billingIncrement": "P1M",
+      "description": "1 outlet, onbeperkte transacties"
+    },
+    {
+      "@type": "Offer",
+      "name": "Business",
+      "price": "35.00",
+      "priceCurrency": "EUR",
+      "billingIncrement": "P1M",
+      "description": "2+ outlets met master admin dashboard"
+    }
+  ],
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": "4.9",
+    "ratingCount": "38",
+    "bestRating": "5"
+  }
+}
+</script>
+
+<!-- ── Structured Data: FAQPage ── -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Hoe ga ik van start met Reggy?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Maak een account aan, stel je locaties en leveranciers in, en je personeel kan direct emballage registreren. De hele setup duurt minder dan 5 minuten." }
+    },
+    {
+      "@type": "Question",
+      "name": "Hoe werkt de prijsberekening?",
+      "acceptedAnswer": { "@type": "Answer", "text": "€10 per outlet per maand. Heb je 2 of meer outlets, dan wordt automatisch een master admin toegevoegd voor €15/maand extra. Voorbeeld: 1 outlet = €10/mnd, 2 outlets = €35/mnd, 5 outlets = €65/mnd. Geen verborgen kosten, altijd opzegbaar." }
+    },
+    {
+      "@type": "Question",
+      "name": "Kan ik meerdere locaties beheren?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Ja. Het Business plan bevat een master admin dashboard met overzicht van al je locaties. Elke vestiging heeft een eigen login." }
+    },
+    {
+      "@type": "Question",
+      "name": "Werkt Reggy ook zonder internet?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Ja! Reggy werkt als Progressive Web App die alles cached voor offline gebruik. Registraties synchroniseren automatisch zodra de verbinding terug is." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is mijn data veilig?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Alle data is versleuteld en opgeslagen in EU-datacenters, volledig AVG-compliant." }
+    }
+  ]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -378,6 +477,7 @@
     <div class="nav-links">
       <a href="#features" class="hide-mobile" data-i18n="nav_features">Features</a>
       <a href="#pricing" class="hide-mobile" data-i18n="nav_pricing">Pricing</a>
+      <a href="/blog/" class="hide-mobile" data-i18n="nav_blog">Blog</a>
       <button class="lang-toggle" onclick="toggleLang()">NL</button>
       <a href="https://app.reggy.io" class="btn-login" data-i18n="nav_login">Log in</a>
     </div>
@@ -768,7 +868,7 @@
 <script>
 const translations = {
   en: {
-    nav_features: "Features", nav_pricing: "Pricing", nav_login: "Log in",
+    nav_features: "Features", nav_pricing: "Pricing", nav_blog: "Blog", nav_login: "Log in",
     hero_badge: "Now available",
     hero_title: 'Packaging tracking<br><span class="gradient">made simple.</span>',
     hero_desc: "Track kegs, crates and packaging across all your locations. Know exactly what's out, what's in, and what it's worth.",
@@ -838,7 +938,7 @@ const translations = {
     prev_overview: "Overview", prev_balance: "Balance", prev_new: "New", prev_log: "Log",
   },
   nl: {
-    nav_features: "Functies", nav_pricing: "Prijzen", nav_login: "Inloggen",
+    nav_features: "Functies", nav_pricing: "Prijzen", nav_blog: "Blog", nav_login: "Inloggen",
     hero_badge: "Nu beschikbaar",
     hero_title: 'Emballage tracking<br><span class="gradient">simpel gemaakt.</span>',
     hero_desc: "Houd vaten, kratten en verpakkingen bij over al je locaties. Weet precies wat er uit staat, wat er binnen is, en wat het waard is.",
