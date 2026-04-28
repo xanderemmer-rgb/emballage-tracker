@@ -759,7 +759,7 @@
 <!-- ────────── FOOTER ────────── -->
 <footer>
   <div class="footer-inner">
-    <p>© 2026 Reggy. <span data-i18n="footer_rights">All rights reserved.</span> · <a href="mailto:hello@reggy.io">hello@reggy.io</a> · <a href="#" onclick="document.getElementById('privacy-modal').style.display='flex';return false" data-i18n="footer_privacy">Privacy Policy</a></p>
+    <p>© 2026 Reggy. <span data-i18n="footer_rights">All rights reserved.</span> · <a href="mailto:hello@reggy.io">hello@reggy.io</a> · <a href="#" onclick="document.getElementById('privacy-modal').style.display='flex';return false" data-i18n="footer_privacy">Privacy Policy</a> · <a href="#" onclick="document.getElementById('terms-modal').style.display='flex';return false" data-i18n="footer_terms">Terms of Service</a></p>
   </div>
 </footer>
 
@@ -798,7 +798,20 @@ const translations = {
     cta_title: "Stop losing money on<br>untracked packaging",
     cta_desc: "Join the growing number of hospitality businesses who track their emballage with Reggy. Set up in under 2 minutes.",
     cta_button: "Get started →",
-    footer_rights: "All rights reserved.", footer_privacy: "Privacy Policy",
+    footer_rights: "All rights reserved.", footer_privacy: "Privacy Policy", footer_terms: "Terms of Service",
+    terms_title: "Terms of Service", terms_updated_label: "Last updated:",
+    terms_intro: 'These Terms of Service ("Terms") govern your use of the Reggy platform ("Service"), operated by Reggy B.V., registered in the Netherlands ("we", "us", "Reggy"). By creating an account or using the Service, you agree to these Terms.',
+    terms_h1: "1. The Service", terms_s1: 'Reggy is a cloud-based packaging tracking platform for the hospitality industry. The Service allows you to register, track, and manage emballage (kegs, crates, packaging) across one or more business locations. We provide the Service "as is" and continuously work to improve it.',
+    terms_h2: "2. Account & Access", terms_s2: "You must provide accurate information when creating an account. You are responsible for keeping your login credentials secure. A master admin account can create and manage branch user accounts. You may not share accounts between different legal entities without a separate agreement.",
+    terms_h3: "3. Pricing & Payment", terms_s3: "Pricing is \u20ac10 per outlet per month. Accounts with 2 or more outlets include a mandatory master admin for \u20ac15/month additional. Prices are exclusive of VAT. We may adjust pricing with 30 days\u2019 notice. No refunds are provided for partial months of use.",
+    terms_h4: "4. Your Data", terms_s4: "You retain ownership of all data you enter into Reggy. We process your data solely to provide the Service, as described in our Privacy Policy. You can export your data at any time via CSV or PDF. Upon account deletion, your data will be permanently removed within 30 days.",
+    terms_h5: "5. Acceptable Use", terms_s5: "You agree not to: (a) use the Service for any unlawful purpose; (b) attempt to access other users\u2019 data; (c) interfere with the operation of the Service; (d) reverse-engineer or copy the Service; (e) resell access to the Service without written permission.",
+    terms_h6: "6. Availability & Support", terms_s6: "We aim for 99.9% uptime but do not guarantee uninterrupted access. Scheduled maintenance will be communicated in advance. Support is available via email at hello@reggy.io.",
+    terms_h7: "7. Cancellation", terms_s7: "You may cancel your subscription at any time. Cancellation takes effect at the end of the current billing period. After cancellation, you can still export your data for 30 days. We may suspend or terminate accounts that violate these Terms.",
+    terms_h8: "8. Liability", terms_s8: "To the maximum extent permitted by Dutch law, Reggy\u2019s total liability is limited to the amount you paid in the 12 months preceding the claim. We are not liable for indirect damages, loss of profit, or data loss caused by circumstances beyond our reasonable control.",
+    terms_h9: "9. Changes to Terms", terms_s9: "We may update these Terms from time to time. Material changes will be communicated via email or in-app notification at least 14 days before taking effect. Continued use of the Service after changes constitutes acceptance.",
+    terms_h10: "10. Governing Law", terms_s10: "These Terms are governed by Dutch law. Any disputes will be submitted to the competent court in the Netherlands. If any provision of these Terms is found unenforceable, the remaining provisions remain in full effect.",
+    terms_h11: "Contact", terms_s11: 'Questions about these Terms? Contact us at <a href="mailto:hello@reggy.io" style="color:#7c3aed">hello@reggy.io</a>.',
     suppliers_label: "Reggy works with all your suppliers, including",
     proof_s1: "Active outlets", proof_s2: "Transactions logged", proof_s3: "Packaging value tracked", proof_s4: "User rating",
     test1_quote: "We used to lose track of dozens of kegs every month. With Reggy, we know exactly what's out with each supplier. It paid for itself in the first week.",
@@ -855,7 +868,20 @@ const translations = {
     cta_title: "Stop met geld verliezen aan<br>ongeregistreerde emballage",
     cta_desc: "Sluit je aan bij het groeiende aantal horecabedrijven die hun emballage bijhouden met Reggy. Opgezet in minder dan 2 minuten.",
     cta_button: "Aan de slag →",
-    footer_rights: "Alle rechten voorbehouden.", footer_privacy: "Privacybeleid",
+    footer_rights: "Alle rechten voorbehouden.", footer_privacy: "Privacybeleid", footer_terms: "Algemene voorwaarden",
+    terms_title: "Algemene Voorwaarden", terms_updated_label: "Laatst bijgewerkt:",
+    terms_intro: 'Deze Algemene Voorwaarden ("Voorwaarden") zijn van toepassing op het gebruik van het Reggy-platform ("Dienst"), beheerd door Reggy B.V., gevestigd in Nederland ("wij", "ons", "Reggy"). Door een account aan te maken of de Dienst te gebruiken, ga je akkoord met deze Voorwaarden.',
+    terms_h1: "1. De Dienst", terms_s1: 'Reggy is een cloud-gebaseerd emballage-trackingplatform voor de horeca. De Dienst stelt je in staat om emballage (vaten, kratten, verpakkingen) te registreren, volgen en beheren over één of meerdere bedrijfslocaties. Wij leveren de Dienst "as is" en werken continu aan verbeteringen.',
+    terms_h2: "2. Account & Toegang", terms_s2: "Je moet correcte gegevens verstrekken bij het aanmaken van een account. Je bent verantwoordelijk voor het veilig houden van je inloggegevens. Een master admin-account kan filiaalgebruikers aanmaken en beheren. Je mag accounts niet delen tussen verschillende rechtspersonen zonder afzonderlijke overeenkomst.",
+    terms_h3: "3. Prijzen & Betaling", terms_s3: "De prijs bedraagt \u20ac10 per outlet per maand. Accounts met 2 of meer outlets bevatten een verplichte master admin voor \u20ac15/maand extra. Prijzen zijn exclusief btw. Wij kunnen prijzen aanpassen met 30 dagen opzegtermijn. Er worden geen restituties verleend voor onvolledige maanden.",
+    terms_h4: "4. Jouw Data", terms_s4: "Je behoudt eigendom van alle data die je invoert in Reggy. Wij verwerken je data uitsluitend om de Dienst te leveren, zoals beschreven in ons Privacybeleid. Je kunt je data op elk moment exporteren via CSV of PDF. Bij accountverwijdering wordt je data binnen 30 dagen permanent verwijderd.",
+    terms_h5: "5. Acceptabel Gebruik", terms_s5: "Je gaat ermee akkoord om: (a) de Dienst niet te gebruiken voor onwettige doeleinden; (b) niet te proberen data van andere gebruikers te benaderen; (c) de werking van de Dienst niet te verstoren; (d) de Dienst niet te reverse-engineeren of kopiëren; (e) toegang tot de Dienst niet door te verkopen zonder schriftelijke toestemming.",
+    terms_h6: "6. Beschikbaarheid & Support", terms_s6: "Wij streven naar 99,9% uptime maar garanderen geen ononderbroken toegang. Gepland onderhoud wordt vooraf gecommuniceerd. Support is beschikbaar via e-mail op hello@reggy.io.",
+    terms_h7: "7. Opzegging", terms_s7: "Je kunt je abonnement op elk moment opzeggen. Opzegging gaat in aan het einde van de lopende facturatieperiode. Na opzegging kun je je data nog 30 dagen exporteren. Wij kunnen accounts opschorten of beëindigen die deze Voorwaarden schenden.",
+    terms_h8: "8. Aansprakelijkheid", terms_s8: "Voor zover toegestaan onder Nederlands recht, is de totale aansprakelijkheid van Reggy beperkt tot het bedrag dat je hebt betaald in de 12 maanden voorafgaand aan de claim. Wij zijn niet aansprakelijk voor indirecte schade, winstderving of dataverlies veroorzaakt door omstandigheden buiten onze redelijke controle.",
+    terms_h9: "9. Wijzigingen", terms_s9: "Wij kunnen deze Voorwaarden van tijd tot tijd bijwerken. Wezenlijke wijzigingen worden minimaal 14 dagen van tevoren gecommuniceerd via e-mail of in-app melding. Voortgezet gebruik van de Dienst na wijzigingen geldt als acceptatie.",
+    terms_h10: "10. Toepasselijk Recht", terms_s10: "Op deze Voorwaarden is Nederlands recht van toepassing. Geschillen worden voorgelegd aan de bevoegde rechtbank in Nederland. Indien enige bepaling van deze Voorwaarden onuitvoerbaar wordt bevonden, blijven de overige bepalingen onverminderd van kracht.",
+    terms_h11: "Contact", terms_s11: 'Vragen over deze Voorwaarden? Neem contact met ons op via <a href="mailto:hello@reggy.io" style="color:#7c3aed">hello@reggy.io</a>.',
     suppliers_label: "Reggy werkt met al je leveranciers, waaronder",
     proof_s1: "Actieve locaties", proof_s2: "Transacties gelogd", proof_s3: "Emballagewaarde bijgehouden", proof_s4: "Gebruikersbeoordeling",
     test1_quote: "We raakten elke maand tientallen vaten kwijt. Met Reggy weten we precies wat er uitstaat bij elke leverancier. Het verdiende zichzelf terug in de eerste week.",
@@ -929,6 +955,52 @@ function toggleLang() {
       <p style="margin-bottom:16px">You can request access to, correction, or deletion of your personal data at any time by emailing <a href="mailto:hello@reggy.io" style="color:#7c3aed">hello@reggy.io</a>.</p>
       <p><strong>Contact</strong></p>
       <p>Questions about this policy? Reach us at <a href="mailto:hello@reggy.io" style="color:#7c3aed">hello@reggy.io</a>.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ────────── TERMS OF SERVICE MODAL ────────── -->
+<div id="terms-modal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.5);align-items:center;justify-content:center;padding:24px">
+  <div style="background:#fff;border-radius:20px;max-width:720px;width:100%;max-height:85vh;overflow-y:auto;padding:40px;position:relative">
+    <button onclick="document.getElementById('terms-modal').style.display='none'" style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:24px;cursor:pointer;color:#71717a">&times;</button>
+    <h2 style="font-size:24px;font-weight:800;margin-bottom:20px;color:#18181b" data-i18n="terms_title">Terms of Service</h2>
+    <div style="font-size:14px;line-height:1.8;color:#52525b" id="terms-content">
+      <p style="margin-bottom:16px"><strong data-i18n="terms_updated_label">Last updated:</strong> April 2026</p>
+
+      <p style="margin-bottom:16px" data-i18n="terms_intro">These Terms of Service ("Terms") govern your use of the Reggy platform ("Service"), operated by Reggy B.V., registered in the Netherlands ("we", "us", "Reggy"). By creating an account or using the Service, you agree to these Terms.</p>
+
+      <p style="margin-bottom:8px"><strong data-i18n="terms_h1">1. The Service</strong></p>
+      <p style="margin-bottom:16px" data-i18n="terms_s1">Reggy is a cloud-based packaging tracking platform for the hospitality industry. The Service allows you to register, track, and manage emballage (kegs, crates, packaging) across one or more business locations. We provide the Service "as is" and continuously work to improve it.</p>
+
+      <p style="margin-bottom:8px"><strong data-i18n="terms_h2">2. Account & Access</strong></p>
+      <p style="margin-bottom:16px" data-i18n="terms_s2">You must provide accurate information when creating an account. You are responsible for keeping your login credentials secure. A master admin account can create and manage branch user accounts. You may not share accounts between different legal entities without a separate agreement.</p>
+
+      <p style="margin-bottom:8px"><strong data-i18n="terms_h3">3. Pricing & Payment</strong></p>
+      <p style="margin-bottom:16px" data-i18n="terms_s3">Pricing is €10 per outlet per month. Accounts with 2 or more outlets include a mandatory master admin for €15/month additional. Prices are exclusive of VAT. We may adjust pricing with 30 days' notice. No refunds are provided for partial months of use.</p>
+
+      <p style="margin-bottom:8px"><strong data-i18n="terms_h4">4. Your Data</strong></p>
+      <p style="margin-bottom:16px" data-i18n="terms_s4">You retain ownership of all data you enter into Reggy. We process your data solely to provide the Service, as described in our Privacy Policy. You can export your data at any time via CSV or PDF. Upon account deletion, your data will be permanently removed within 30 days.</p>
+
+      <p style="margin-bottom:8px"><strong data-i18n="terms_h5">5. Acceptable Use</strong></p>
+      <p style="margin-bottom:16px" data-i18n="terms_s5">You agree not to: (a) use the Service for any unlawful purpose; (b) attempt to access other users' data; (c) interfere with the operation of the Service; (d) reverse-engineer or copy the Service; (e) resell access to the Service without written permission.</p>
+
+      <p style="margin-bottom:8px"><strong data-i18n="terms_h6">6. Availability & Support</strong></p>
+      <p style="margin-bottom:16px" data-i18n="terms_s6">We aim for 99.9% uptime but do not guarantee uninterrupted access. Scheduled maintenance will be communicated in advance. Support is available via email at hello@reggy.io. Response times may vary based on your plan.</p>
+
+      <p style="margin-bottom:8px"><strong data-i18n="terms_h7">7. Cancellation</strong></p>
+      <p style="margin-bottom:16px" data-i18n="terms_s7">You may cancel your subscription at any time. Cancellation takes effect at the end of the current billing period. After cancellation, you can still export your data for 30 days. We may suspend or terminate accounts that violate these Terms.</p>
+
+      <p style="margin-bottom:8px"><strong data-i18n="terms_h8">8. Liability</strong></p>
+      <p style="margin-bottom:16px" data-i18n="terms_s8">To the maximum extent permitted by Dutch law, Reggy's total liability is limited to the amount you paid in the 12 months preceding the claim. We are not liable for indirect damages, loss of profit, or data loss caused by circumstances beyond our reasonable control.</p>
+
+      <p style="margin-bottom:8px"><strong data-i18n="terms_h9">9. Changes to Terms</strong></p>
+      <p style="margin-bottom:16px" data-i18n="terms_s9">We may update these Terms from time to time. Material changes will be communicated via email or in-app notification at least 14 days before taking effect. Continued use of the Service after changes constitutes acceptance.</p>
+
+      <p style="margin-bottom:8px"><strong data-i18n="terms_h10">10. Governing Law</strong></p>
+      <p style="margin-bottom:16px" data-i18n="terms_s10">These Terms are governed by Dutch law. Any disputes will be submitted to the competent court in the Netherlands. If any provision of these Terms is found unenforceable, the remaining provisions remain in full effect.</p>
+
+      <p style="margin-bottom:8px"><strong data-i18n="terms_h11">Contact</strong></p>
+      <p data-i18n="terms_s11">Questions about these Terms? Contact us at <a href="mailto:hello@reggy.io" style="color:#7c3aed">hello@reggy.io</a>.</p>
     </div>
   </div>
 </div>
