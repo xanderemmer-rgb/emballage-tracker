@@ -806,17 +806,57 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
   };
 
   const handleLoginAs = async (acc) => {
-    const master = acc.users.find(u => u.role === "master");
-    if (!master) { setToast({ type: "error", message: "Geen master user gevonden" }); return; }
+    setImpersonateLoading(true);
     try {
-      const { data: profileData, error } = await supabase.from("profiles").select("id").eq("account_id", acc.id).eq("role", "master").single();
-      if (error) throw error;
-      localStorage.setItem("reggy_impersonate", JSON.stringify({ accountId: acc.id, accountName: acc.companyName }));
-      setToast({ type: "success", message: `Bekijk-modus voor ${acc.companyName}` });
-    } catch {
-      setToast({ type: "info", message: `Login als ${acc.companyName}: gebruik het master-account in incognito` });
+      // Load full account data just like a master user would see
+      const [accountRes, profilesRes, branchesRes, transactionsRes, emballageRes, suppliersRes] = await Promise.all([
+        supabase.from("accounts").select("*").eq("id", acc.id).single(),
+        supabase.from("profiles").select("*").eq("account_id", acc.id).order("created_at"),
+        supabase.from("branches").select("*").eq("account_id", acc.id).order("name"),
+        supabase.from("transactions").select("*").eq("account_id", acc.id).order("created_at", { ascending: false }),
+        supabase.from("emballage_types").select("*").eq("account_id", acc.id).order("name"),
+        supabase.from("suppliers").select("*").eq("account_id", acc.id).order("name"),
+      ]);
+      if (accountRes.error) throw accountRes.error;
+      const acctData = accountRes.data;
+      const impersonated = {
+        id: acctData.id, companyName: acctData.company_name, email: acctData.email, logoUrl: acctData.logo_url || null,
+        plan: { outlets: acctData.plan_outlets, startDate: acctData.plan_start_date, status: acctData.plan_status, nextBilling: acctData.plan_next_billing },
+        branches: (branchesRes.data || []).map(b => ({ id: b.id, name: b.name, logoUrl: b.logo_url || null, extraUsers: b.extra_users || 0 })),
+        users: (profilesRes.data || []).map(p => ({ id: p.id, name: p.display_name, role: p.role, branch: p.branch, branchId: p.branch_id || null })),
+        emballageTypes: (emballageRes.data || []).map(e => ({ id: e.id, name: e.name, value: e.value, supplierName: e.supplier_name || null })),
+        suppliers: (suppliersRes.data || []).map(s => s.name),
+        _supplierRecords: suppliersRes.data || [],
+        transactions: (transactionsRes.data || []).map(t => ({ id: t.id, date: t.date, type: t.type, supplier: t.supplier, emballage: t.emballage, qty: t.qty, note: t.note || "", attachment: t.attachment, branch: t.branch || "" })),
+      };
+      setImpersonateAccount(impersonated);
+      setSelectedAccount(null);
+      setToast({ type: "success", message: `Bekijk-modus: ${acc.companyName}` });
+    } catch (err) {
+      setToast({ type: "error", message: "Kon account niet laden: " + err.message });
+    } finally {
+      setImpersonateLoading(false);
     }
   };
+
+  // ── Contact requests ──
+  const [contactRequests, setContactRequests] = useState([]);
+  const [contactsLoaded, setContactsLoaded] = useState(false);
+  useEffect(() => {
+    if (activeTab === "contacts" && !contactsLoaded) {
+      (async () => {
+        try {
+          const { data } = await supabase.from("contact_requests").select("*").order("created_at", { ascending: false }).limit(100);
+          setContactRequests(data || []);
+        } catch {}
+        setContactsLoaded(true);
+      })();
+    }
+  }, [activeTab, contactsLoaded]);
+
+  // ── Impersonation state ──
+  const [impersonateAccount, setImpersonateAccount] = useState(null);
+  const [impersonateLoading, setImpersonateLoading] = useState(false);
 
   // ── Sidebar nav items ──
   const navItems = [
@@ -825,6 +865,7 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
     { id: "revenue", label: "Revenue", icon: DollarSign },
     { id: "catalog", label: "Emballage", icon: Package },
     { id: "activity", label: "Activiteit", icon: Activity },
+    { id: "contacts", label: "Berichten", icon: Inbox },
     { id: "settings", label: "Instellingen", icon: Settings },
   ];
 
@@ -1181,6 +1222,37 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
           </div>
         )}
 
+        {/* ═══════════════ CONTACTS TAB ═══════════════ */}
+        {activeTab === "contacts" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between"><h3 className="text-lg font-bold text-gray-900">Contactverzoeken</h3><button onClick={() => { setContactsLoaded(false); setContactRequests([]); }} className="text-xs text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1"><RefreshCw size={12} /> Vernieuwen</button></div>
+            {!contactsLoaded ? (
+              <div className="bg-white rounded-xl p-8 text-center border border-gray-100"><Loader2 size={24} className="animate-spin mx-auto text-purple-400 mb-2" /><p className="text-sm text-gray-400">Laden...</p></div>
+            ) : contactRequests.length === 0 ? (
+              <div className="bg-white rounded-xl p-8 text-center border border-gray-100"><Inbox size={24} className="mx-auto text-gray-300 mb-2" /><p className="text-sm text-gray-400">Nog geen contactverzoeken</p><p className="text-xs text-gray-300 mt-1">Berichten van het contactformulier op reggy.io verschijnen hier</p></div>
+            ) : (
+              <div className="space-y-3">
+                {contactRequests.map(cr => (
+                  <div key={cr.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{cr.name}</p>
+                        <p className="text-xs text-gray-400">{cr.email}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${cr.subject === "enterprise" ? "bg-purple-100 text-purple-700" : cr.subject === "pricing" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-600"}`}>{cr.subject || "general"}</span>
+                        <p className="text-[10px] text-gray-400 mt-1">{cr.created_at ? new Date(cr.created_at).toLocaleString("nl-NL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</p>
+                      </div>
+                    </div>
+                    {cr.outlets && <p className="text-xs text-purple-600 font-medium mb-1">{cr.outlets} outlets</p>}
+                    <p className="text-sm text-gray-600 leading-relaxed">{cr.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ═══════════════ SETTINGS TAB ═══════════════ */}
         {activeTab === "settings" && (
           <div className="space-y-6">
@@ -1209,6 +1281,19 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
                 <div className="bg-gray-50 rounded-xl p-4"><p className="text-xs text-gray-400 mb-1">Master admin toeslag</p><p className="text-lg font-bold text-gray-900">€{PRICE_MASTER}/mo</p><p className="text-[10px] text-gray-400">Vanaf {MASTER_REQUIRED_FROM} outlets</p></div>
               </div>
               <p className="text-xs text-gray-400 mt-3">Pricing is geconfigureerd in de code (PRICE_OUTLET, PRICE_MASTER). Wijzig deze in App.jsx.</p>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════ IMPERSONATION VIEW ═══════════════ */}
+        {impersonateAccount && (
+          <div className="fixed inset-0 z-50 bg-gray-50">
+            <div className="sticky top-0 z-10 bg-orange-500 text-white px-4 py-2 flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2"><Eye size={16} /> <span className="font-semibold">Bekijk-modus:</span> {impersonateAccount.companyName}</div>
+              <button onClick={() => setImpersonateAccount(null)} className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg font-medium text-xs flex items-center gap-1"><X size={14} /> Sluiten</button>
+            </div>
+            <div className="overflow-y-auto" style={{ height: "calc(100vh - 40px)" }}>
+              <MasterApp account={impersonateAccount} user={{ id: "sa-impersonate", name: "Super Admin", role: "master", branch: null }} onLogout={() => setImpersonateAccount(null)} setAccount={(updated) => setImpersonateAccount(updated)} />
             </div>
           </div>
         )}
