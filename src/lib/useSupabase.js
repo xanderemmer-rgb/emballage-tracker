@@ -245,6 +245,7 @@ export function useSupabase() {
   // ─── TRANSACTION CRUD ─────────────────────────────────────────────────────
   const addTransactions = async (transactionsData) => {
     const items = Array.isArray(transactionsData) ? transactionsData : [transactionsData];
+    const userId = session?.user?.id || null;
     const inserts = items.map(t => ({
       account_id: account.id,
       date: t.date,
@@ -255,6 +256,7 @@ export function useSupabase() {
       note: t.note || null,
       attachment: t.attachment || null,
       branch: t.branch || null,
+      user_id: userId,
     }));
 
     const { data, error } = await supabase

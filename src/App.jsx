@@ -586,7 +586,7 @@ function RegisterFlow({ accounts, setAccounts, onDone }) {
 }
 
 // ─── SUPER ADMIN PANEL ────────────────────────────────────────────────────────
-function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
+function SuperAdminPanel({ accounts, setAccounts, onLogout, userName = "Admin" }) {
   const [newForm, setNewForm] = useState(false);
   const [newAccount, setNewAccount] = useState(null);
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -923,7 +923,7 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout }) {
           {/* ── Welkomstbanner ── */}
           {activeTab === "dashboard" && (
             <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Welkom terug, Xander</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Welkom terug, {userName}</h2>
               <p className="text-sm text-gray-400">{new Date().toLocaleDateString("nl-NL", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
             </div>
           )}
@@ -3952,7 +3952,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
       addToQueue(items);
       // Add to local state immediately so user sees them
       const localTrans = items.map((t, i) => ({
-        id: `offline-${Date.now()}-${i}`,
+        id: `offline-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 8)}`,
         date: t.date,
         type: t.type,
         supplier: t.supplier,
@@ -4095,17 +4095,28 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
       {exportModal && <ExportModal account={account} onClose={() => setExportModal(false)} />}
       {attViewer && <AttViewer att={attViewer} onClose={() => setAttViewer(null)} />}
       {editingTransaction && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} onClose={() => setEditingTransaction(null)} onImport={handleSaveTransaction} isEdit={true} initialData={editingTransaction} />}
-      {deleteConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full">
-            <p className="text-gray-900 font-semibold mb-6">Weet je zeker dat je deze transactie wilt verwijderen?</p>
-            <div className="flex gap-3">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-all duration-200">Annuleren</button>
-              <button onClick={() => handleDeleteTransaction(deleteConfirm)} className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition-all duration-200">Verwijderen</button>
+      {deleteConfirm && (() => {
+        const t = account.transactions.find(tr => tr.id === deleteConfirm);
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 shadow-xl max-w-sm w-full">
+              <p className="text-gray-900 font-bold text-lg mb-3">Transactie verwijderen?</p>
+              {t && (
+                <div className="bg-red-50 rounded-xl p-3 mb-4 text-sm space-y-1">
+                  <p className="text-gray-700"><span className="font-semibold">{t.type === "IN" ? "↓ Inkomend" : "↑ Uitgaand"}</span> — {t.qty}× {t.emballage}</p>
+                  <p className="text-gray-500">Leverancier: {t.supplier}</p>
+                  <p className="text-gray-500">Datum: {t.date}{t.branch ? ` • ${t.branch}` : ""}</p>
+                </div>
+              )}
+              <p className="text-sm text-gray-400 mb-4">Dit kan niet ongedaan worden gemaakt.</p>
+              <div className="flex gap-3">
+                <button onClick={() => setDeleteConfirm(null)} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50 transition-all duration-200">Annuleren</button>
+                <button onClick={() => handleDeleteTransaction(deleteConfirm)} className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition-all duration-200">Verwijderen</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Header */}
       <div className="bg-white border-b border-gray-100 sticky top-0 z-30">
@@ -4627,7 +4638,7 @@ function App() {
   }
 
   if (screen === "superadmin" && currentUser?.role === "superadmin") {
-    return <SuperAdminPanel accounts={accounts} setAccounts={() => {}} onLogout={handleLogout} />;
+    return <SuperAdminPanel accounts={accounts} setAccounts={() => {}} onLogout={handleLogout} userName={profile?.display_name || "Admin"} />;
   }
 
   if (!account || !currentUser) {

@@ -805,9 +805,6 @@
       document.getElementById('outlets-field').style.display = (this.value === 'enterprise' || this.value === 'pricing') ? '' : 'none';
     });
 
-    const SUPABASE_URL = 'https://qxtgzcvhlsewdhhjqilh.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF4dGd6Y3ZobHNld2RoaGpxaWxoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NzA0MzEsImV4cCI6MjA5MTA0NjQzMX0.B9oNrPfX4l-m4NtCMxgPO0mzIR30o6pxTiTNHgyf4CU';
-
     async function handleContactSubmit(e) {
       e.preventDefault();
       const name = document.getElementById('contact-name').value;
@@ -821,10 +818,10 @@
       btn.disabled = true;
 
       try {
-        // Save to Supabase
-        const res = await fetch(SUPABASE_URL + '/rest/v1/contact_requests', {
+        // Save via serverless function (key is server-side)
+        const res = await fetch('/api/contact', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, email, subject, outlets: outlets ? parseInt(outlets) : null, message })
         });
         if (!res.ok) throw new Error('Failed');
@@ -834,7 +831,7 @@
         document.getElementById('contact-form').reset();
         document.getElementById('outlets-field').style.display = 'none';
       } catch {
-        // Fallback to mailto if Supabase fails
+        // Fallback to mailto if serverless function fails
         const subjectText = document.getElementById('contact-subject').options[document.getElementById('contact-subject').selectedIndex].textContent;
         const body = `Name: ${name}\nEmail: ${email}\nSubject: ${subjectText}${outlets ? '\nOutlets: ' + outlets : ''}\n\n${message}`;
         window.location.href = `mailto:hello@reggy.io?subject=${encodeURIComponent('Reggy: ' + subjectText)}&body=${encodeURIComponent(body)}`;
