@@ -9,7 +9,7 @@ import {
   Activity, Eye, AlertTriangle, ChevronDown, ChevronUp, Menu, XCircle,
   DollarSign, Hash, Percent, Clock, TrendingDown, MoreHorizontal,
   Upload, Image, Save, Moon, Sun, WifiOff, Wifi,
-  RefreshCw, Filter, ExternalLink, Copy, ArrowRight
+  RefreshCw, Filter, ExternalLink, Copy, ArrowRight, EyeOff, ChevronLeft, Rocket
 } from "lucide-react";
 import { useSupabase, setSkipProfileLoad } from "./lib/useSupabase";
 import { supabase } from "./lib/supabase";
@@ -3910,6 +3910,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [dark, toggleDark] = useDarkMode();
+  const [showSuccess, setShowSuccess] = useState(false);
   const { isOnline, queue, addToQueue, clearQueue } = useOfflineQueue();
 
   const branchTransactions = account.transactions.filter(t => t.branch === user.branch);
@@ -3986,6 +3987,8 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
       const newTrans = data.map(t => ({ id: t.id, date: t.date, type: t.type, supplier: t.supplier, emballage: t.emballage, qty: t.qty, note: t.note || "", attachment: t.attachment, branch: t.branch || "", userId: t.user_id || null, createdAt: t.created_at || null }));
       setAccount({ ...account, transactions: [...newTrans, ...account.transactions] });
       setScanModal(false);
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 2000);
       setToast({ type: "success", message: items.length > 1 ? `${items.length} transacties geregistreerd!` : "Transactie geregistreerd!" });
     } catch (err) {
       console.error("Error saving transaction:", err);
@@ -4089,6 +4092,17 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
     <div className="min-h-screen bg-gray-50 pb-24">
       {!isOnline && <OfflineBanner queueCount={queue.length} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      {/* Success animation overlay */}
+      {showSuccess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="bg-white/95 backdrop-blur rounded-3xl p-8 shadow-2xl animate-bounce-in text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Check size={32} className="text-green-600" />
+            </div>
+            <p className="text-lg font-bold text-gray-900">Geregistreerd!</p>
+          </div>
+        </div>
+      )}
       {showOnboarding && <OnboardingOverlay onDone={() => setShowOnboarding(false)} />}
       {barcodeScanner && <BarcodeScannerModal onScan={(barcode) => { setBarcodeScanner(false); setScanModal(true); }} onClose={() => setBarcodeScanner(false)} />}
       {scanModal && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} onClose={() => setScanModal(false)} onImport={handleImportTransaction} />}
@@ -4167,6 +4181,24 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
                 </div>
               );
             })()}
+
+            {/* Desktop: prominent register button */}
+            <button onClick={() => setScanModal(true)} className="hidden md:flex w-full bg-purple-600 text-white py-3.5 rounded-2xl font-bold hover:bg-purple-700 transition-all duration-200 items-center justify-center gap-2 shadow-lg shadow-purple-200 text-sm"><Plus size={20} /> Nieuwe registratie</button>
+
+            {/* Empty state welcome for new accounts */}
+            {branchTransactions.length === 0 && (
+              <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-6 border border-purple-100 text-center">
+                <Rocket size={32} className="mx-auto text-purple-400 mb-3" />
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Welkom bij Reggy!</h3>
+                <p className="text-sm text-gray-500 mb-4">Je account is klaar. Begin met je eerste emballage-registratie in 3 stappen:</p>
+                <div className="space-y-2 text-left max-w-xs mx-auto mb-5">
+                  <div className="flex items-center gap-3"><div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold shrink-0">1</div><span className="text-sm text-gray-700">Druk op de <strong>+ knop</strong> hieronder</span></div>
+                  <div className="flex items-center gap-3"><div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold shrink-0">2</div><span className="text-sm text-gray-700">Selecteer de <strong>leverancier</strong></span></div>
+                  <div className="flex items-center gap-3"><div className="w-6 h-6 bg-purple-600 text-white rounded-full flex items-center justify-center text-xs font-bold shrink-0">3</div><span className="text-sm text-gray-700">Vul de <strong>aantallen</strong> in en bevestig</span></div>
+                </div>
+                <button onClick={() => setScanModal(true)} className="bg-purple-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-purple-700 transition-all text-sm inline-flex items-center gap-2"><Plus size={16} /> Eerste registratie</button>
+              </div>
+            )}
 
             {/* Stats row */}
             <div className="grid grid-cols-3 md:grid-cols-3 gap-2 md:gap-3">
@@ -4436,6 +4468,7 @@ function setApiKey(key) {
 function LoginPage({ onLogin, onRegister }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -4480,29 +4513,45 @@ function LoginPage({ onLogin, onRegister }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-400 to-purple-500 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md lg:max-w-2xl xl:max-w-4xl w-full p-8">
-        <div className="flex items-center justify-center mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-500 to-purple-400 flex items-center justify-center p-4">
+      {/* Back to reggy.io */}
+      <a href="https://reggy.io" className="fixed top-4 left-4 text-white/70 hover:text-white text-sm font-medium flex items-center gap-1.5 transition-all"><ChevronLeft size={16} /> reggy.io</a>
+
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+        <div className="flex items-center justify-center mb-3">
           <BarcodeLogo size="lg" />
         </div>
+        <p className="text-center text-sm text-gray-400 mb-8">Emballage bijhouden voor de horeca</p>
 
         {!showReset ? (
           <>
             <div className="space-y-4 mb-6">
-              <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-              <input type="password" placeholder="Wachtwoord" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+              <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all" />
+              <div className="relative">
+                <input type={showPassword ? "text" : "password"} placeholder="Wachtwoord" value={password} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleLogin()} className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition-all" tabIndex={-1}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
+              </div>
             </div>
 
-            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm flex items-center gap-2"><AlertCircle size={18} /> {error}</div>}
-            {success && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-4 text-sm flex items-center gap-2"><CheckCircle size={18} /> {success}</div>}
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-4 text-sm flex items-center gap-2"><AlertCircle size={18} /> {error}</div>}
+            {success && <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl mb-4 text-sm flex items-center gap-2"><CheckCircle size={18} /> {success}</div>}
 
-            <button onClick={handleLogin} disabled={isLoading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 mb-4 disabled:opacity-60 flex items-center justify-center gap-2">
+            <button onClick={handleLogin} disabled={isLoading} className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 transition-all duration-200 mb-4 disabled:opacity-60 flex items-center justify-center gap-2 shadow-lg shadow-purple-200">
               {isLoading ? <><Loader2 size={20} className="animate-spin" /> Inloggen...</> : "Inloggen"}
             </button>
 
             <div className="text-center space-y-3">
-              <button onClick={() => { setShowReset(true); setResetEmail(email); setError(""); setSuccess(""); }} className="text-gray-400 hover:text-gray-600 text-sm">Wachtwoord vergeten?</button>
-              <div><button onClick={onRegister} className="text-blue-600 hover:text-blue-700 font-semibold text-sm">Nog geen account? Registreren</button></div>
+              <button onClick={() => { setShowReset(true); setResetEmail(email); setError(""); setSuccess(""); }} className="text-gray-400 hover:text-gray-600 text-sm transition-all">Wachtwoord vergeten?</button>
+              <div><button onClick={onRegister} className="text-purple-600 hover:text-purple-700 font-semibold text-sm transition-all">Nog geen account? Registreren</button></div>
+            </div>
+
+            {/* Social proof */}
+            <div className="mt-8 pt-6 border-t border-gray-100 flex items-center justify-center gap-6 text-gray-300">
+              <div className="text-center"><p className="text-lg font-bold text-gray-700">38+</p><p className="text-[10px] uppercase tracking-wide">Outlets</p></div>
+              <div className="w-px h-8 bg-gray-200" />
+              <div className="text-center"><p className="text-lg font-bold text-gray-700">1.2K+</p><p className="text-[10px] uppercase tracking-wide">Registraties</p></div>
+              <div className="w-px h-8 bg-gray-200" />
+              <div className="text-center"><p className="text-lg font-bold text-gray-700">4.9/5</p><p className="text-[10px] uppercase tracking-wide">Rating</p></div>
             </div>
           </>
         ) : (
@@ -4511,12 +4560,12 @@ function LoginPage({ onLogin, onRegister }) {
             <p className="text-sm text-gray-500 text-center mb-6">Voer je email in en we sturen je een link om je wachtwoord te resetten.</p>
 
             <div className="space-y-4 mb-6">
-              <input type="email" placeholder="Email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleResetPassword()} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
+              <input type="email" placeholder="Email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleResetPassword()} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" autoFocus />
             </div>
 
-            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 text-sm flex items-center gap-2"><AlertCircle size={18} /> {error}</div>}
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-4 text-sm flex items-center gap-2"><AlertCircle size={18} /> {error}</div>}
 
-            <button onClick={handleResetPassword} disabled={resetLoading} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200 mb-4 disabled:opacity-60 flex items-center justify-center gap-2">
+            <button onClick={handleResetPassword} disabled={resetLoading} className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 transition-all duration-200 mb-4 disabled:opacity-60 flex items-center justify-center gap-2">
               {resetLoading ? <><Loader2 size={20} className="animate-spin" /> Versturen...</> : "Reset-link versturen"}
             </button>
 
