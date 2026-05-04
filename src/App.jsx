@@ -315,12 +315,14 @@ function shouldShowOnboarding() {
 }
 
 // ─── BARCODE SCANNER ──────────────────────────────────────────────────────
-function BarcodeScannerModal({ onScan, onClose }) {
+function BarcodeScannerModal({ onScan, onClose, emballageTypes = [] }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const [error, setError] = useState(null);
-  const [scanning, setScanning] = useState(true);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [result, setResult] = useState(null);
+  const [capturedImage, setCapturedImage] = useState(null);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -331,7 +333,6 @@ function BarcodeScannerModal({ onScan, onClose }) {
 
   useEffect(() => {
     let mounted = true;
-
     async function startCamera() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -339,78 +340,146 @@ function BarcodeScannerModal({ onScan, onClose }) {
         });
         if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-        }
+        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
       } catch (err) {
         if (mounted) setError("Camera niet beschikbaar. Controleer je browserinstellingen.");
       }
     }
-
     startCamera();
     return () => { mounted = false; stopCamera(); };
   }, [stopCamera]);
 
-  const handleClose = () => {
-    stopCamera();
-    onClose();
+  const handleClose = () => { stopCamera(); onClose(); };
+  const handleManualInput = () => { stopCamera(); onScan(null); };
+
+  const captureAndAnalyze = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    const imageData = canvas.toDataURL("image/jpeg", 0.7);
+    setCapturedImage(imageData);
+    setAnalyzing(true);
+    setResult(null);
+
+    try {
+      const res = await fetch("/api/recognize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: imageData, knownTypes: emballageTypes.map(e => ({ name: e.name, value: e.value })) }),
+      });
+      if (!res.ok) throw new Error("Herkenning mislukt");
+      const data = await res.json();
+      setResult(data);
+    } catch (err) {
+      setResult({ identified: false, description: err.message || "Er ging iets mis" });
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
-  const handleManualInput = () => {
+  const handleUseResult = () => {
     stopCamera();
-    onScan(null); // null means: open registration without barcode
+    onScan(result); // Pass recognized item to registration
+  };
+
+  const handleRetry = () => {
+    setCapturedImage(null);
+    setResult(null);
   };
 
   return (
     <div className="fixed inset-0 bg-black z-[60] flex flex-col">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-black/80">
-        <h3 className="text-white font-semibold flex items-center gap-2"><Camera size={20} /> Scanner</h3>
+        <h3 className="text-white font-semibold flex items-center gap-2"><Camera size={20} /> Emballage Scanner</h3>
         <button onClick={handleClose} className="text-white p-2"><X size={24} /></button>
       </div>
 
-      {/* Camera view */}
       <div className="flex-1 relative overflow-hidden">
         {error ? (
           <div className="flex-1 flex items-center justify-center p-8">
             <div className="text-center">
               <AlertCircle size={48} className="text-red-400 mx-auto mb-4" />
               <p className="text-white mb-2">{error}</p>
-              <button onClick={handleManualInput} className="mt-4 px-6 py-3 bg-purple-600 text-white rounded-xl font-semibold">
-                Handmatig invoeren
-              </button>
+              <button onClick={handleManualInput} className="mt-4 px-6 py-3 bg-purple-600 text-white rounded-xl font-semibold">Handmatig invoeren</button>
             </div>
+          </div>
+        ) : capturedImage ? (
+          /* Show captured image + result */
+          <div className="w-full h-full flex flex-col">
+            <img src={capturedImage} alt="Captured" className="flex-1 object-cover" />
+            {analyzing && (
+              <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                <div className="text-center text-white">
+                  <Loader2 size={40} className="animate-spin mx-auto mb-3" />
+                  <p className="font-semibold">Emballage herkennen...</p>
+                  <p className="text-sm text-white/60 mt-1">AI analyseert je foto</p>
+                </div>
+              </div>
+            )}
+            {result && (
+              <div className="absolute bottom-0 left-0 right-0 bg-black/90 backdrop-blur p-5 rounded-t-2xl">
+                {result.identified ? (
+                  <>
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle size={20} className="text-green-400" />
+                      <span className="text-green-400 font-bold text-sm">Herkend{result.confidence === "high" ? " (hoge zekerheid)" : ""}</span>
+                    </div>
+                    <p className="text-white text-lg font-bold mb-1">{result.type}</p>
+                    {result.quantity > 1 && <p className="text-white/70 text-sm mb-1">Geschat aantal: {result.quantity}</p>}
+                    <p className="text-white/50 text-xs mb-4">{result.description}</p>
+                    <div className="flex gap-2">
+                      <button onClick={handleRetry} className="flex-1 py-3 bg-white/10 text-white rounded-xl font-semibold border border-white/20">Opnieuw</button>
+                      <button onClick={handleUseResult} className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-semibold">Gebruik dit →</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertCircle size={20} className="text-amber-400" />
+                      <span className="text-amber-400 font-bold text-sm">Niet herkend</span>
+                    </div>
+                    <p className="text-white/70 text-sm mb-4">{result.description || "Probeer een duidelijkere foto of voer handmatig in."}</p>
+                    <div className="flex gap-2">
+                      <button onClick={handleRetry} className="flex-1 py-3 bg-white/10 text-white rounded-xl font-semibold border border-white/20">Opnieuw</button>
+                      <button onClick={handleManualInput} className="flex-1 py-3 bg-purple-600 text-white rounded-xl font-semibold">Handmatig</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <>
             <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
             <canvas ref={canvasRef} className="hidden" />
-
-            {/* Scan overlay */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-64 h-40 border-2 border-white/60 rounded-2xl relative">
-                <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-xl" />
-                <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-xl" />
-                <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-xl" />
-                <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-xl" />
-                {scanning && <div className="absolute left-2 right-2 h-0.5 bg-red-500 top-1/2 animate-pulse" />}
+              <div className="w-72 h-72 border-2 border-white/40 rounded-3xl relative">
+                <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-purple-400 rounded-tl-2xl" />
+                <div className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-purple-400 rounded-tr-2xl" />
+                <div className="absolute bottom-0 left-0 w-10 h-10 border-b-4 border-l-4 border-purple-400 rounded-bl-2xl" />
+                <div className="absolute bottom-0 right-0 w-10 h-10 border-b-4 border-r-4 border-purple-400 rounded-br-2xl" />
               </div>
             </div>
-
-            <p className="absolute bottom-24 left-0 right-0 text-center text-white/70 text-sm">
-              Richt de camera op een barcode
+            <p className="absolute bottom-32 left-0 right-0 text-center text-white/70 text-sm px-8">
+              Richt de camera op een rolcontainer, krat of vat en druk op de knop
             </p>
           </>
         )}
       </div>
 
-      {/* Bottom bar */}
-      <div className="bg-black/80 px-4 py-4 safe-area-bottom">
-        <button onClick={handleManualInput} className="w-full py-3 bg-white/10 text-white rounded-xl font-semibold border border-white/20 hover:bg-white/20 transition-all duration-200">
-          Handmatig invoeren
-        </button>
-      </div>
+      {!capturedImage && !error && (
+        <div className="bg-black/80 px-4 py-4 safe-area-bottom space-y-2">
+          <button onClick={captureAndAnalyze} className="w-full py-3.5 bg-purple-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-purple-700 transition-all">
+            <Camera size={20} /> Foto maken & herkennen
+          </button>
+          <button onClick={handleManualInput} className="w-full py-3 bg-white/10 text-white rounded-xl font-semibold border border-white/20 hover:bg-white/20 transition-all text-sm">
+            Handmatig invoeren
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1598,6 +1667,33 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
 
   // For new registrations: qty map keyed by emballage name, auto-populated when supplier changes
   const [qtyMap, setQtyMap] = useState({});
+  const [scanBanner, setScanBanner] = useState(null);
+
+  // Check for scan result from camera scanner
+  useEffect(() => {
+    if (isEdit) return;
+    try {
+      const raw = localStorage.getItem("reggy_scan_result");
+      if (raw) {
+        localStorage.removeItem("reggy_scan_result");
+        const scanResult = JSON.parse(raw);
+        if (scanResult.identified && scanResult.type) {
+          // Find matching emballage type
+          const match = emballageTypes.find(e => e.name.toLowerCase() === scanResult.type.toLowerCase());
+          if (match && match.supplierName) {
+            setSupplier(match.supplierName);
+            setScanBanner(`📷 Herkend: ${match.name}${scanResult.quantity > 1 ? ` (${scanResult.quantity}×)` : ""}`);
+            // Pre-fill qty after supplier change triggers
+            setTimeout(() => {
+              setQtyMap(prev => ({ ...prev, [match.name]: scanResult.quantity || 1 }));
+            }, 100);
+          } else {
+            setScanBanner(`📷 Herkend: ${scanResult.type} — selecteer de leverancier`);
+          }
+        }
+      }
+    } catch {}
+  }, [isEdit, emballageTypes]);
 
   // When supplier changes in non-edit mode, populate qtyMap with all supplier's items at qty 0
   const supplierItems = supplier ? emballageTypes.filter(e => e.supplierName === supplier) : [];
@@ -1640,7 +1736,8 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
     <div className="fixed inset-0 bg-black/50 flex items-stretch md:items-center md:justify-center z-50">
       <div className="bg-white w-full md:rounded-2xl md:max-w-lg lg:max-w-2xl md:mx-auto md:max-h-[90vh] flex flex-col shadow-2xl animate-slide-up">
         <div className="p-5 md:p-6 pb-0 flex-shrink-0">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">{isEdit ? <Pencil size={24} /> : <ScanLine size={24} />} {isEdit ? "Transactie bewerken" : "Registratie"}</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2 flex items-center gap-2">{isEdit ? <Pencil size={24} /> : <ScanLine size={24} />} {isEdit ? "Transactie bewerken" : "Registratie"}</h2>
+          {scanBanner && <div className="bg-purple-50 text-purple-700 text-sm font-medium px-3 py-2 rounded-xl mb-2 flex items-center gap-2">{scanBanner}<button onClick={() => setScanBanner(null)} className="ml-auto text-purple-400 hover:text-purple-600"><X size={14} /></button></div>}
         </div>
         <div className="space-y-4 overflow-y-auto flex-1 px-5 md:px-6 pb-2">
           {/* Type + Supplier */}
@@ -4252,7 +4349,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
         </div>
       )}
       {showOnboarding && <OnboardingOverlay onDone={() => setShowOnboarding(false)} />}
-      {barcodeScanner && <BarcodeScannerModal onScan={(barcode) => { setBarcodeScanner(false); setScanModal(true); }} onClose={() => setBarcodeScanner(false)} />}
+      {barcodeScanner && <BarcodeScannerModal emballageTypes={account.emballageTypes} onScan={(result) => { setBarcodeScanner(false); setScanModal(true); if (result && result.identified && result.type) { /* Store recognized item for pre-filling */ localStorage.setItem("reggy_scan_result", JSON.stringify(result)); } }} onClose={() => setBarcodeScanner(false)} />}
       {scanModal && <BonScanModal emballageTypes={account.emballageTypes} suppliers={account.suppliers} branch={user.branch} onClose={() => setScanModal(false)} onImport={handleImportTransaction} />}
       {exportModal && <ExportModal account={account} onClose={() => setExportModal(false)} />}
       {attViewer && <AttViewer att={attViewer} onClose={() => setAttViewer(null)} />}
