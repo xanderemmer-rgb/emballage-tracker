@@ -3031,18 +3031,55 @@ function EmballageBeheer({ account, setAccount }) {
 
 // ─── ALERTS & NOTIFICATIES ───────────────────────────────────────────────────
 function AlertsPanel({ account }) {
-  // Configurable alert settings (persisted in localStorage)
+  // Configurable alert settings (persisted in localStorage + Supabase for email)
   const [alertConfig, setAlertConfig] = useState(() => {
     try { return JSON.parse(localStorage.getItem("reggy_alert_config") || "{}"); } catch { return {}; }
   });
   const [showConfig, setShowConfig] = useState(false);
+  const [emailEnabled, setEmailEnabled] = useState(false);
+  const [alertEmail, setAlertEmail] = useState(account.email || "");
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailToast, setEmailToast] = useState(null);
+
+  // Load email preferences from Supabase on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.from("alert_preferences").select("*").eq("account_id", account.id).single();
+        if (data) {
+          setEmailEnabled(data.email_enabled || false);
+          setAlertEmail(data.email || account.email || "");
+          if (data.config) setAlertConfig(prev => ({ ...prev, ...data.config }));
+        }
+      } catch {}
+    })();
+  }, [account.id]);
+
+  const saveEmailPreferences = async (enabled, email, config) => {
+    setEmailSaving(true);
+    try {
+      const { error } = await supabase.from("alert_preferences").upsert({
+        account_id: account.id,
+        email_enabled: enabled,
+        email: email,
+        config: config,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "account_id" });
+      if (error) throw error;
+      setEmailToast({ type: "success", message: enabled ? "Email alerts ingeschakeld" : "Email alerts uitgeschakeld" });
+      setTimeout(() => setEmailToast(null), 3000);
+    } catch (err) {
+      setEmailToast({ type: "error", message: err.message });
+      setTimeout(() => setEmailToast(null), 3000);
+    } finally { setEmailSaving(false); }
+  };
 
   const defaultConfig = {
-    inactiveBranches: true,     // Filialen zonder registratie (>7 dagen)
-    highSupplierSaldo: true,    // Hoog leverancierssaldo (>€500)
-    negativeBalance: true,      // Negatief saldo (meer uit dan in)
-    noWeeklyActivity: true,     // Geen activiteit deze week
-    unusualVolume: true,        // Ongebruikelijk hoog volume (>3× gemiddeld)
+    inactiveBranches: true,
+    highSupplierSaldo: true,
+    negativeBalance: true,
+    noWeeklyActivity: true,
+    unusualVolume: true,
   };
   const config = { ...defaultConfig, ...alertConfig };
 
@@ -3050,6 +3087,8 @@ function AlertsPanel({ account }) {
     const newConfig = { ...alertConfig, [key]: value };
     setAlertConfig(newConfig);
     try { localStorage.setItem("reggy_alert_config", JSON.stringify(newConfig)); } catch {}
+    // Also save to Supabase if email is enabled
+    if (emailEnabled) saveEmailPreferences(emailEnabled, alertEmail, newConfig);
   };
 
   const alertOptions = [
@@ -3114,17 +3153,41 @@ function AlertsPanel({ account }) {
 
       {/* Alert configuration */}
       {showConfig && (
-        <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-          {alertOptions.map(opt => (
-            <label key={opt.key} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-all">
-              <input type="checkbox" checked={config[opt.key]} onChange={e => saveConfig(opt.key, e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
-              <div className="text-gray-400">{opt.icon}</div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-900">{opt.label}</p>
-                <p className="text-xs text-gray-400">{opt.desc}</p>
+        <div className="space-y-3">
+          {/* Email notification toggle */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Bell size={16} className="text-purple-500" />
+                <span className="text-sm font-semibold text-gray-900">Email notificaties</span>
               </div>
-            </label>
-          ))}
+              <button onClick={() => { const newVal = !emailEnabled; setEmailEnabled(newVal); saveEmailPreferences(newVal, alertEmail, config); }} disabled={emailSaving} className={`relative w-11 h-6 rounded-full transition-all ${emailEnabled ? "bg-purple-600" : "bg-gray-200"}`}>
+                <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${emailEnabled ? "left-5.5" : "left-0.5"}`} style={{ left: emailEnabled ? "22px" : "2px" }} />
+              </button>
+            </div>
+            {emailEnabled && (
+              <div className="flex gap-2 mt-2">
+                <input type="email" value={alertEmail} onChange={e => setAlertEmail(e.target.value)} placeholder="Email voor alerts" className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+                <button onClick={() => saveEmailPreferences(emailEnabled, alertEmail, config)} disabled={emailSaving} className="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-semibold hover:bg-purple-700 disabled:opacity-60 transition-all">{emailSaving ? "..." : "Opslaan"}</button>
+              </div>
+            )}
+            {emailToast && <p className={`text-xs mt-2 ${emailToast.type === "success" ? "text-green-600" : "text-red-500"}`}>{emailToast.message}</p>}
+            {emailEnabled && <p className="text-xs text-gray-400 mt-2">Je ontvangt dagelijks een email wanneer er actieve meldingen zijn.</p>}
+          </div>
+
+          {/* Alert type toggles */}
+          <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+            {alertOptions.map(opt => (
+              <label key={opt.key} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-all">
+                <input type="checkbox" checked={config[opt.key]} onChange={e => saveConfig(opt.key, e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
+                <div className="text-gray-400">{opt.icon}</div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-900">{opt.label}</p>
+                  <p className="text-xs text-gray-400">{opt.desc}</p>
+                </div>
+              </label>
+            ))}
+          </div>
         </div>
       )}
 
