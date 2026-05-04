@@ -1701,21 +1701,22 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
                         <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
                         <p className="text-xs text-gray-400">€{Number(item.value).toFixed(2)} per stuk</p>
                       </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <div className="flex items-center gap-2 flex-shrink-0">
                         <button
                           onClick={() => updateQty(item.name, Math.max(0, (qtyMap[item.name] || 0) - 1))}
-                          className="w-8 h-8 rounded-lg bg-white border border-gray-200 text-gray-500 flex items-center justify-center text-lg font-bold hover:bg-gray-100 transition-colors active:bg-gray-200"
+                          className="w-11 h-11 rounded-xl bg-white border border-gray-200 text-gray-600 flex items-center justify-center text-xl font-bold hover:bg-gray-100 transition-colors active:bg-gray-200 active:scale-95"
                         >−</button>
                         <input
                           type="number"
+                          inputMode="numeric"
                           value={qtyMap[item.name] || 0}
                           onChange={(e) => updateQty(item.name, e.target.value)}
-                          className="w-14 px-1 py-1.5 border border-gray-200 rounded-lg text-sm text-center bg-white focus:ring-2 focus:ring-purple-500 outline-none"
+                          className="w-16 px-1 py-2.5 border border-gray-200 rounded-xl text-base font-bold text-center bg-white focus:ring-2 focus:ring-purple-500 outline-none"
                           min="0"
                         />
                         <button
                           onClick={() => updateQty(item.name, (qtyMap[item.name] || 0) + 1)}
-                          className="w-8 h-8 rounded-lg bg-white border border-gray-200 text-gray-500 flex items-center justify-center text-lg font-bold hover:bg-gray-100 transition-colors active:bg-gray-200"
+                          className="w-11 h-11 rounded-xl bg-purple-600 text-white flex items-center justify-center text-xl font-bold hover:bg-purple-700 transition-colors active:scale-95"
                         >+</button>
                       </div>
                     </div>
@@ -3030,40 +3031,103 @@ function EmballageBeheer({ account, setAccount }) {
 
 // ─── ALERTS & NOTIFICATIES ───────────────────────────────────────────────────
 function AlertsPanel({ account }) {
+  // Configurable alert settings (persisted in localStorage)
+  const [alertConfig, setAlertConfig] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("reggy_alert_config") || "{}"); } catch { return {}; }
+  });
+  const [showConfig, setShowConfig] = useState(false);
+
+  const defaultConfig = {
+    inactiveBranches: true,     // Filialen zonder registratie (>7 dagen)
+    highSupplierSaldo: true,    // Hoog leverancierssaldo (>€500)
+    negativeBalance: true,      // Negatief saldo (meer uit dan in)
+    noWeeklyActivity: true,     // Geen activiteit deze week
+    unusualVolume: true,        // Ongebruikelijk hoog volume (>3× gemiddeld)
+  };
+  const config = { ...defaultConfig, ...alertConfig };
+
+  const saveConfig = (key, value) => {
+    const newConfig = { ...alertConfig, [key]: value };
+    setAlertConfig(newConfig);
+    try { localStorage.setItem("reggy_alert_config", JSON.stringify(newConfig)); } catch {}
+  };
+
+  const alertOptions = [
+    { key: "inactiveBranches", label: "Inactieve filialen", desc: "Waarschuw als een filiaal >7 dagen niet heeft geregistreerd", icon: <Clock size={16} /> },
+    { key: "highSupplierSaldo", label: "Hoog leverancierssaldo", desc: "Waarschuw bij >€500 uitstaand bij een leverancier", icon: <TrendingUp size={16} /> },
+    { key: "negativeBalance", label: "Negatief saldo", desc: "Waarschuw als meer uitgaand dan inkomend (>10 stuks)", icon: <TrendingDown size={16} /> },
+    { key: "noWeeklyActivity", label: "Geen wekelijkse activiteit", desc: "Waarschuw als er deze week geen registraties zijn", icon: <Activity size={16} /> },
+    { key: "unusualVolume", label: "Ongebruikelijk volume", desc: "Waarschuw bij 3× hoger volume dan gemiddeld per dag", icon: <AlertTriangle size={16} /> },
+  ];
+
   const allBranchNames = (account.branches || []).length > 0
     ? (account.branches || []).map(b => b.name)
     : [...new Set(account.users.filter(u => u.role === "branch" && u.branch).map(u => u.branch))];
   const alerts = [];
 
-  // Inactive branches
-  const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-  allBranchNames.forEach(b => {
-    const bt = account.transactions.filter(t => t.branch === b);
-    const lastDate = bt.length > 0 ? [...bt].sort((a, b2) => b2.date.localeCompare(a.date))[0].date : null;
-    if (!lastDate || new Date(lastDate) < oneWeekAgo) {
-      alerts.push({ severity: "warning", title: `${b} is inactief`, message: `Laatste registratie: ${lastDate || "nooit"}`, icon: <Clock size={16} /> });
-    }
-  });
+  // 1. Inactive branches
+  if (config.inactiveBranches) {
+    const oneWeekAgo = new Date(); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    allBranchNames.forEach(b => {
+      const bt = account.transactions.filter(t => t.branch === b);
+      const lastDate = bt.length > 0 ? [...bt].sort((a, b2) => b2.date.localeCompare(a.date))[0].date : null;
+      if (!lastDate || new Date(lastDate) < oneWeekAgo) {
+        alerts.push({ severity: "warning", title: `${b} is inactief`, message: `Laatste registratie: ${lastDate || "nooit"}`, icon: <Clock size={16} /> });
+      }
+    });
+  }
 
-  // High supplier balances
+  // 2. High supplier balances + 3. Negative balance
   const saldo = buildSaldoData(account.transactions, account.emballageTypes, account.suppliers);
   Object.entries(saldo).forEach(([sup, data]) => {
-    if (data.value > 500) alerts.push({ severity: "info", title: `Hoog saldo: ${sup}`, message: `${fmt(data.value)} uitstaand emballagewaarde`, icon: <TrendingUp size={16} /> });
-    if (data.in - data.out < -10) alerts.push({ severity: "error", title: `Negatief saldo: ${sup}`, message: `Saldo: ${data.in - data.out} stuks — meer uitgaand dan inkomend`, icon: <TrendingDown size={16} /> });
+    if (config.highSupplierSaldo && data.value > 500) alerts.push({ severity: "info", title: `Hoog saldo: ${sup}`, message: `${fmt(data.value)} uitstaand emballagewaarde`, icon: <TrendingUp size={16} /> });
+    if (config.negativeBalance && data.in - data.out < -10) alerts.push({ severity: "error", title: `Negatief saldo: ${sup}`, message: `Saldo: ${data.in - data.out} stuks — meer uitgaand dan inkomend`, icon: <TrendingDown size={16} /> });
   });
 
-  // Low activity overall
-  const thisWeek = account.transactions.filter(t => { const d = new Date(t.date); const w = new Date(); w.setDate(w.getDate() - 7); return d >= w; });
-  if (thisWeek.length === 0 && account.transactions.length > 0) {
-    alerts.push({ severity: "warning", title: "Geen activiteit deze week", message: "Er zijn deze week nog geen transacties geregistreerd", icon: <Activity size={16} /> });
+  // 4. No weekly activity
+  if (config.noWeeklyActivity) {
+    const thisWeek = account.transactions.filter(t => { const d = new Date(t.date); const w = new Date(); w.setDate(w.getDate() - 7); return d >= w; });
+    if (thisWeek.length === 0 && account.transactions.length > 0) {
+      alerts.push({ severity: "warning", title: "Geen activiteit deze week", message: "Er zijn deze week nog geen transacties geregistreerd", icon: <Activity size={16} /> });
+    }
+  }
+
+  // 5. Unusual volume
+  if (config.unusualVolume && account.transactions.length > 14) {
+    const today = new Date().toISOString().split("T")[0];
+    const todayCount = account.transactions.filter(t => t.date === today).length;
+    const avgPerDay = account.transactions.length / Math.max(1, Math.ceil((Date.now() - new Date(account.transactions[account.transactions.length - 1]?.date).getTime()) / 86400000));
+    if (todayCount > avgPerDay * 3 && todayCount > 5) {
+      alerts.push({ severity: "info", title: "Ongebruikelijk hoog volume", message: `${todayCount} registraties vandaag (gemiddeld: ${avgPerDay.toFixed(0)}/dag)`, icon: <AlertTriangle size={16} /> });
+    }
   }
 
   return (
     <div className="animate-fade-in space-y-6">
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <Bell size={16} />
-        <span>{alerts.length} melding{alerts.length !== 1 ? "en" : ""}</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <Bell size={16} />
+          <span>{alerts.length} melding{alerts.length !== 1 ? "en" : ""}</span>
+        </div>
+        <button onClick={() => setShowConfig(!showConfig)} className={`text-xs font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg transition-all ${showConfig ? "bg-purple-100 text-purple-700" : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"}`}><Settings size={14} /> Configuratie</button>
       </div>
+
+      {/* Alert configuration */}
+      {showConfig && (
+        <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
+          {alertOptions.map(opt => (
+            <label key={opt.key} className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-all">
+              <input type="checkbox" checked={config[opt.key]} onChange={e => saveConfig(opt.key, e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
+              <div className="text-gray-400">{opt.icon}</div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-900">{opt.label}</p>
+                <p className="text-xs text-gray-400">{opt.desc}</p>
+              </div>
+            </label>
+          ))}
+        </div>
+      )}
+
       {alerts.length === 0 ? (
         <div className="bg-emerald-50 rounded-xl p-8 text-center border border-emerald-200">
           <CheckCircle size={32} className="mx-auto text-emerald-400 mb-2" />
@@ -3953,7 +4017,10 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
           const newTrans = data.map(t => ({ id: t.id, date: t.date, type: t.type, supplier: t.supplier, emballage: t.emballage, qty: t.qty, note: t.note || "", attachment: t.attachment, branch: t.branch || "", userId: t.user_id || null, createdAt: t.created_at || null }));
           setAccount({ ...account, transactions: [...newTrans, ...account.transactions] });
           clearQueue();
-          setToast({ type: "success", message: `${data.length} offline registratie${data.length !== 1 ? "s" : ""} gesynchroniseerd!` });
+          // Show detailed sync summary
+          const suppliers = [...new Set(data.map(t => t.supplier))];
+          const totalQty = data.reduce((sum, t) => sum + t.qty, 0);
+          setToast({ type: "success", message: `✓ ${data.length} registratie${data.length !== 1 ? "s" : ""} gesynchroniseerd (${totalQty} items bij ${suppliers.join(", ")})` });
         } catch (err) {
           console.error("Error syncing offline queue:", err);
           setToast({ type: "error", message: "Fout bij synchroniseren: " + err.message });

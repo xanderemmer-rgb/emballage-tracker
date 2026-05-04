@@ -560,23 +560,30 @@
       </div>
       <div class="preview-body">
         <div class="preview-stats">
-          <div class="preview-stat"><div class="label" style="color:#71717a" data-i18n="prev_total">Total</div><div class="val" style="color:#18181b">12</div></div>
-          <div class="preview-stat"><div class="label" style="color:#10b981" data-i18n="prev_in">↓ In</div><div class="val" style="color:#059669">8</div></div>
-          <div class="preview-stat"><div class="label" style="color:#f43f5e" data-i18n="prev_out">↑ Out</div><div class="val" style="color:#e11d48">4</div></div>
+          <div class="preview-stat"><div class="label" style="color:#71717a" data-i18n="prev_total">Total</div><div class="val" style="color:#18181b" id="demo-total">0</div></div>
+          <div class="preview-stat"><div class="label" style="color:#10b981" data-i18n="prev_in">↓ In</div><div class="val" style="color:#059669" id="demo-in">0</div></div>
+          <div class="preview-stat"><div class="label" style="color:#f43f5e" data-i18n="prev_out">↑ Out</div><div class="val" style="color:#e11d48" id="demo-out">0</div></div>
         </div>
         <div class="preview-supplier">
           <div class="preview-supplier-header">
             <div class="preview-supplier-name"><div class="dot" style="background:#10b981"></div> Heineken</div>
-            <div class="preview-supplier-nums"><span style="color:#10b981">+5</span><span style="color:#f43f5e">−2</span><span style="color:#059669;font-weight:800">+3</span></div>
+            <div class="preview-supplier-nums"><span style="color:#10b981">+12</span><span style="color:#f43f5e">−4</span><span style="color:#059669;font-weight:800">+8</span></div>
           </div>
-          <div class="preview-supplier-bar"><div class="preview-supplier-bar-fill" style="width:65%;background:linear-gradient(90deg,#10b981,#34d399)"></div></div>
+          <div class="preview-supplier-bar"><div class="preview-supplier-bar-fill" id="demo-bar1" style="width:0;background:linear-gradient(90deg,#10b981,#34d399);transition:width 1.2s ease"></div></div>
         </div>
         <div class="preview-supplier">
           <div class="preview-supplier-header">
-            <div class="preview-supplier-name"><div class="dot" style="background:#f59e0b"></div> AB InBev</div>
-            <div class="preview-supplier-nums"><span style="color:#10b981">+3</span><span style="color:#f43f5e">−1</span><span style="color:#059669;font-weight:800">+2</span></div>
+            <div class="preview-supplier-name"><div class="dot" style="background:#f59e0b"></div> Sligro</div>
+            <div class="preview-supplier-nums"><span style="color:#10b981">+6</span><span style="color:#f43f5e">−3</span><span style="color:#059669;font-weight:800">+3</span></div>
           </div>
-          <div class="preview-supplier-bar"><div class="preview-supplier-bar-fill" style="width:45%;background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div></div>
+          <div class="preview-supplier-bar"><div class="preview-supplier-bar-fill" id="demo-bar2" style="width:0;background:linear-gradient(90deg,#f59e0b,#fbbf24);transition:width 1.2s ease"></div></div>
+        </div>
+        <div class="preview-supplier">
+          <div class="preview-supplier-header">
+            <div class="preview-supplier-name"><div class="dot" style="background:#8b5cf6"></div> Bidfood</div>
+            <div class="preview-supplier-nums"><span style="color:#10b981">+4</span><span style="color:#f43f5e">−1</span><span style="color:#059669;font-weight:800">+3</span></div>
+          </div>
+          <div class="preview-supplier-bar"><div class="preview-supplier-bar-fill" id="demo-bar3" style="width:0;background:linear-gradient(90deg,#8b5cf6,#a78bfa);transition:width 1.2s ease"></div></div>
         </div>
       </div>
       <div class="preview-bottom-nav">
@@ -676,23 +683,23 @@
     <div class="features-grid">
       <div class="feature-card">
         <div class="feature-icon" style="background:#dcfce7">📦</div>
-        <h3 data-i18n="f1_title">Supplier Balance</h3>
-        <p data-i18n="f1_desc">See exactly how many kegs, crates and packaging you have outstanding per supplier. No more guessing.</p>
+        <h3 data-i18n="f1_title">Nooit meer discussie over vaten</h3>
+        <p data-i18n="f1_desc">Zie per leverancier precies hoeveel rolcontainers en kratten er uitstaan. Heineken claimt 15 vaten? Jij hebt het bewijs dat het er 9 zijn.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" style="background:#ede9fe">📊</div>
-        <h3 data-i18n="f2_title">Live Dashboard</h3>
-        <p data-i18n="f2_desc">Weekly activity charts, inventory value, and real-time stats across all your locations in one view.</p>
+        <h3 data-i18n="f2_title">Eén overzicht, alle locaties</h3>
+        <p data-i18n="f2_desc">Als eigenaar zie je in één oogopslag wat er speelt: saldo per leverancier, activiteit per filiaal, en de totale waarde van je uitstaande emballage.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" style="background:#fff7ed">📱</div>
-        <h3 data-i18n="f3_title">Mobile-First</h3>
-        <p data-i18n="f3_desc">Designed for busy bar staff. Quick registration with one tap, right from your phone. No training needed.</p>
+        <h3 data-i18n="f3_title">Zo snel als een tikje</h3>
+        <p data-i18n="f3_desc">Je barpersoneel registreert een levering in 5 seconden. Geen opleiding, geen handleiding — als ze een telefoon kunnen gebruiken, kunnen ze Reggy gebruiken.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" style="background:#eff6ff">📤</div>
-        <h3 data-i18n="f4_title">Export & Reports</h3>
-        <p data-i18n="f4_desc">Export to CSV or PDF anytime. Perfect for your accountant, supplier negotiations, or internal audits.</p>
+        <h3 data-i18n="f4_title">Bewijs voor je boekhouder</h3>
+        <p data-i18n="f4_desc">Exporteer je emballage-overzicht naar CSV of PDF. Klaar voor je accountant, leveranciersgesprekken, of de belastingdienst.</p>
       </div>
       <div class="feature-card">
         <div class="feature-icon" style="background:#1e1b4b">🌙</div>
@@ -715,6 +722,43 @@
     <h2 class="section-title" data-i18n="pricing_title">Simple, transparent pricing</h2>
     <p class="section-desc" style="margin:0 auto 0" data-i18n="pricing_desc">No setup fees. Scale as you grow. Cancel anytime.</p>
     <p class="section-desc" style="margin:8px auto 0; font-size:14px; color:var(--gray-400)" data-i18n="pricing_calc">€10 per outlet/mo + €15 master admin (from 2+ outlets)</p>
+
+    <!-- Pricing Calculator -->
+    <div style="max-width:480px;margin:32px auto 40px;background:#fff;border-radius:20px;padding:28px;border:2px solid var(--purple-200);box-shadow:0 8px 32px rgba(124,58,237,0.08)">
+      <p style="font-size:14px;font-weight:700;color:var(--gray-700);margin-bottom:16px;text-align:left" data-i18n="calc_title">Calculate your price</p>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:12px">
+        <label style="font-size:13px;font-weight:600;color:var(--gray-500);min-width:80px" data-i18n="calc_outlets">Outlets</label>
+        <input type="range" id="calc-slider" min="1" max="20" value="2" style="flex:1;accent-color:#7c3aed;height:6px" oninput="updateCalc()">
+        <span id="calc-count" style="font-size:20px;font-weight:900;color:var(--gray-900);min-width:28px;text-align:right">2</span>
+      </div>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;padding:16px 0 8px;border-top:1px solid var(--gray-100)">
+        <div>
+          <span id="calc-breakdown" style="font-size:12px;color:var(--gray-400)">2× €10 + €15 master</span>
+        </div>
+        <div style="text-align:right">
+          <span id="calc-price" style="font-size:32px;font-weight:900;color:var(--purple-600)">€35</span>
+          <span style="font-size:14px;color:var(--gray-400)">/mnd</span>
+        </div>
+      </div>
+      <a id="calc-cta" href="https://app.reggy.io?plan=business&outlets=2" style="display:block;text-align:center;background:var(--purple-600);color:#fff;padding:12px;border-radius:12px;font-size:14px;font-weight:700;text-decoration:none;margin-top:12px;transition:0.2s" onmouseover="this.style.background='#6d28d9'" onmouseout="this.style.background='#7c3aed'" data-i18n="calc_cta">Start with 2 outlets →</a>
+    </div>
+    <script>
+    function updateCalc() {
+      const n = parseInt(document.getElementById('calc-slider').value);
+      const master = n >= 2 ? 15 : 0;
+      const total = n * 10 + master;
+      document.getElementById('calc-count').textContent = n;
+      document.getElementById('calc-price').textContent = '€' + total;
+      const bd = n === 1 ? '1× €10' : n + '× €10 + €15 master';
+      document.getElementById('calc-breakdown').textContent = bd;
+      const plan = n === 1 ? 'starter' : 'business';
+      document.getElementById('calc-cta').href = 'https://app.reggy.io?plan=' + plan + '&outlets=' + n;
+      const lang = typeof currentLang !== 'undefined' ? currentLang : 'en';
+      const ctaText = lang === 'nl' ? 'Start met ' + n + ' outlet' + (n > 1 ? 's' : '') + ' →' : 'Start with ' + n + ' outlet' + (n > 1 ? 's' : '') + ' →';
+      document.getElementById('calc-cta').textContent = ctaText;
+    }
+    </script>
+
     <div class="pricing-cards">
       <div class="pricing-card">
         <h3 data-i18n="plan1_name">Starter</h3>
@@ -915,10 +959,11 @@ const translations = {
     hiw_s3_title: "You see the full picture", hiw_s3_desc: "Live overview of all outstanding packaging per supplier, per location. Export reports anytime.",
     features_label: "Features", features_title: "Everything you need to<br>track your packaging",
     features_desc: "Built for bars, restaurants, and hospitality groups who are done losing money on untracked kegs and crates.",
-    f1_title: "Supplier Balance", f1_desc: "See exactly how many kegs, crates and packaging you have outstanding per supplier. No more guessing.",
-    f2_title: "Live Dashboard", f2_desc: "Weekly activity charts, inventory value, and real-time stats across all your locations in one view.",
-    f3_title: "Mobile-First", f3_desc: "Designed for busy bar staff. Quick registration with one tap, right from your phone. No training needed.",
-    f4_title: "Export & Reports", f4_desc: "Export to CSV or PDF anytime. Perfect for your accountant, supplier negotiations, or internal audits.",
+    f1_title: "No more disputes over kegs", f1_desc: "See per supplier exactly how many roll containers and crates are outstanding. Heineken claims 15 kegs? You have the proof it's 9.",
+    f2_title: "One view, all locations", f2_desc: "As owner, see at a glance what's happening: balance per supplier, activity per branch, and the total value of your outstanding packaging.",
+    f3_title: "Fast as a tap", f3_desc: "Your bar staff registers a delivery in 5 seconds. No training, no manual — if they can use a phone, they can use Reggy.",
+    f4_title: "Proof for your accountant", f4_desc: "Export your packaging overview to CSV or PDF. Ready for your accountant, supplier negotiations, or tax authorities.",
+    calc_title: "Calculate your price", calc_outlets: "Outlets", calc_cta: "Start with 2 outlets →",
     f5_title: "Dark Mode", f5_desc: "Built for hospitality staff working in dimly lit bars and restaurants. Switch to dark mode with one tap to reduce eye strain.",
     f6_title: "Works Offline", f6_desc: "No Wi-Fi in the cellar? No problem. Register packaging offline and it syncs automatically when you're back online.",
     pricing_label: "Pricing", pricing_title: "Simple, transparent pricing",
@@ -986,9 +1031,10 @@ const translations = {
     features_label: "Functies", features_title: "Alles wat je nodig hebt om<br>je emballage bij te houden",
     features_desc: "Gebouwd voor cafés, restaurants en horecagroepen die klaar zijn met geld verliezen aan ongeregistreerde vaten en kratten.",
     f1_title: "Saldo per leverancier", f1_desc: "Zie precies hoeveel vaten, kratten en verpakkingen je uitstaan hebt per leverancier. Niet meer gokken.",
-    f2_title: "Live Dashboard", f2_desc: "Wekelijkse activiteitsgrafieken, inventariswaarde en realtime statistieken van al je locaties in één overzicht.",
-    f3_title: "Mobile-First", f3_desc: "Ontworpen voor druk barpersoneel. Snelle registratie met één tik, direct vanaf je telefoon. Geen training nodig.",
-    f4_title: "Export & Rapporten", f4_desc: "Exporteer naar CSV of PDF wanneer je wilt. Perfect voor je boekhouder, leveranciersonderhandelingen of interne audits.",
+    f2_title: "Eén overzicht, alle locaties", f2_desc: "Als eigenaar zie je in één oogopslag wat er speelt: saldo per leverancier, activiteit per filiaal, en de totale waarde van je uitstaande emballage.",
+    f3_title: "Zo snel als een tikje", f3_desc: "Je barpersoneel registreert een levering in 5 seconden. Geen opleiding, geen handleiding — als ze een telefoon kunnen gebruiken, kunnen ze Reggy gebruiken.",
+    f4_title: "Bewijs voor je boekhouder", f4_desc: "Exporteer je emballage-overzicht naar CSV of PDF. Klaar voor je accountant, leveranciersgesprekken, of de belastingdienst.",
+    calc_title: "Bereken je prijs", calc_outlets: "Outlets", calc_cta: "Start met 2 outlets →",
     f5_title: "Donkere Modus", f5_desc: "Gemaakt voor horecapersoneel dat werkt in donkere bars en restaurants. Schakel met één tik over naar dark mode om oogvermoeidheid te verminderen.",
     f6_title: "Werkt Offline", f6_desc: "Geen wifi in de kelder? Geen probleem. Registreer emballage offline en het synchroniseert automatisch zodra je weer online bent.",
     pricing_label: "Prijzen", pricing_title: "Eenvoudige, transparante prijzen",
@@ -1069,6 +1115,30 @@ function toggleLang() {
     featured.setAttribute("data-badge", currentLang === "en" ? "Most popular" : "Meest populair");
   }
 }
+
+// ── Demo animation (Intersection Observer) ──
+function animateDemo() {
+  function countUp(el, target, dur) {
+    let s = 0;
+    const step = (ts) => { if (!s) s = ts; const p = Math.min((ts - s) / dur, 1); el.textContent = Math.floor(p * target); if (p < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+  const t = document.getElementById('demo-total');
+  if (t && t.textContent === '0') {
+    countUp(t, 22, 1200);
+    countUp(document.getElementById('demo-in'), 14, 1200);
+    countUp(document.getElementById('demo-out'), 8, 1200);
+    setTimeout(() => {
+      const b1 = document.getElementById('demo-bar1'); if (b1) b1.style.width = '72%';
+      const b2 = document.getElementById('demo-bar2'); if (b2) b2.style.width = '45%';
+      const b3 = document.getElementById('demo-bar3'); if (b3) b3.style.width = '35%';
+    }, 300);
+  }
+}
+// Trigger on scroll into view
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver((entries) => { entries.forEach(e => { if (e.isIntersecting) animateDemo(); }); }, { threshold: 0.3 }).observe(document.querySelector('.preview') || document.body);
+} else { setTimeout(animateDemo, 1000); }
 </script>
 
 <!-- ────────── PRIVACY MODAL ────────── -->
