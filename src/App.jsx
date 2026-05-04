@@ -286,7 +286,7 @@ function OnboardingOverlay({ onDone }) {
         {/* Progress dots */}
         <div className="flex justify-center gap-2 mb-6">
           {steps.map((_, i) => (
-            <div key={i} className={`w-2 h-2 rounded-full transition-all duration-300 ${i === step ? "bg-blue-600 w-6" : i < step ? "bg-blue-300" : "bg-gray-200"}`} />
+            <div key={i} className={`w-2 h-2 rounded-full transition-all duration-300 ${i === step ? "bg-blue-600 w-6" : i < step ? "bg-purple-300" : "bg-gray-200"}`} />
           ))}
         </div>
 
@@ -301,7 +301,7 @@ function OnboardingOverlay({ onDone }) {
               Overslaan
             </button>
           )}
-          <button onClick={isLast ? handleFinish : () => setStep(step + 1)} className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-all duration-200">
+          <button onClick={isLast ? handleFinish : () => setStep(step + 1)} className="flex-1 py-3 rounded-xl bg-purple-600 text-white font-semibold hover:bg-purple-700 transition-all duration-200">
             {isLast ? "Aan de slag!" : "Volgende"}
           </button>
         </div>
@@ -377,7 +377,7 @@ function BarcodeScannerModal({ onScan, onClose }) {
             <div className="text-center">
               <AlertCircle size={48} className="text-red-400 mx-auto mb-4" />
               <p className="text-white mb-2">{error}</p>
-              <button onClick={handleManualInput} className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold">
+              <button onClick={handleManualInput} className="mt-4 px-6 py-3 bg-purple-600 text-white rounded-xl font-semibold">
                 Handmatig invoeren
               </button>
             </div>
@@ -436,7 +436,7 @@ function PricingCalc({ outlets, onChange }) {
         <span className="font-bold text-gray-800">Totaal per maand</span>
         <span className="text-xl font-bold text-blue-700">€ {p.total.toFixed(2)}</span>
       </div>
-      {outlets >= MASTER_REQUIRED_FROM && <p className="text-xs text-blue-600 flex items-center gap-1"><CheckCircle size={14} /> Master admin inbegrepen, overzicht van alle filialen</p>}
+      {outlets >= MASTER_REQUIRED_FROM && <p className="text-xs text-purple-600 flex items-center gap-1"><CheckCircle size={14} /> Master admin inbegrepen, overzicht van alle filialen</p>}
     </div>
   );
 }
@@ -559,7 +559,7 @@ function RegisterFlow({ accounts, setAccounts, onDone }) {
           <div className="space-y-6">
             <p className="text-gray-600">Stap 1: Kies uw abonnement</p>
             <PricingCalc outlets={outlets} onChange={setOutlets} />
-            <button onClick={() => setStep(2)} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200">Volgende</button>
+            <button onClick={() => setStep(2)} className="w-full bg-purple-600 text-white py-3 rounded-lg font-bold hover:bg-purple-700 transition-all duration-200">Volgende</button>
             <button onClick={onDone} className="w-full text-gray-500 text-sm hover:text-gray-700">Terug naar inloggen</button>
           </div>
         )}
@@ -568,7 +568,7 @@ function RegisterFlow({ accounts, setAccounts, onDone }) {
             <p className="text-gray-600">Stap 2: Bedrijfsgegevens</p>
             <div><label className="block text-sm font-semibold text-gray-700 mb-2">Bedrijfsnaam</label><input type="text" value={company.name} onChange={(e) => setCompany({ ...company, name: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Naam" /></div>
             <div><label className="block text-sm font-semibold text-gray-700 mb-2">Telefoon (optioneel)</label><input type="tel" value={company.phone} onChange={(e) => setCompany({ ...company, phone: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" placeholder="Telefoon" /></div>
-            <div className="flex gap-3"><button onClick={() => setStep(1)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Terug</button><button onClick={() => setStep(3)} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200">Volgende</button></div>
+            <div className="flex gap-3"><button onClick={() => setStep(1)} className="flex-1 bg-gray-200 text-gray-800 py-3 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Terug</button><button onClick={() => setStep(3)} className="flex-1 bg-purple-600 text-white py-3 rounded-lg font-bold hover:bg-purple-700 transition-all duration-200">Volgende</button></div>
           </div>
         )}
         {step === 3 && (
@@ -842,12 +842,23 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout, userName = "Admin" }
   // ── Contact requests ──
   const [contactRequests, setContactRequests] = useState([]);
   const [contactsLoaded, setContactsLoaded] = useState(false);
+  const [contactCount, setContactCount] = useState(0);
+  // Load count on mount for badge
+  useEffect(() => {
+    (async () => {
+      try {
+        const { count } = await supabase.from("contact_requests").select("id", { count: "exact", head: true });
+        setContactCount(count || 0);
+      } catch {}
+    })();
+  }, []);
   useEffect(() => {
     if (activeTab === "contacts" && !contactsLoaded) {
       (async () => {
         try {
           const { data } = await supabase.from("contact_requests").select("*").order("created_at", { ascending: false }).limit(100);
           setContactRequests(data || []);
+          setContactCount(data?.length || 0);
         } catch {}
         setContactsLoaded(true);
       })();
@@ -897,6 +908,7 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout, userName = "Admin" }
               <item.icon size={18} className={activeTab === item.id ? "text-purple-600" : "text-gray-400"} />
               {item.label}
               {item.id === "accounts" && <span className="ml-auto text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{totalAccounts}</span>}
+              {item.id === "contacts" && contactCount > 0 && <span className="ml-auto text-[10px] bg-purple-600 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{contactCount}</span>}
             </button>
           ))}
         </nav>
@@ -1130,7 +1142,7 @@ function SuperAdminPanel({ accounts, setAccounts, onLogout, userName = "Admin" }
               </div>
               <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
                 <p className="text-xs text-gray-400 uppercase font-medium mb-1">ARR</p>
-                <p className="text-3xl font-bold text-blue-600">€{arr.toFixed(2)}</p>
+                <p className="text-3xl font-bold text-purple-600">€{arr.toFixed(2)}</p>
                 <p className="text-xs text-gray-400 mt-1">jaarlijks</p>
               </div>
               <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
@@ -1315,7 +1327,7 @@ function NewAccountForm({ onSave, onCancel }) {
       <input type="tel" placeholder="Telefoon" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full px-4 py-2 border border-gray-300 rounded-lg" />
       <div className="flex gap-3">
         <button onClick={onCancel} className="flex-1 bg-gray-200 text-gray-800 py-2 rounded-lg font-bold hover:bg-gray-300 transition-all duration-200">Annuleren</button>
-        <button onClick={() => onSave(formData)} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 transition-all duration-200">Opslaan</button>
+        <button onClick={() => onSave(formData)} className="flex-1 bg-purple-600 text-white py-2 rounded-lg font-bold hover:bg-purple-700 transition-all duration-200">Opslaan</button>
       </div>
     </div>
   );
@@ -1567,7 +1579,7 @@ function ExportModal({ account, onClose }) {
         </div>
         <div className="flex gap-3 mt-6">
           <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200">Annuleren</button>
-          <button onClick={() => { format === "csv" ? exportToCSV(account.transactions, account.emballageTypes, account.suppliers, account.companyName) : exportToPDF(account.transactions, account.emballageTypes, account.users, account.suppliers, account.companyName); onClose(); }} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all duration-200 flex items-center justify-center gap-2"><Download size={20} /> Exporteren</button>
+          <button onClick={() => { format === "csv" ? exportToCSV(account.transactions, account.emballageTypes, account.suppliers, account.companyName) : exportToPDF(account.transactions, account.emballageTypes, account.users, account.suppliers, account.companyName); onClose(); }} className="flex-1 bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 transition-all duration-200 flex items-center justify-center gap-2"><Download size={20} /> Exporteren</button>
         </div>
       </div>
     </div>
@@ -1635,14 +1647,14 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1.5">Type</label>
-              <select value={type} onChange={(e) => setType(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              <select value={type} onChange={(e) => setType(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none">
                 <option value="IN">↓ Inkomend</option>
                 <option value="OUT">↑ Uitgaand</option>
               </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1.5">Leverancier</label>
-              <select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              <select value={supplier} onChange={(e) => setSupplier(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none">
                 <option value="">Selecteer...</option>
                 {suppliers.map((s, i) => <option key={i} value={s}>{s}</option>)}
               </select>
@@ -1655,13 +1667,13 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1.5">Artikel</label>
               <div className="flex items-center gap-2 bg-gray-50 rounded-xl p-2.5 border border-gray-100">
-                <select value={editEmballage} onChange={(e) => setEditEmballage(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none min-w-0">
+                <select value={editEmballage} onChange={(e) => setEditEmballage(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-purple-500 outline-none min-w-0">
                   <option value="">Emballage...</option>
                   {(supplier ? emballageTypes.filter(e => e.supplierName === supplier) : emballageTypes).map((e, i) => (
                     <option key={i} value={e.name}>{e.name} (€{e.value})</option>
                   ))}
                 </select>
-                <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)} className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm text-center bg-white focus:ring-2 focus:ring-blue-500 outline-none" min="1" />
+                <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)} className="w-16 px-3 py-2 border border-gray-200 rounded-lg text-sm text-center bg-white focus:ring-2 focus:ring-purple-500 outline-none" min="1" />
               </div>
             </div>
           ) : (
@@ -1698,7 +1710,7 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
                           type="number"
                           value={qtyMap[item.name] || 0}
                           onChange={(e) => updateQty(item.name, e.target.value)}
-                          className="w-14 px-1 py-1.5 border border-gray-200 rounded-lg text-sm text-center bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                          className="w-14 px-1 py-1.5 border border-gray-200 rounded-lg text-sm text-center bg-white focus:ring-2 focus:ring-purple-500 outline-none"
                           min="0"
                         />
                         <button
@@ -1716,12 +1728,12 @@ function BonScanModal({ emballageTypes, suppliers, branch, onClose, onImport, is
           {/* Note */}
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1.5">Opmerking</label>
-            <input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Optioneel" />
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" placeholder="Optioneel" />
           </div>
         </div>
         <div className="flex gap-3 p-5 md:p-6 pt-4 flex-shrink-0 border-t border-gray-100">
           <button onClick={onClose} className="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all duration-200">Annuleren</button>
-          <button onClick={handleImport} disabled={!canSubmit} className={`flex-1 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${isEdit ? "bg-blue-600 hover:bg-blue-700" : "bg-green-600 hover:bg-green-700"}`}>
+          <button onClick={handleImport} disabled={!canSubmit} className={`flex-1 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed ${isEdit ? "bg-blue-600 hover:bg-purple-700" : "bg-green-600 hover:bg-green-700"}`}>
             {isEdit ? <><Check size={20} /> Opslaan</> : <><Check size={20} /> {filledItems.length > 1 ? `${filledItems.length} artikelen registreren` : "Registreren"}</>}
           </button>
         </div>
@@ -2286,16 +2298,16 @@ function MasterBeheer({ account, setAccount }) {
       <div className="bg-blue-50 rounded-xl p-4 flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-blue-700">{totalUsers} gebruiker{totalUsers !== 1 ? "s" : ""}</p>
-          <p className="text-xs text-blue-600">{branches.length} filia{branches.length !== 1 ? "len" : "al"} • max {maxPerBranch} per filiaal</p>
+          <p className="text-xs text-purple-600">{branches.length} filia{branches.length !== 1 ? "len" : "al"} • max {maxPerBranch} per filiaal</p>
         </div>
       </div>
 
       {/* Branch filter */}
       {branches.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          <button onClick={() => setFilterBranch("all")} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterBranch === "all" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Alle</button>
+          <button onClick={() => setFilterBranch("all")} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterBranch === "all" ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Alle</button>
           {branches.map(b => (
-            <button key={b.id} onClick={() => setFilterBranch(b.id)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterBranch === b.id ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+            <button key={b.id} onClick={() => setFilterBranch(b.id)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${filterBranch === b.id ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
               {b.name} ({usersInBranch(b.id)}/{maxForBranch(b.id)})
             </button>
           ))}
@@ -2399,13 +2411,13 @@ function MasterBeheer({ account, setAccount }) {
         <div className="bg-gray-50 rounded-xl p-4 space-y-3 border border-gray-200">
           <p className="text-sm font-semibold text-gray-700">Nieuwe gebruiker</p>
           <div className="grid grid-cols-2 gap-3">
-            <input type="text" placeholder="Voornaam *" value={newUser.firstName} onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })} className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-            <input type="text" placeholder="Achternaam *" value={newUser.lastName} onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })} className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+            <input type="text" placeholder="Voornaam *" value={newUser.firstName} onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })} className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+            <input type="text" placeholder="Achternaam *" value={newUser.lastName} onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })} className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
           </div>
-          <input type="email" placeholder="E-mailadres *" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-          <input type="password" placeholder="Wachtwoord * (min. 6 tekens)" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-          <input type="tel" placeholder="Mobiel nummer (optioneel)" value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-          <select value={newUser.branchId} onChange={(e) => setNewUser({ ...newUser, branchId: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+          <input type="email" placeholder="E-mailadres *" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+          <input type="password" placeholder="Wachtwoord * (min. 6 tekens)" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+          <input type="tel" placeholder="Mobiel nummer (optioneel)" value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
+          <select value={newUser.branchId} onChange={(e) => setNewUser({ ...newUser, branchId: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none">
             <option value="">Kies filiaal... *</option>
             {branches.map(b => {
               const count = usersInBranch(b.id);
@@ -2417,7 +2429,7 @@ function MasterBeheer({ account, setAccount }) {
           {branches.length === 0 && <p className="text-xs text-amber-600 bg-amber-50 rounded-lg p-2">Maak eerst filialen aan onder "Filialen" voordat je gebruikers toevoegt.</p>}
           <div className="flex gap-2">
             <button onClick={() => { setShowForm(false); setNewUser({ firstName: "", lastName: "", email: "", password: "", phone: "", branchId: "" }); }} className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-xl font-semibold text-sm">Annuleren</button>
-            <button onClick={handleAddUser} disabled={isLoading || branches.length === 0} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60">
+            <button onClick={handleAddUser} disabled={isLoading || branches.length === 0} className="flex-1 bg-purple-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60">
               {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Toevoegen
             </button>
           </div>
@@ -2439,7 +2451,7 @@ function MasterBeheer({ account, setAccount }) {
             <p className="text-xs text-gray-500 mt-1">Ga naar "Filialen" om je eerste filiaal te maken.</p>
           </div>
         ) : (
-          <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all duration-200">
+          <button onClick={() => setShowForm(true)} className="w-full bg-purple-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-purple-700 transition-all duration-200">
             <PlusCircle size={16} /> Gebruiker toevoegen
           </button>
         );
@@ -2548,11 +2560,11 @@ function BranchManagement({ account, setAccount }) {
       <div className="bg-blue-50 rounded-xl p-4 flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-blue-700">{branches.length} van {maxBranches} filia{maxBranches !== 1 ? "len" : "al"}</p>
-          <p className="text-xs text-blue-600">Abonnement: {maxBranches} outlet{maxBranches !== 1 ? "s" : ""}</p>
+          <p className="text-xs text-purple-600">Abonnement: {maxBranches} outlet{maxBranches !== 1 ? "s" : ""}</p>
         </div>
         <div className="text-right">
           <div className="w-32 h-2 bg-blue-200 rounded-full">
-            <div className="h-full bg-blue-600 rounded-full transition-all" style={{ width: `${Math.min(100, (branches.length / maxBranches) * 100)}%` }} />
+            <div className="h-full bg-purple-600 rounded-full transition-all" style={{ width: `${Math.min(100, (branches.length / maxBranches) * 100)}%` }} />
           </div>
           <p className="text-[10px] text-blue-500 mt-1">{branches.length}/{maxBranches} gebruikt</p>
         </div>
@@ -2577,8 +2589,8 @@ function BranchManagement({ account, setAccount }) {
                   <div className="flex-1 min-w-0">
                     {isEditing ? (
                       <div className="flex gap-2 mb-2">
-                        <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
-                        <button onClick={() => handleRenameBranch(b.id)} disabled={isLoading} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold"><Check size={14} /></button>
+                        <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none" autoFocus />
+                        <button onClick={() => handleRenameBranch(b.id)} disabled={isLoading} className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-semibold"><Check size={14} /></button>
                         <button onClick={() => setEditingBranch(null)} className="px-3 py-1.5 bg-gray-200 text-gray-600 rounded-lg text-xs font-semibold"><X size={14} /></button>
                       </div>
                     ) : (
@@ -2630,10 +2642,10 @@ function BranchManagement({ account, setAccount }) {
       {showForm && (
         <div className="bg-gray-50 rounded-xl p-4 space-y-3 border border-gray-200">
           <p className="text-sm font-semibold text-gray-700">Nieuw filiaal</p>
-          <input type="text" placeholder="Filiaalnaam" value={newBranchName} onChange={(e) => setNewBranchName(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
+          <input type="text" placeholder="Filiaalnaam" value={newBranchName} onChange={(e) => setNewBranchName(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" autoFocus />
           <div className="flex gap-2">
             <button onClick={() => { setShowForm(false); setNewBranchName(""); }} className="flex-1 bg-gray-200 text-gray-700 py-2.5 rounded-xl font-semibold text-sm">Annuleren</button>
-            <button onClick={handleCreateBranch} disabled={isLoading || !newBranchName.trim()} className="flex-1 bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60">
+            <button onClick={handleCreateBranch} disabled={isLoading || !newBranchName.trim()} className="flex-1 bg-purple-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60">
               {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Aanmaken
             </button>
           </div>
@@ -2641,7 +2653,7 @@ function BranchManagement({ account, setAccount }) {
       )}
       {!showForm && (
         canAddBranch ? (
-          <button onClick={() => setShowForm(true)} className="w-full bg-blue-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-blue-700 transition-all duration-200">
+          <button onClick={() => setShowForm(true)} className="w-full bg-purple-600 text-white py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 hover:bg-purple-700 transition-all duration-200">
             <PlusCircle size={16} /> Filiaal toevoegen ({branches.length}/{maxBranches})
           </button>
         ) : (
@@ -2911,7 +2923,7 @@ function EmballageBeheer({ account, setAccount }) {
                   <span className="text-sm font-semibold text-gray-900">{s}</span>
                   <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">{supplierItems.length} item{supplierItems.length !== 1 ? "s" : ""}</span>
                   {hasCatalog && catalogNewItems.length > 0 && (
-                    <button onClick={(e) => { e.stopPropagation(); handleShowCatalog(s); }} className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-all flex items-center gap-1">
+                    <button onClick={(e) => { e.stopPropagation(); handleShowCatalog(s); }} className="text-[10px] px-2 py-0.5 bg-blue-50 text-purple-600 rounded-full hover:bg-blue-100 transition-all flex items-center gap-1">
                       <Download size={10} /> {catalogNewItems.length} importeren
                     </button>
                   )}
@@ -2998,7 +3010,7 @@ function EmballageBeheer({ account, setAccount }) {
               ))}
             </div>
             <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
-              <button onClick={() => setSelectedImportItems(prev => prev.map(it => ({ ...it, selected: !prev.every(i => i.selected) })))} className="text-xs text-blue-600 font-medium hover:underline">
+              <button onClick={() => setSelectedImportItems(prev => prev.map(it => ({ ...it, selected: !prev.every(i => i.selected) })))} className="text-xs text-purple-600 font-medium hover:underline">
                 {selectedImportItems.every(i => i.selected) ? "Deselecteer alles" : "Selecteer alles"}
               </button>
               <div className="flex gap-2">
@@ -3065,7 +3077,7 @@ function AlertsPanel({ account }) {
               <div className={`mt-0.5 ${a.severity === "error" ? "text-red-500" : a.severity === "warning" ? "text-amber-500" : "text-blue-500"}`}>{a.icon}</div>
               <div>
                 <p className={`text-sm font-semibold ${a.severity === "error" ? "text-red-800" : a.severity === "warning" ? "text-amber-800" : "text-blue-800"}`}>{a.title}</p>
-                <p className={`text-xs mt-0.5 ${a.severity === "error" ? "text-red-600" : a.severity === "warning" ? "text-amber-600" : "text-blue-600"}`}>{a.message}</p>
+                <p className={`text-xs mt-0.5 ${a.severity === "error" ? "text-red-600" : a.severity === "warning" ? "text-amber-600" : "text-purple-600"}`}>{a.message}</p>
               </div>
             </div>
           ))}
@@ -3109,7 +3121,7 @@ function AuditLog({ account }) {
     <div className="animate-fade-in space-y-4">
       <div className="relative">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Zoek in audit log..." className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Zoek in audit log..." className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
       </div>
       <p className="text-xs text-gray-400">{filtered.length} vermelding{filtered.length !== 1 ? "en" : ""}</p>
       {filtered.length === 0 ? (
@@ -3125,7 +3137,7 @@ function AuditLog({ account }) {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium text-gray-900">{e.action}</span>
                   <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-full">{e.user}</span>
-                  {e.userName && <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded-full">door {e.userName}</span>}
+                  {e.userName && <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-purple-600 rounded-full">door {e.userName}</span>}
                 </div>
                 <p className="text-xs text-gray-500 truncate">{e.detail}</p>
               </div>
@@ -3178,24 +3190,24 @@ function MasterLogboek({ account, setAccount }) {
       {/* Search */}
       <div className="relative">
         <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Zoek op emballage, leverancier of filiaal..." className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
+        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Zoek op emballage, leverancier of filiaal..." className="w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none" />
       </div>
 
       {/* Date filters */}
       <div className="flex gap-2">
         <div className="flex-1 relative">
           <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
         </div>
         <div className="flex-1 relative">
           <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
         </div>
       </div>
 
       {/* Type filter */}
       <div className="flex flex-wrap gap-2">
-        <button onClick={() => setFilter("all")} className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm md:text-base font-semibold transition-all duration-200 ${filter === "all" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Alles</button>
+        <button onClick={() => setFilter("all")} className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm md:text-base font-semibold transition-all duration-200 ${filter === "all" ? "bg-purple-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Alles</button>
         <button onClick={() => setFilter("IN")} className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm md:text-base font-semibold transition-all duration-200 ${filter === "IN" ? "bg-green-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Inkomend</button>
         <button onClick={() => setFilter("OUT")} className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-sm md:text-base font-semibold transition-all duration-200 ${filter === "OUT" ? "bg-red-600 text-white" : "bg-gray-200 text-gray-800 hover:bg-gray-300"}`}>Uitgaand</button>
         {(search || dateFrom || dateTo) && (
@@ -3366,7 +3378,7 @@ function AbonnementTab({ account, setAccount }) {
         {/* Extra outlet card */}
         <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 flex flex-col">
           <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Building2 size={20} className="text-blue-600" /></div>
+            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Building2 size={20} className="text-purple-600" /></div>
             <div>
               <p className="text-sm font-semibold text-gray-900">Extra outlet</p>
               <p className="text-xs text-gray-500">€{PRICE_EXTRA_OUTLET}/outlet/maand</p>
@@ -3375,7 +3387,7 @@ function AbonnementTab({ account, setAccount }) {
           <p className="text-xs text-gray-500 mb-4 flex-1">Breid je abonnement uit met een extra filiaal. Je hebt nu {account.plan.outlets} outlet{account.plan.outlets !== 1 ? "s" : ""} ({branches.length} in gebruik).</p>
           <button
             onClick={() => setShowOutletConfirm(true)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 transition-all"
           >
             <PlusCircle size={16} /> Extra outlet aanvragen
           </button>
@@ -3486,7 +3498,7 @@ function AbonnementTab({ account, setAccount }) {
               <button
                 onClick={handleRequestOutlet}
                 disabled={isLoading}
-                className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-purple-600 text-white font-semibold text-sm hover:bg-purple-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
               >
                 {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Building2 size={14} />} Bevestigen
               </button>
@@ -3641,18 +3653,18 @@ function CompanySettings({ account, setAccount, user }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Voornaam</label>
-            <input type="text" value={profileFirst} onChange={(e) => setProfileFirst(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Voornaam" />
+            <input type="text" value={profileFirst} onChange={(e) => setProfileFirst(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" placeholder="Voornaam" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Achternaam</label>
-            <input type="text" value={profileLast} onChange={(e) => setProfileLast(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Achternaam" />
+            <input type="text" value={profileLast} onChange={(e) => setProfileLast(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" placeholder="Achternaam" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Telefoonnummer</label>
-            <input type="tel" value={profilePhone} onChange={(e) => setProfilePhone(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="+31 6..." />
+            <input type="tel" value={profilePhone} onChange={(e) => setProfilePhone(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" placeholder="+31 6..." />
           </div>
           <div className="flex items-end">
-            <button onClick={handleSaveProfile} disabled={savingProfile || (!profileFirst.trim() || !profileLast.trim())} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-blue-700 transition-all disabled:opacity-40">
+            <button onClick={handleSaveProfile} disabled={savingProfile || (!profileFirst.trim() || !profileLast.trim())} className="px-5 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-purple-700 transition-all disabled:opacity-40">
               {savingProfile ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Profiel opslaan
             </button>
           </div>
@@ -3676,8 +3688,8 @@ function CompanySettings({ account, setAccount, user }) {
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Bedrijfsnaam</h3>
         <div className="flex gap-3">
-          <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Bedrijfsnaam" />
-          <button onClick={handleSaveName} disabled={saving || companyName.trim() === account.companyName} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-blue-700 transition-all disabled:opacity-40">
+          <input type="text" value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" placeholder="Bedrijfsnaam" />
+          <button onClick={handleSaveName} disabled={saving || companyName.trim() === account.companyName} className="px-5 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-purple-700 transition-all disabled:opacity-40">
             {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Opslaan
           </button>
         </div>
@@ -3686,7 +3698,7 @@ function CompanySettings({ account, setAccount, user }) {
       {/* Branch logos info */}
       <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
         <h3 className="text-sm font-semibold text-gray-900 mb-2">Filiaallogo's</h3>
-        <p className="text-sm text-gray-500">Filiaallogo's kun je instellen bij het betreffende filiaal onder <span className="font-semibold text-blue-600">Filialen</span> in het menu.</p>
+        <p className="text-sm text-gray-500">Filiaallogo's kun je instellen bij het betreffende filiaal onder <span className="font-semibold text-purple-600">Filialen</span> in het menu.</p>
       </div>
     </div>
   );
@@ -3720,6 +3732,7 @@ function MasterApp({ account, user, onLogout, setAccount }) {
   const [masterScreen, setMasterScreen] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dark, toggleDark] = useDarkMode();
+  const [showChangePw, setShowChangePw] = useState(false);
 
   const navItems = [
     { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard size={18} /> },
@@ -3788,7 +3801,7 @@ function MasterApp({ account, user, onLogout, setAccount }) {
         <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
           {navItems.map(item => (
             <button key={item.id} onClick={() => { setMasterScreen(item.id); setSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${masterScreen === item.id ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}>
-              <span className={masterScreen === item.id ? "text-blue-600" : "text-gray-400"}>{item.icon}</span>
+              <span className={masterScreen === item.id ? "text-purple-600" : "text-gray-400"}>{item.icon}</span>
               <span className="flex-1 text-left">{item.label}</span>
               {item.id === "alerts" && alertCount > 0 && <span className="w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{alertCount}</span>}
             </button>
@@ -3801,9 +3814,12 @@ function MasterApp({ account, user, onLogout, setAccount }) {
             {dark ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} className="text-gray-400" />}
             {dark ? "Licht modus" : "Donker modus"}
           </button>
+          <button onClick={() => setShowChangePw(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-all duration-200"><Key size={18} className="text-gray-400" /> Wachtwoord</button>
           <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-all duration-200"><LogOut size={18} /> Afmelden</button>
         </div>
       </aside>
+
+      {showChangePw && <ChangePasswordModal onClose={() => setShowChangePw(false)} />}
 
       {/* Main content */}
       <main className="flex-1 min-w-0">
@@ -3911,6 +3927,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [dark, toggleDark] = useDarkMode();
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showChangePw, setShowChangePw] = useState(false);
   const { isOnline, queue, addToQueue, clearQueue } = useOfflineQueue();
 
   const branchTransactions = account.transactions.filter(t => t.branch === user.branch);
@@ -4090,6 +4107,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
+      {showChangePw && <ChangePasswordModal onClose={() => setShowChangePw(false)} />}
       {!isOnline && <OfflineBanner queueCount={queue.length} />}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       {/* Success animation overlay */}
@@ -4157,6 +4175,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
               <option value="en">EN</option>
             </select>
             <DarkModeToggle dark={dark} onToggle={toggleDark} />
+            <button onClick={() => setShowChangePw(true)} className="p-2 md:p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200" title="Wachtwoord wijzigen"><Key size={18} className="text-gray-500" /></button>
             <button onClick={() => setExportModal(true)} className="p-2 md:p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><Download size={18} className="text-gray-500" /></button>
             <button onClick={onLogout} className="p-2 md:p-2.5 rounded-xl hover:bg-gray-100 transition-all duration-200"><LogOut size={18} className="text-gray-500" /></button>
           </div>
@@ -4252,7 +4271,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-sm font-semibold text-gray-900">Saldo per leverancier</p>
-                  <button onClick={() => setScreen("saldo")} className="text-xs text-blue-600 font-semibold hover:text-blue-700">Bekijk alles →</button>
+                  <button onClick={() => setScreen("saldo")} className="text-xs text-purple-600 font-semibold hover:text-blue-700">Bekijk alles →</button>
                 </div>
                 <div className="space-y-2">
                   {Object.entries(supplierSaldo).slice(0, 3).map(([supplier, data]) => {
@@ -4367,7 +4386,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
             <div className="flex gap-2">
               <div className="flex-1 relative">
                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input type="text" value={logSearch} onChange={(e) => setLogSearch(e.target.value)} placeholder="Zoek emballage of leverancier..." className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                <input type="text" value={logSearch} onChange={(e) => setLogSearch(e.target.value)} placeholder="Zoek emballage of leverancier..." className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
               </div>
             </div>
 
@@ -4375,11 +4394,11 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
             <div className="flex gap-2">
               <div className="flex-1 relative">
                 <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                <input type="date" value={logDateFrom} onChange={(e) => setLogDateFrom(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                <input type="date" value={logDateFrom} onChange={(e) => setLogDateFrom(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
               </div>
               <div className="flex-1 relative">
                 <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                <input type="date" value={logDateTo} onChange={(e) => setLogDateTo(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                <input type="date" value={logDateTo} onChange={(e) => setLogDateTo(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none" />
               </div>
             </div>
 
@@ -4432,7 +4451,7 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 safe-area-bottom">
         <div className="max-w-lg md:max-w-2xl lg:max-w-4xl xl:max-w-6xl mx-auto px-4 flex items-center justify-around">
           {tabs.map(tab => (
-            <button key={tab.id} onClick={() => setScreen(tab.id)} className={`flex flex-col items-center gap-1 py-3 px-4 transition-all duration-200 ${screen === tab.id ? "text-blue-600" : "text-gray-400 hover:text-gray-600"}`}>
+            <button key={tab.id} onClick={() => setScreen(tab.id)} className={`flex flex-col items-center gap-1 py-3 px-4 transition-all duration-200 ${screen === tab.id ? "text-purple-600" : "text-gray-400 hover:text-gray-600"}`}>
               {tab.icon}
               <span className="text-[10px] font-semibold">{tab.label}</span>
             </button>
@@ -4444,10 +4463,10 @@ function BranchApp({ user, account, setAccount, onLogout, language, setLanguage 
           </button>
           {/* FAB-style register button */}
           <button onClick={() => setScanModal(true)} className="flex flex-col items-center gap-1 py-2 px-4">
-            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200 -mt-5 hover:bg-blue-700 transition-all duration-200">
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-purple-200 -mt-5 hover:bg-purple-700 transition-all duration-200">
               <Plus size={24} className="text-white" />
             </div>
-            <span className="text-[10px] font-semibold text-blue-600">Nieuw</span>
+            <span className="text-[10px] font-semibold text-purple-600">Nieuw</span>
           </button>
         </div>
       </div>
@@ -4462,6 +4481,52 @@ function getApiKey() {
 
 function setApiKey(key) {
   try { localStorage.setItem(API_KEY_STORAGE, key); } catch {}
+}
+
+// ─── CHANGE PASSWORD MODAL ────────────────────────────────────────────────────
+function ChangePasswordModal({ onClose }) {
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const handleChange = async () => {
+    if (!newPw || !confirmPw) { setToast({ type: "error", message: "Vul beide velden in" }); return; }
+    if (newPw !== confirmPw) { setToast({ type: "error", message: "Wachtwoorden komen niet overeen" }); return; }
+    if (newPw.length < 6) { setToast({ type: "error", message: "Minimaal 6 tekens" }); return; }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPw });
+      if (error) throw error;
+      setToast({ type: "success", message: "Wachtwoord gewijzigd!" });
+      setTimeout(onClose, 1500);
+    } catch (err) {
+      setToast({ type: "error", message: err.message || "Er ging iets mis" });
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-gray-900">Wachtwoord wijzigen</h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg"><X size={18} /></button>
+        </div>
+        {toast && <div className={`px-3 py-2 rounded-xl mb-3 text-sm flex items-center gap-2 ${toast.type === "error" ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>{toast.type === "error" ? <AlertCircle size={16} /> : <CheckCircle size={16} />} {toast.message}</div>}
+        <div className="space-y-3 mb-4">
+          <div className="relative">
+            <input type={showPw ? "text" : "password"} placeholder="Nieuw wachtwoord" value={newPw} onChange={e => setNewPw(e.target.value)} className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-sm" />
+            <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600" tabIndex={-1}>{showPw ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+          </div>
+          <input type={showPw ? "text" : "password"} placeholder="Herhaal wachtwoord" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} onKeyDown={e => e.key === "Enter" && handleChange()} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-sm" />
+        </div>
+        <button onClick={handleChange} disabled={loading} className="w-full bg-purple-600 text-white py-3 rounded-xl font-bold hover:bg-purple-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2 text-sm">
+          {loading ? <><Loader2 size={16} className="animate-spin" /> Wijzigen...</> : "Wachtwoord wijzigen"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ─── LOGIN PAGE ───────────────────────────────────────────────────────────────
@@ -4694,7 +4759,7 @@ function App() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <Loader2 size={24} className="animate-spin mx-auto text-blue-600 mb-2" />
+          <Loader2 size={24} className="animate-spin mx-auto text-purple-600 mb-2" />
           <p className="text-gray-500">Account laden...</p>
         </div>
       </div>
