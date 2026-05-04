@@ -1,12 +1,12 @@
-// Vercel Serverless Function: Recognize emballage from photo via OpenAI Vision
+// Vercel Serverless Function: Recognize emballage from photo via Claude Haiku Vision
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const OPENAI_KEY = process.env.OPENAI_API_KEY;
-  if (!OPENAI_KEY) {
-    return res.status(500).json({ error: "OPENAI_API_KEY not configured" });
+  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!ANTHROPIC_KEY) {
+    return res.status(500).json({ error: "ANTHROPIC_API_KEY not configured" });
   }
 
   try {
@@ -15,6 +15,11 @@ export default async function handler(req, res) {
     if (!image) {
       return res.status(400).json({ error: "No image provided" });
     }
+
+    // Extract base64 data and media type from data URL
+    const match = image.match(/^data:(image\/\w+);base64,(.+)$/);
+    const mediaType = match ? match[1] : "image/jpeg";
+    const base64Data = match ? match[2] : image;
 
     // Build the prompt with known emballage types for better matching
     const typesList = (knownTypes || []).map(t => `- ${t.name} (€${t.value})`).join("\n");
@@ -35,41 +40,42 @@ Antwoord in dit exacte JSON formaat (geen andere tekst):
 
 Als je geen emballage herkent, zet "identified" op false.`;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${OPENAI_KEY}`,
+        "x-api-key": ANTHROPIC_KEY,
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 200,
         messages: [
           {
             role: "user",
             content: [
-              { type: "text", text: prompt },
               {
-                type: "image_url",
-                image_url: {
-                  url: image.startsWith("data:") ? image : `data:image/jpeg;base64,${image}`,
-                  detail: "low", // Use low detail to keep costs down (~$0.003 per image)
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: mediaType,
+                  data: base64Data,
                 },
               },
+              { type: "text", text: prompt },
             ],
           },
         ],
-        max_tokens: 200,
-        temperature: 0.1,
       }),
     });
 
     if (!response.ok) {
       const err = await response.text();
-      throw new Error(`OpenAI API error: ${err}`);
+      throw new Error(`Claude API error: ${err}`);
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
+    const content = data.content?.[0]?.text || "";
 
     // Parse JSON from response
     try {
